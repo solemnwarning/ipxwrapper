@@ -1,0 +1,15 @@
+LIBRARY IPXWRAPPER.dll
+EXPORTS
+	bind
+	closesocket
+	getsockname
+	getsockopt
+	recv
+	recvfrom
+	sendto
+	setsockopt
+	shutdown
+	socket
+	EnumProtocolsA
+	EnumProtocolsW
+	WSARecvEx

@@ -1,0 +1,23 @@
+LIBRARY MSWSOCK.dll
+EXPORTS
+	; ServiceMain			@1
+	; SvchostPushServiceGlobals	@2
+	AcceptEx			@3
+	EnumProtocolsA			@4
+	EnumProtocolsW			@5
+	GetAcceptExSockaddrs		@6
+	GetAddressByNameA		@7
+	GetAddressByNameW		@8
+	GetNameByTypeA			@9
+	GetNameByTypeW			@10
+	GetServiceA			@11
+	GetServiceW			@12
+	GetTypeByNameA			@13
+	GetTypeByNameW			@14
+	NSPStartup			@17
+	SetServiceA			@18
+	SetServiceW			@19
+	TransmitFile			@22
+	WSARecvEx			@23
+	WSPStartup			@24
+	sethostname			@32
