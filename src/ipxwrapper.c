@@ -72,6 +72,10 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 		IP_ADAPTER_INFO *ifptr = ifroot;
 		ipx_nic *enic = NULL;
 		
+		if(!ifptr) {
+			debug("No NICs: %s", w32_error(WSAGetLastError()));
+		}
+		
 		while(ifptr) {
 			ipx_nic *nnic = malloc(sizeof(ipx_nic));
 			if(!nnic) {
@@ -217,7 +221,7 @@ IP_ADAPTER_INFO *get_nics(void) {
 	ULONG bufsize = sizeof(IP_ADAPTER_INFO);
 	
 	int rval = GetAdaptersInfo(&tbuf, &bufsize);
-	if(rval != ERROR_SUCCESS) {
+	if(rval != ERROR_SUCCESS && rval != ERROR_BUFFER_OVERFLOW) {
 		WSASetLastError(rval);
 		return NULL;
 	}
