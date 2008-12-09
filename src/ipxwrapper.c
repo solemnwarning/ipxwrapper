@@ -244,7 +244,7 @@ static HMODULE load_sysdll(char const *name) {
 	char sysdir[1024], path[1024];
 	HMODULE ret = NULL;
 	
-	GetSystemDirectory(path, 1024);
+	GetSystemDirectory(sysdir, 1024);
 	snprintf(path, 1024, "%s\\%s", sysdir, name);
 	
 	ret = LoadLibrary(path);
