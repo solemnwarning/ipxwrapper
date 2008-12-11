@@ -12,9 +12,8 @@ them over UDP, this allows you to run legacy software which uses IPX on systems
 that don't have the IPX protocol installed, it also allows you to tunnel the
 connection over IP tunneling software such as Hamachi.
 
-ipxwrapper currently supports programs which use winsock 1.x, programs which
-use winsock 2.x are not supported, but may partially work, depending how they
-are linked.
+ipxwrapper currently supports most of winsock 1.x, more of the winsock library
+will be implemented over time.
 
 -- INSTALLATION --
 
