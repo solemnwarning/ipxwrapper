@@ -562,6 +562,7 @@ int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct s
 	unsigned char z6[] = {0,0,0,0,0,0};
 	int sval, psize;
 	struct sockaddr_in saddr;
+	struct sockaddr_ipx baddr;
 	ipx_packet *packet;
 	ipx_nic *nic;
 	
@@ -577,8 +578,15 @@ int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct s
 		}
 		
 		if(!(sockptr->flags & IPX_BOUND)) {
-			debug("fd %d: NO IMPLICIT BIND! SHIT!");
-			/* TODO: Implicit bind */
+			baddr.sa_family = AF_IPX;
+			memset(baddr.sa_netnum, 0, 4);
+			memset(baddr.sa_nodenum, 0, 6);
+			baddr.sa_socket = 0;
+			
+			if(bind(fd, (struct sockaddr*)&baddr, sizeof(baddr)) == -1) {
+				debug("Implicit bind on %d failed: %s", (int)fd, w32_error(WSAGetLastError()));
+				RETURN(-1);
+			}
 		}
 		
 		if(len > MAX_PACKET_SIZE) {
