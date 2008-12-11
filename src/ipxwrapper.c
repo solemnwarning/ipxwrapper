@@ -47,7 +47,6 @@ static FILE *debug_fh = NULL;
 static HANDLE mutex = NULL;
 static HANDLE router_thread = NULL;
 static DWORD router_tid = 0;
-static int mutex_locked = 0;
 
 static HMODULE load_sysdll(char const *name);
 static int init_router(void);
@@ -202,18 +201,12 @@ ipx_socket *get_socket(SOCKET fd) {
 
 /* Lock the mutex */
 void lock_mutex(void) {
-	if(mutex_locked) {
-		return;
-	}
-	
 	WaitForSingleObject(mutex, INFINITE);
-	mutex_locked++;
 }
 
 /* Unlock the mutex */
 void unlock_mutex(void) {
-	mutex_locked = 0;
-	ReleaseMutex(mutex);
+	while(ReleaseMutex(mutex)) {}
 }
 
 IP_ADAPTER_INFO *get_nics(void) {
