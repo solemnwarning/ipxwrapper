@@ -444,16 +444,22 @@ int WSAAPI getsockopt(SOCKET fd, int level, int optname, char FAR *optval, int F
 			if(optname == IPX_PTYPE) {
 				CHECK_OPTLEN(sizeof(int));
 				*intval = ptr->s_ptype;
+				
+				RETURN(0);
 			}
 			
 			if(optname == IPX_FILTERPTYPE) {
 				CHECK_OPTLEN(sizeof(int));
 				*intval = ptr->f_ptype;
+				
+				RETURN(0);
 			}
 			
 			if(optname == IPX_MAXSIZE) {
 				CHECK_OPTLEN(sizeof(int));
 				*intval = MAX_PACKET_SIZE;
+				
+				RETURN(0);
 			}
 			
 			if(optname == IPX_ADDRESS) {
@@ -482,6 +488,8 @@ int WSAAPI getsockopt(SOCKET fd, int level, int optname, char FAR *optval, int F
 				ipxdata->status = FALSE;
 				ipxdata->maxpkt = MAX_PACKET_SIZE;
 				ipxdata->linkspeed = 100000; /* 10MBps */
+				
+				RETURN(0);
 			}
 			
 			if(optname == IPX_MAX_ADAPTER_NUM) {
@@ -494,9 +502,11 @@ int WSAAPI getsockopt(SOCKET fd, int level, int optname, char FAR *optval, int F
 					(*intval)++;
 					nic = nic->next;
 				}
+				
+				RETURN(0);
 			}
 			
-			RETURN(0);
+			RETURN_WSA(WSAENOPROTOOPT, -1);
 		}
 	}
 	
@@ -513,18 +523,22 @@ int WSAAPI setsockopt(SOCKET fd, int level, int optname, const char FAR *optval,
 		if(level == NSPROTO_IPX) {
 			if(optname == IPX_PTYPE) {
 				sockptr->s_ptype = *intval;
+				RETURN(0);
 			}
 			
 			if(optname == IPX_FILTERPTYPE) {
 				sockptr->f_ptype = *intval;
 				sockptr->flags |= IPX_FILTER;
+				
+				RETURN(0);
 			}
 			
 			if(optname == IPX_STOPFILTERPTYPE) {
 				sockptr->flags &= ~IPX_FILTER;
+				RETURN(0);
 			}
 			
-			RETURN(0);
+			RETURN_WSA(WSAENOPROTOOPT, -1);
 		}
 		
 		if(level == SOL_SOCKET) {
