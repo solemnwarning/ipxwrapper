@@ -548,6 +548,8 @@ int WSAAPI setsockopt(SOCKET fd, int level, int optname, const char FAR *optval,
 				}else{
 					sockptr->flags &= ~IPX_BROADCAST;
 				}
+				
+				RETURN(0);
 			}
 		}
 	}
