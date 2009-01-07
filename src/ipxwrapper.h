@@ -22,7 +22,7 @@
 #include <iphlpapi.h>
 #include <stdint.h>
 
-#define PORT 40404
+#define PORT 54792
 #define DEBUG "ipxwrapper.log"
 
 /* Maximum UDP data size is 65467, we use a smaller value to ensure we have
