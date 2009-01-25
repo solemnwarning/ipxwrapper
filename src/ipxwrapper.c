@@ -26,7 +26,6 @@
 #include <stdint.h>
 
 #include "ipxwrapper.h"
-#include "ipxwrapper_stubs.txt"
 
 #define DLL_UNLOAD(dll) \
 	if(dll) {\
@@ -144,7 +143,7 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 	return TRUE;
 }
 
-void *find_sym(char const *symbol) {
+void __stdcall *find_sym(char const *symbol) {
 	void *addr = GetProcAddress(winsock2_dll, symbol);
 	
 	if(!addr) {

@@ -24,7 +24,7 @@ all: ipxwrapper.dll wsock32.dll mswsock.dll
 
 clean:
 	rm -f src/*.o
-	rm -f src/*_stubs.c
+	rm -f src/*_stubs.s
 
 ipxwrapper.dll: $(IPXWRAPPER_DEPS)
 	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -shared -o ipxwrapper.dll $(IPXWRAPPER_DEPS) -liphlpapi
@@ -41,23 +41,23 @@ src/ipxwrapper.o: src/ipxwrapper.c src/ipxwrapper.h
 src/winsock.o: src/winsock.c src/ipxwrapper.h
 	$(CC) $(CFLAGS) -c -o src/winsock.o src/winsock.c
 
-src/ipxwrapper_stubs.o: src/ipxwrapper_stubs.c
-	$(CC) $(CFLAGS) -c -o src/ipxwrapper_stubs.o src/ipxwrapper_stubs.c
+src/ipxwrapper_stubs.o: src/ipxwrapper_stubs.s
+	nasm -f win32 -o src/ipxwrapper_stubs.o src/ipxwrapper_stubs.s
 
-src/ipxwrapper_stubs.c: src/ipxwrapper_stubs.txt
-	perl mkstubs.pl src/ipxwrapper_stubs.txt src/ipxwrapper_stubs.c
+src/ipxwrapper_stubs.s: src/ipxwrapper_stubs.txt
+	perl mkstubs.pl src/ipxwrapper_stubs.txt src/ipxwrapper_stubs.s
 
 src/stubdll.o: src/stubdll.c
 	$(CC) $(CFLAGS) -c -o src/stubdll.o src/stubdll.c
 
-src/wsock32_stubs.o: src/wsock32_stubs.c
-	$(CC) $(CFLAGS) -c -o src/wsock32_stubs.o src/wsock32_stubs.c
+src/wsock32_stubs.o: src/wsock32_stubs.s
+	nasm -f win32 -o src/wsock32_stubs.o src/wsock32_stubs.s
 
-src/wsock32_stubs.c: src/wsock32_stubs.txt
-	perl mkstubs.pl src/wsock32_stubs.txt src/wsock32_stubs.c wsock32.dll
+src/wsock32_stubs.s: src/wsock32_stubs.txt
+	perl mkstubs.pl src/wsock32_stubs.txt src/wsock32_stubs.s wsock32.dll
 
-src/mswsock_stubs.o: src/mswsock_stubs.c
-	$(CC) $(CFLAGS) -c -o src/mswsock_stubs.o src/mswsock_stubs.c
+src/mswsock_stubs.o: src/mswsock_stubs.s
+	nasm -f win32 -o src/mswsock_stubs.o src/mswsock_stubs.s
 
-src/mswsock_stubs.c: src/mswsock_stubs.txt
-	perl mkstubs.pl src/mswsock_stubs.txt src/mswsock_stubs.c mswsock.dll
+src/mswsock_stubs.s: src/mswsock_stubs.txt
+	perl mkstubs.pl src/mswsock_stubs.txt src/mswsock_stubs.s mswsock.dll

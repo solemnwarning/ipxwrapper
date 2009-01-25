@@ -1,27 +1,22 @@
-/* Stub functions will be generated for all functions declared here */
-
-/* Declarations from MinGW headers */
-unsigned long PASCAL inet_addr(const char*);
-int PASCAL WSAStartup(WORD,LPWSADATA);
-int PASCAL WSACleanup(void);
-void PASCAL WSASetLastError(int);
-int PASCAL WSAGetLastError(void);
-u_long PASCAL htonl(u_long);
-u_long PASCAL ntohl(u_long);
-u_short PASCAL htons(u_short);
-u_short PASCAL ntohs(u_short);
-
-/* Declarations from the win32 SDK and MSDN */
-INT APIENTRY r_EnumProtocolsA(LPINT,LPVOID,LPDWORD);
-INT APIENTRY r_EnumProtocolsW(LPINT,LPVOID,LPDWORD);
-int PASCAL FAR r_WSARecvEx(SOCKET,char*,int,int*);
-int WSAAPI r_bind(SOCKET,const struct sockaddr*,int);
-int WSAAPI r_closesocket(SOCKET);
-int WSAAPI r_getsockname(SOCKET,struct sockaddr*,int*);
-int WSAAPI r_getsockopt(SOCKET,int,int,char*,int*);
-int WSAAPI r_recv(SOCKET,char*,int,int);
-int WSAAPI r_recvfrom(SOCKET,char*,int,int,struct sockaddr*,int*);
-int WSAAPI r_sendto(SOCKET,const char*,int,int,const struct sockaddr*,int);
-int WSAAPI r_setsockopt(SOCKET,int,int,const char*,int);
-int WSAAPI r_shutdown(SOCKET,int);
-SOCKET WSAAPI r_socket(int,int,int);
+inet_addr
+WSAStartup
+WSACleanup
+WSASetLastError
+WSAGetLastError
+htonl
+ntohl
+htons
+ntohs
+r_EnumProtocolsA
+r_EnumProtocolsW
+r_WSARecvEx
+r_bind
+r_closesocket
+r_getsockname
+r_getsockopt
+r_recv
+r_recvfrom
+r_sendto
+r_setsockopt
+r_shutdown
+r_socket

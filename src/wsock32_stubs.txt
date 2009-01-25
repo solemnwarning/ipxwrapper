@@ -1,119 +1,75 @@
-/* Stub functions will be generated for all functions declared here */
-
-/* Declarations from MinGW headers */
-int PASCAL __WSAFDIsSet(SOCKET,fd_set*);
-SOCKET PASCAL accept(SOCKET,struct sockaddr*,int*);
-int PASCAL connect(SOCKET,const struct sockaddr*,int);
-int PASCAL ioctlsocket(SOCKET,long,u_long *);
-int PASCAL getpeername(SOCKET,struct sockaddr*,int*);
-unsigned long PASCAL inet_addr(const char*);
-DECLARE_STDCALL_P(char *) inet_ntoa(struct in_addr);
-int PASCAL listen(SOCKET,int);
-int PASCAL send(SOCKET,const char*,int,int);
-DECLARE_STDCALL_P(struct hostent *) gethostbyaddr(const char*,int,int);
-DECLARE_STDCALL_P(struct hostent *) gethostbyname(const char*);
-DECLARE_STDCALL_P(struct servent *) getservbyport(int,const char*);
-DECLARE_STDCALL_P(struct servent *) getservbyname(const char*,const char*);
-DECLARE_STDCALL_P(struct protoent *) getprotobynumber(int);
-DECLARE_STDCALL_P(struct protoent *) getprotobyname(const char*);
-int PASCAL WSAStartup(WORD,LPWSADATA);
-int PASCAL WSACleanup(void);
-void PASCAL WSASetLastError(int);
-int PASCAL WSAGetLastError(void);
-BOOL PASCAL WSAIsBlocking(void);
-int PASCAL WSAUnhookBlockingHook(void);
-FARPROC PASCAL WSASetBlockingHook(FARPROC);
-int PASCAL WSACancelBlockingCall(void);
-HANDLE PASCAL WSAAsyncGetServByName(HWND,u_int,const char*,const char*,char*,int);
-HANDLE PASCAL WSAAsyncGetServByPort(HWND,u_int,int,const char*,char*,int);
-HANDLE PASCAL WSAAsyncGetProtoByName(HWND,u_int,const char*,char*,int);
-HANDLE PASCAL WSAAsyncGetProtoByNumber(HWND,u_int,int,char*,int);
-HANDLE PASCAL WSAAsyncGetHostByName(HWND,u_int,const char*,char*,int);
-HANDLE PASCAL WSAAsyncGetHostByAddr(HWND,u_int,const char*,int,int,char*,int);
-int PASCAL WSACancelAsyncRequest(HANDLE);
-int PASCAL WSAAsyncSelect(SOCKET,HWND,u_int,long);
-u_long PASCAL htonl(u_long);
-u_long PASCAL ntohl(u_long);
-u_short PASCAL htons(u_short);
-u_short PASCAL ntohs(u_short);
-int PASCAL select(int,fd_set*,fd_set*,fd_set*,const struct timeval*);
-int PASCAL gethostname(char*,int);
-SOCKET WINAPI WSAAccept(SOCKET, struct sockaddr *, LPINT, LPCONDITIONPROC, DWORD);
-INT WINAPI WSAAddressToStringA(LPSOCKADDR, DWORD, LPWSAPROTOCOL_INFOA, LPSTR, LPDWORD);
-INT WINAPI WSAAddressToStringW(LPSOCKADDR, DWORD, LPWSAPROTOCOL_INFOW, LPWSTR, LPDWORD);
-BOOL WINAPI WSACloseEvent(WSAEVENT);
-int WINAPI WSAConnect(SOCKET, const struct sockaddr *, int, LPWSABUF, LPWSABUF, LPQOS, LPQOS);
-WSAEVENT WINAPI WSACreateEvent(void);
-int WINAPI WSADuplicateSocketA(SOCKET, DWORD, LPWSAPROTOCOL_INFOA);
-int WINAPI WSADuplicateSocketW(SOCKET, DWORD, LPWSAPROTOCOL_INFOW);
-INT WINAPI WSAEnumNameSpaceProvidersA(LPDWORD, LPWSANAMESPACE_INFOA);
-INT WINAPI WSAEnumNameSpaceProvidersW(LPDWORD, LPWSANAMESPACE_INFOW);
-int WINAPI WSAEnumNetworkEvents(SOCKET, WSAEVENT, LPWSANETWORKEVENTS);
-int WINAPI WSAEnumProtocolsA(LPINT, LPWSAPROTOCOL_INFOA, LPDWORD);
-int WINAPI WSAEnumProtocolsW(LPINT, LPWSAPROTOCOL_INFOW, LPDWORD);
-int WINAPI WSAEventSelect(SOCKET, WSAEVENT, long);
-BOOL WINAPI WSAGetOverlappedResult(SOCKET, LPWSAOVERLAPPED, LPDWORD, BOOL, LPDWORD);
-BOOL WINAPI WSAGetQOSByName(SOCKET, LPWSABUF, LPQOS);
-INT WINAPI WSAGetServiceClassInfoA(LPGUID, LPGUID, LPDWORD, LPWSASERVICECLASSINFOA);
-INT WINAPI WSAGetServiceClassInfoW(LPGUID, LPGUID, LPDWORD, LPWSASERVICECLASSINFOW);
-INT WINAPI WSAGetServiceClassNameByClassIdA(LPGUID, LPSTR, LPDWORD);
-INT WINAPI WSAGetServiceClassNameByClassIdW(LPGUID, LPWSTR, LPDWORD);
-int WINAPI WSAHtonl(SOCKET, unsigned long, unsigned long *);
-int WINAPI WSAHtons(SOCKET, unsigned short, unsigned short *);
-INT WINAPI WSAInstallServiceClassA(LPWSASERVICECLASSINFOA);
-INT WINAPI WSAInstallServiceClassW(LPWSASERVICECLASSINFOW);
-int WINAPI WSAIoctl(SOCKET, DWORD, LPVOID, DWORD, LPVOID, DWORD, LPDWORD, LPWSAOVERLAPPED, LPWSAOVERLAPPED_COMPLETION_ROUTINE);
-SOCKET WINAPI WSAJoinLeaf(SOCKET, const struct sockaddr *, int, LPWSABUF, LPWSABUF, LPQOS, LPQOS, DWORD);
-INT WINAPI WSALookupServiceBeginA(LPWSAQUERYSETA, DWORD, LPHANDLE);
-INT WINAPI WSALookupServiceBeginW(LPWSAQUERYSETW, DWORD, LPHANDLE);
-INT WINAPI WSALookupServiceNextA(HANDLE, DWORD, LPDWORD, LPWSAQUERYSETA);
-INT WINAPI WSALookupServiceNextW(HANDLE, DWORD, LPDWORD, LPWSAQUERYSETW);
-INT WINAPI WSALookupServiceEnd(HANDLE);
-int WINAPI WSANSPIoctl(HANDLE,DWORD,LPVOID,DWORD,LPVOID,DWORD,LPDWORD,LPWSACOMPLETION); /* XP or .NET Server */
-int WINAPI WSANtohl(SOCKET, unsigned long, unsigned long *);
-int WINAPI WSANtohs(SOCKET, unsigned short, unsigned short *);
-int WINAPI WSARecv(SOCKET, LPWSABUF, DWORD, LPDWORD, LPDWORD, LPWSAOVERLAPPED, LPWSAOVERLAPPED_COMPLETION_ROUTINE);
-int WINAPI WSARecvDisconnect(SOCKET, LPWSABUF);
-int WINAPI WSARecvFrom(SOCKET, LPWSABUF, DWORD, LPDWORD, LPDWORD, struct sockaddr *, LPINT, LPWSAOVERLAPPED, LPWSAOVERLAPPED_COMPLETION_ROUTINE);
-INT WINAPI WSARemoveServiceClass(LPGUID);
-BOOL WINAPI WSAResetEvent(WSAEVENT);
-int WINAPI WSASend(SOCKET, LPWSABUF, DWORD, LPDWORD, DWORD, LPWSAOVERLAPPED, LPWSAOVERLAPPED_COMPLETION_ROUTINE);
-int WINAPI WSASendDisconnect(SOCKET, LPWSABUF);
-int WINAPI WSASendTo(SOCKET, LPWSABUF, DWORD, LPDWORD, DWORD, const struct sockaddr *, int, LPWSAOVERLAPPED, LPWSAOVERLAPPED_COMPLETION_ROUTINE);
-BOOL WINAPI WSASetEvent(WSAEVENT);
-INT WSAAPI WSASetServiceA(LPWSAQUERYSETA, WSAESETSERVICEOP, DWORD);
-INT WINAPI WSASetServiceW(LPWSAQUERYSETW, WSAESETSERVICEOP, DWORD);
-SOCKET WINAPI WSASocketA(int, int, int, LPWSAPROTOCOL_INFOA, GROUP, DWORD);
-SOCKET WINAPI WSASocketW(int, int, int, LPWSAPROTOCOL_INFOW, GROUP, DWORD);
-INT WINAPI WSAStringToAddressA(LPSTR, INT, LPWSAPROTOCOL_INFOA, LPSOCKADDR, LPINT);
-INT WINAPI WSAStringToAddressW(LPWSTR, INT, LPWSAPROTOCOL_INFOW, LPSOCKADDR, LPINT);
-DWORD WINAPI WSAWaitForMultipleEvents(DWORD, const WSAEVENT *, BOOL, DWORD, BOOL);
-BOOL PASCAL AcceptEx(SOCKET,SOCKET,PVOID,DWORD,DWORD,DWORD,LPDWORD,LPOVERLAPPED);
-VOID PASCAL GetAcceptExSockaddrs(PVOID,DWORD,DWORD,DWORD,struct sockaddr**, LPINT, struct sockaddr**, LPINT);
-INT WINAPI GetAddressByNameA(DWORD,LPGUID,LPSTR,LPINT,DWORD,LPSERVICE_ASYNC_INFO,LPVOID,LPDWORD,LPSTR,LPDWORD);
-INT WINAPI GetAddressByNameW(DWORD,LPGUID,LPWSTR,LPINT,DWORD,LPSERVICE_ASYNC_INFO,LPVOID,LPDWORD,LPWSTR,LPDWORD);
-INT WINAPI SetServiceA(DWORD,DWORD,DWORD,LPSERVICE_INFOA,LPSERVICE_ASYNC_INFO,LPDWORD);
-INT WINAPI SetServiceW(DWORD,DWORD,DWORD,LPSERVICE_INFOW,LPSERVICE_ASYNC_INFO,LPDWORD);
-BOOL PASCAL TransmitFile(SOCKET,HANDLE,DWORD,DWORD,LPOVERLAPPED,LPTRANSMIT_FILE_BUFFERS,DWORD);
-
-/* Declarations from the win32 SDK and MSDN */
-INT APIENTRY GetNameByTypeA(IN LPGUID,IN OUT LPSTR,IN DWORD);
-INT APIENTRY GetNameByTypeW(IN LPGUID,IN OUT LPWSTR,IN DWORD);
-INT APIENTRY GetServiceA(DWORD, LPGUID, LPSTR,DWORD,LPVOID,LPDWORD,LPSERVICE_ASYNC_INFO);
-INT APIENTRY GetServiceW(DWORD, LPGUID, LPWSTR,DWORD,LPVOID,LPDWORD,LPSERVICE_ASYNC_INFO);
-INT APIENTRY GetTypeByNameA(LPSTR,LPGUID);
-INT APIENTRY GetTypeByNameW(LPWSTR,LPGUID);
-int APIENTRY sethostname(char*,int);
-INT APIENTRY EnumProtocolsA(LPINT,LPVOID,LPDWORD);
-INT APIENTRY EnumProtocolsW(LPINT,LPVOID,LPDWORD);
-int PASCAL FAR WSARecvEx(SOCKET,char*,int,int*);
-int WSAAPI bind(SOCKET,const struct sockaddr*,int);
-int WSAAPI closesocket(SOCKET);
-int WSAAPI getsockname(SOCKET,struct sockaddr*,int*);
-int WSAAPI getsockopt(SOCKET,int,int,char*,int*);
-int WSAAPI recv(SOCKET,char*,int,int);
-int WSAAPI recvfrom(SOCKET,char*,int,int,struct sockaddr*,int*);
-int WSAAPI sendto(SOCKET,const char*,int,int,const struct sockaddr*,int);
-int WSAAPI setsockopt(SOCKET,int,int,const char*,int);
-int WSAAPI shutdown(SOCKET,int);
-SOCKET WSAAPI socket(int,int,int);
+accept
+bind
+closesocket
+connect
+getpeername
+getsockname
+getsockopt
+htonl
+htons
+inet_addr
+inet_ntoa
+ioctlsocket
+listen
+ntohl
+ntohs
+recv
+recvfrom
+select
+send
+sendto
+setsockopt
+shutdown
+socket
+MigrateWinsockConfiguration
+gethostbyaddr
+gethostbyname
+getprotobyname
+getprotobynumber
+getservbyname
+getservbyport
+gethostname
+WSAAsyncSelect
+WSAAsyncGetHostByAddr
+WSAAsyncGetHostByName
+WSAAsyncGetProtoByNumber
+WSAAsyncGetProtoByName
+WSAAsyncGetServByPort
+WSAAsyncGetServByName
+WSACancelAsyncRequest
+WSASetBlockingHook
+WSAUnhookBlockingHook
+WSAGetLastError
+WSASetLastError
+WSACancelBlockingCall
+WSAIsBlocking
+WSAStartup
+WSACleanup
+__WSAFDIsSet
+WEP
+WSApSetPostRoutine
+inet_network
+getnetbyname
+rcmd
+rexec
+rresvport
+sethostname
+dn_expand
+WSARecvEx
+s_perror
+GetAddressByNameA
+GetAddressByNameW
+EnumProtocolsA
+EnumProtocolsW
+GetTypeByNameA
+GetTypeByNameW
+GetNameByTypeA
+GetNameByTypeW
+SetServiceA
+SetServiceW
+GetServiceA
+GetServiceW
+NPLoadNameSpaces
+TransmitFile
+AcceptEx
+GetAcceptExSockaddrs

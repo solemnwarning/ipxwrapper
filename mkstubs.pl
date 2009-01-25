@@ -14,95 +14,61 @@
 # this program; if not, write to the Free Software Foundation, Inc., 51
 # Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
-use strict;
-use warnings;
-
 if(@ARGV != 2 && @ARGV != 3) {
-	print STDERR "Usage: mkdll.pl <input header> <output code> [<dll name>]\n";
+	print STDERR "Usage: mkdll.pl <function list> <output code> [<dll name>]\n";
 	exit(1);
 }
 
 open(STUBS, "<".$ARGV[0]) or die("Cannot open ".$ARGV[0].": $!");
 open(CODE, ">".$ARGV[1]) or die("Cannot open ".$ARGV[1].": $!");
 
-print CODE <<EOF;
-#include <windows.h>
-#include <winsock2.h>
-#include <mswsock.h>
-#include <nspapi.h>
-#include <ws2spi.h>
-
-void *find_sym(char const *symbol);
-EOF
-
-if(@ARGV == 3) {
-	print CODE "char const *dllname = \"".$ARGV[2]."\";\n";
-}
+my @stubs = ();
 
 foreach my $line(<STUBS>) {
-	$line =~ s/[\r\n;]//g;
-	$line =~ s/\/\*.*\*\///g;
+	$line =~ s/[\r\n]//g;
 	
-	if($line eq "") {
-		next;
+	if($line ne "") {
+		push @stubs, $line;
 	}
+}
+
+if(@ARGV == 3) {
+	print CODE "section .rdata:\n";
+	print CODE "\tglobal\t_dllname\n";
+	print CODE "\tdllname_s:\tdb\t'wsock32.dll'\n";
+	print CODE "\t_dllname:\tdd\tdllname_s\n\n";
+}
+
+print CODE "section .data\n";
+
+for($n = 0; $n < @stubs; $n++) {
+	my $func = $stubs[$n];
+	$func =~ s/^r_//;
 	
-	my $type = "";
-	my $func = "";
-	my $args = "";
+	print CODE "\tname$n:\tdb\t'$func'\n";
+	print CODE "\taddr$n:\tdd\t0\n";
+}
+
+print CODE "\nsection .text\n";
+print CODE "\textern\t_find_sym\n";
+
+for($n = 0; $n < @stubs; $n++) {
+	my $func = $stubs[$n];
+	print CODE "\tglobal\t_$func\n";
+}
+
+for($n = 0; $n < @stubs; $n++) {
+	my $func = $stubs[$n];
+
+	print CODE "\n_$func:\n";
+	print CODE "\tcmp\tdword [addr$n], 0\n";
+	print CODE "\tjne\tjmp$n\n\n";
 	
-	foreach my $word(split(/ /, $line)) {
-		if($word =~ /\w+\(/) {
-			if($func ne "") {
-				$type .= " $func($args";
-			}
-			
-			($func, $args) = split(/\(/, $word, 2);
-			next;
-		}
-		
-		if($args ne "") {
-			$args .= " $word";
-		}else{
-			if($type ne "") {
-				$type .= " ";
-			}
-			
-			$type .= $word;
-		}
-	}
-	
-	$args =~ s/\)$//;
-	
-	my $argdefs = "void";
-	my $argnames = "";
-	my $count = 0;
-	
-	if($args ne "void") {
-		foreach my $arg(split(/,/, $args)) {
-			if($count == 0) {
-				$argdefs = "$arg arg$count";
-				$argnames = "arg$count";
-			}else{
-				$argdefs .= ", $arg arg$count";
-				$argnames .= ", arg$count";
-			}
-			
-			$count++;
-		}
-	}
-	
-	my $symbol = $func;
-	$symbol =~ s/^r_//;
-	
-	print CODE "\n$type $func($argdefs) {\n";
-	print CODE "\tstatic $type (*real_$func)($args) = NULL;\n";
-	print CODE "\tif(!real_$func) {\n";
-	print CODE "\t\treal_$func = find_sym(\"$symbol\");\n";
-	print CODE "\t}\n";
-	print CODE "\treturn real_$func($argnames);\n";
-	print CODE "}\n";
-	
+	print CODE "\tpush\tname$n\n";
+	print CODE "\tcall\t_find_sym\n";
+	print CODE "\tmov\t[addr$n], eax\n";
+	print CODE "jmp$n:\n";
+	print CODE "\tjmp\t[addr$n]\n";
 }
 
 close(CODE);
