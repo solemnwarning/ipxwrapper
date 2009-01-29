@@ -23,7 +23,7 @@ static HMODULE ipxdll = NULL;
 static HMODULE sysdll = NULL;
 extern char const *dllname;
 
-void *find_sym(char const *symbol);
+void __stdcall *find_sym(char const *symbol);
 void debug(char const *fmt, ...);
 
 BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
@@ -58,7 +58,7 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 	return TRUE;
 }
 
-void *find_sym(char const *symbol) {
+void __stdcall *find_sym(char const *symbol) {
 	void *ptr = NULL;
 	
 	if(!ptr) {

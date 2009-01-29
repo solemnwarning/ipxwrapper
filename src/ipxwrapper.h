@@ -22,7 +22,7 @@
 #include <iphlpapi.h>
 #include <stdint.h>
 
-#define PORT 40404
+#define PORT 54792
 #define DEBUG "ipxwrapper.log"
 
 /* Maximum UDP data size is 65467, we use a smaller value to ensure we have
@@ -147,7 +147,7 @@ extern HMODULE winsock2_dll;
 extern HMODULE mswsock_dll;
 extern HMODULE wsock32_dll;
 
-void *find_sym(char const *sym);
+void __stdcall *find_sym(char const *sym);
 void debug(char const *fmt, ...);
 ipx_socket *get_socket(SOCKET fd);
 void lock_mutex(void);
@@ -155,5 +155,19 @@ void unlock_mutex(void);
 IP_ADAPTER_INFO *get_nics(void);
 char const *w32_error(DWORD errnum);
 ipx_host *find_host(unsigned char *hwaddr);
+
+INT APIENTRY r_EnumProtocolsA(LPINT,LPVOID,LPDWORD);
+INT APIENTRY r_EnumProtocolsW(LPINT,LPVOID,LPDWORD);
+int PASCAL FAR r_WSARecvEx(SOCKET,char*,int,int*);
+int WSAAPI r_bind(SOCKET,const struct sockaddr*,int);
+int WSAAPI r_closesocket(SOCKET);
+int WSAAPI r_getsockname(SOCKET,struct sockaddr*,int*);
+int WSAAPI r_getsockopt(SOCKET,int,int,char*,int*);
+int WSAAPI r_recv(SOCKET,char*,int,int);
+int WSAAPI r_recvfrom(SOCKET,char*,int,int,struct sockaddr*,int*);
+int WSAAPI r_sendto(SOCKET,const char*,int,int,const struct sockaddr*,int);
+int WSAAPI r_setsockopt(SOCKET,int,int,const char*,int);
+int WSAAPI r_shutdown(SOCKET,int);
+SOCKET WSAAPI r_socket(int,int,int);
 
 #endif /* !IPXWRAPPER_H */
