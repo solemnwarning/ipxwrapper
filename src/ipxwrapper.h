@@ -169,5 +169,6 @@ int WSAAPI r_sendto(SOCKET,const char*,int,int,const struct sockaddr*,int);
 int WSAAPI r_setsockopt(SOCKET,int,int,const char*,int);
 int WSAAPI r_shutdown(SOCKET,int);
 SOCKET WSAAPI r_socket(int,int,int);
+int PASCAL r_ioctlsocket(SOCKET fd, long cmd, u_long *argp);
 
 #endif /* !IPXWRAPPER_H */

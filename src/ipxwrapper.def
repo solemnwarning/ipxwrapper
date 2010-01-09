@@ -13,3 +13,4 @@ EXPORTS
 	EnumProtocolsA
 	EnumProtocolsW
 	WSARecvEx
+	ioctlsocket

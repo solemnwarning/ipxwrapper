@@ -7,6 +7,7 @@ htonl
 ntohl
 htons
 ntohs
+select
 r_EnumProtocolsA
 r_EnumProtocolsW
 r_WSARecvEx
@@ -20,3 +21,4 @@ r_sendto
 r_setsockopt
 r_shutdown
 r_socket
+r_ioctlsocket

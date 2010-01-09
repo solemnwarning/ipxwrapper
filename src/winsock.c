@@ -658,3 +658,34 @@ int PASCAL shutdown(SOCKET fd, int cmd) {
 		RETURN(r_shutdown(fd, cmd));
 	}
 }
+
+int PASCAL ioctlsocket(SOCKET fd, long cmd, u_long *argp) {
+	ipx_socket *sockptr = get_socket(fd);
+	
+	if(sockptr && cmd == FIONREAD) {
+		ipx_packet packet;
+		fd_set fdset;
+		struct timeval tv = {0,0};
+		
+		FD_ZERO(&fdset);
+		FD_SET(sockptr->fd, &fdset);
+		
+		int r = select(1, &fdset, NULL, NULL, &tv);
+		if(r == -1) {
+			RETURN(-1);
+		}else if(r == 0) {
+			*(unsigned long*)argp = 0;
+			RETURN(0);
+		}
+		
+		r = r_recv(sockptr->fd, (char*)&packet, sizeof(packet), MSG_PEEK);
+		if(r == -1 && WSAGetLastError() != WSAEMSGSIZE) {
+			RETURN(-1);
+		}
+		
+		*(unsigned long*)argp = packet.size;
+		RETURN(0);
+	}else{
+		RETURN(r_ioctlsocket(fd, cmd, argp));
+	}
+}
