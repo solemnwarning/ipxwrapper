@@ -276,29 +276,24 @@ static LRESULT CALLBACK addr_dialog_wproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM
 					char text[256];
 					GetWindowText(GetDlgItem(hwnd, ID_DIALOG_TXT), text, sizeof(text));
 					
-					bool success = false;
+					int buf[6];
 					
-					if(vars->size == 4) {
-						int buf[4];
+					if(sscanf(text, "%02X:%02X:%02X:%02X:%02X:%02X", &buf[0], &buf[1], &buf[2], &buf[3], &buf[4], &buf[5]) == vars->size) {
+						unsigned char uc[] = {buf[0], buf[1], buf[2], buf[3], buf[4], buf[5]};
+						unsigned char f6[] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
+						unsigned char z6[] = {0,0,0,0,0,0};
 						
-						if(sscanf(text, "%02X:%02X:%02X:%02X", &buf[0], &buf[1], &buf[2], &buf[3]) == 4) {
-							unsigned char uc[] = {buf[0], buf[1], buf[2], buf[3]};
+						if(memcmp(uc, f6, vars->size) == 0 || memcmp(uc, z6, vars->size) == 0) {
+							std::string m = "This is not a valid network/node number.\n";
+							m += "Using it may cause problems. Use it anyway?";
 							
-							baddr_to_str(vars->dest, uc, 4);
-							success = true;
+							if(MessageBox(hwnd, m.c_str(), "Warning", MB_YESNO | MB_ICONWARNING) != IDYES) {
+								return 0;
+							}
 						}
-					}else{
-						int buf[6];
 						
-						if(sscanf(text, "%02X:%02X:%02X:%02X:%02X:%02X", &buf[0], &buf[1], &buf[2], &buf[3], &buf[4], &buf[5]) == 6) {
-							unsigned char uc[] = {buf[0], buf[1], buf[2], buf[3], buf[4], buf[5]};
-							
-							baddr_to_str(vars->dest, uc, 6);
-							success = true;
-						}
-					}
-					
-					if(success) {
+						baddr_to_str(vars->dest, uc, vars->size);
+						
 						int nic = ListView_GetNextItem(windows.nic_list, (LPARAM)-1, LVNI_FOCUSED);
 						
 						ListView_Update(windows.nic_list, nic);
