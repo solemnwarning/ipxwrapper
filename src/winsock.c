@@ -611,7 +611,7 @@ int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct s
 		
 		lock_mutex();
 		
-		ipx_host *hptr = find_host(packet->dest_node);
+		ipx_host *hptr = find_host(packet->dest_net, packet->dest_node);
 		
 		for(nic = nics; nic; nic = nic->next) {
 			if((

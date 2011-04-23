@@ -24,6 +24,7 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <stdint.h>
+#include <time.h>
 
 #include "ipxwrapper.h"
 
@@ -51,7 +52,7 @@ static HKEY regkey = NULL;
 static HMODULE load_sysdll(char const *name);
 static int init_router(void);
 static DWORD WINAPI router_main(LPVOID argp);
-static void add_host(unsigned char *hwaddr, uint32_t ipaddr);
+static void add_host(const unsigned char *net, const unsigned char *node, uint32_t ipaddr);
 
 BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 	if(why == DLL_PROCESS_ATTACH) {
@@ -307,17 +308,17 @@ static HMODULE load_sysdll(char const *name) {
 static int init_router(void) {
 	net_fd = socket(AF_INET, SOCK_DGRAM, 0);
 	if(net_fd == -1) {
-		debug("Failed to create listener socket: %s", w32_error(WSAGetLastError()));
+		debug("Failed to create network socket: %s", w32_error(WSAGetLastError()));
 		return 0;
 	}
 	
 	struct sockaddr_in bind_addr;
 	bind_addr.sin_family = AF_INET;
-	bind_addr.sin_addr.s_addr = inet_addr("0.0.0.0");
+	bind_addr.sin_addr.s_addr = INADDR_ANY;
 	bind_addr.sin_port = htons(PORT);
 	
 	if(bind(net_fd, (struct sockaddr*)&bind_addr, sizeof(bind_addr)) == -1) {
-		debug("Failed to bind listener socket");
+		debug("Failed to bind network socket: %s", w32_error(WSAGetLastError()));
 		return 0;
 	}
 	
@@ -381,7 +382,7 @@ static DWORD WINAPI router_main(LPVOID buf) {
 		
 		lock_mutex();
 		
-		add_host(packet->src_node, ntohl(addr.sin_addr.s_addr));
+		add_host(packet->src_net, packet->src_node, ntohl(addr.sin_addr.s_addr));
 		
 		for(sockptr = sockets; sockptr; sockptr = sockptr->next) {
 			if(
@@ -432,13 +433,15 @@ char const *w32_error(DWORD errnum) {
 	return buf;	
 }
 
-/* Add a host to the hosts list */
-static void add_host(unsigned char *hwaddr, uint32_t ipaddr) {
+/* Add a host to the hosts list or update an existing one */
+static void add_host(const unsigned char *net, const unsigned char *node, uint32_t ipaddr) {
 	ipx_host *hptr = hosts;
 	
 	while(hptr) {
-		if(memcmp(hptr->hwaddr, hwaddr, 6) == 0) {
+		if(memcmp(hptr->ipx_net, net, 4) == 0 && memcmp(hptr->ipx_node, node, 6) == 0) {
 			hptr->ipaddr = ipaddr;
+			hptr->last_packet = time(NULL);
+			
 			return;
 		}
 		
@@ -451,24 +454,40 @@ static void add_host(unsigned char *hwaddr, uint32_t ipaddr) {
 		return;
 	}
 	
-	INIT_HOST(hptr);
+	memcpy(hptr->ipx_net, net, 4);
+	memcpy(hptr->ipx_node, node, 6);
 	
-	memcpy(hptr->hwaddr, hwaddr, 6);
 	hptr->ipaddr = ipaddr;
+	hptr->last_packet = time(NULL);
 	
 	hptr->next = hosts;
 	hosts = hptr;
 }
 
 /* Search the hosts list */
-ipx_host *find_host(unsigned char *hwaddr) {
-	ipx_host *hptr = hosts;
+ipx_host *find_host(const unsigned char *net, const unsigned char *node) {
+	ipx_host *hptr = hosts, *pptr = NULL;
 	
 	while(hptr) {
-		if(memcmp(hptr->hwaddr, hwaddr, 6) == 0) {
-			return hptr;
+		if(memcmp(hptr->ipx_net, net, 4) == 0 && memcmp(hptr->ipx_node, node, 6) == 0) {
+			if(hptr->last_packet+TTL < time(NULL)) {
+				/* Host record has expired, delete */
+				
+				if(pptr) {
+					pptr->next = hptr->next;
+					free(hptr);
+				}else{
+					hosts = hptr->next;
+					free(hptr);
+				}
+				
+				return NULL;
+			}else{
+				return hptr;
+			}
 		}
 		
+		pptr = hptr;
 		hptr = hptr->next;
 	}
 	

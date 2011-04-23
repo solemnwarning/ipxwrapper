@@ -23,6 +23,8 @@
 #include <stdint.h>
 
 #define PORT 54792
+#define TTL 60
+
 #define DEBUG "ipxwrapper.log"
 
 /* Maximum UDP data size is 65467, we use a smaller value to ensure we have
@@ -126,8 +128,11 @@ struct ipx_nic {
 };
 
 struct ipx_host {
-	unsigned char hwaddr[6];
+	unsigned char ipx_net[4];
+	unsigned char ipx_node[6];
+	
 	uint32_t ipaddr;
+	time_t last_packet;
 	
 	ipx_host *next;
 };
@@ -156,7 +161,7 @@ void lock_mutex(void);
 void unlock_mutex(void);
 IP_ADAPTER_INFO *get_nics(void);
 char const *w32_error(DWORD errnum);
-ipx_host *find_host(unsigned char *hwaddr);
+ipx_host *find_host(const unsigned char *net, const unsigned char *node);
 
 INT APIENTRY r_EnumProtocolsA(LPINT,LPVOID,LPDWORD);
 INT APIENTRY r_EnumProtocolsW(LPINT,LPVOID,LPDWORD);
