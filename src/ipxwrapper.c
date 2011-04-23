@@ -128,10 +128,7 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 			INIT_NIC(nnic);
 			
 			nnic->ipaddr = ntohl(inet_addr(ifptr->IpAddressList.IpAddress.String));
-			nnic->netmask = ntohl(inet_addr(ifptr->IpAddressList.IpMask.String));
-			nnic->bcast = nnic->ipaddr | ~nnic->netmask;
-			nnic->start = (nnic->ipaddr & nnic->netmask) | 1;
-			nnic->end = (nnic->ipaddr & nnic->netmask) | (~nnic->netmask & ~1);
+			nnic->bcast = nnic->ipaddr | ~ntohl(inet_addr(ifptr->IpAddressList.IpMask.String));
 			memcpy(nnic->hwaddr, ifptr->Address, 6);
 			
 			if(got_rv && rv.primary) {
@@ -140,6 +137,7 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 				nics = nnic;
 			}else if(enic) {
 				enic->next = nnic;
+				enic = nnic;
 			}else{
 				enic = nics = nnic;
 			}

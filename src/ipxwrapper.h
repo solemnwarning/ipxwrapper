@@ -59,10 +59,7 @@
 
 #define INIT_NIC(ptr) \
 	(ptr)->ipaddr = 0;\
-	(ptr)->netmask = 0;\
 	(ptr)->bcast = 0;\
-	(ptr)->start = 0;\
-	(ptr)->end = 0;\
 	memset((ptr)->hwaddr, 0, 6);\
 	(ptr)->next = NULL;
 
@@ -121,10 +118,7 @@ struct ipx_packet {
 
 struct ipx_nic {
 	uint32_t ipaddr;
-	uint32_t netmask;
 	uint32_t bcast;
-	uint32_t start;
-	uint32_t end;
 	
 	unsigned char hwaddr[6];
 	
