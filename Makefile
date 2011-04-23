@@ -15,12 +15,13 @@
 # Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 CFLAGS := -Wall
+CXXFLAGS := -Wall
 
 IPXWRAPPER_DEPS := src/ipxwrapper.o src/winsock.o src/ipxwrapper_stubs.o src/ipxwrapper.def
 WSOCK32_DEPS := src/stubdll.o src/wsock32_stubs.o src/wsock32.def
 MSWSOCK_DEPS := src/stubdll.o src/mswsock_stubs.o src/mswsock.def
 
-all: ipxwrapper.dll wsock32.dll mswsock.dll
+all: ipxwrapper.dll wsock32.dll mswsock.dll ipxconfig.exe
 
 clean:
 	rm -f src/*.o
@@ -61,3 +62,6 @@ src/mswsock_stubs.o: src/mswsock_stubs.s
 
 src/mswsock_stubs.s: src/mswsock_stubs.txt
 	perl mkstubs.pl src/mswsock_stubs.txt src/mswsock_stubs.s mswsock.dll
+
+ipxconfig.exe: src/ipxconfig.cpp
+	$(CXX) $(CXXFLAGS) -D_WIN32_IE=0x0400 -mwindows -o ipxconfig.exe src/ipxconfig.cpp -liphlpapi
