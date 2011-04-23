@@ -46,6 +46,7 @@ static FILE *debug_fh = NULL;
 static HANDLE mutex = NULL;
 static HANDLE router_thread = NULL;
 static DWORD router_tid = 0;
+static HKEY regkey = NULL;
 
 static HMODULE load_sysdll(char const *name);
 static int init_router(void);
@@ -66,6 +67,19 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 			return FALSE;
 		}
 		
+		int reg_err = RegOpenKeyEx(
+			HKEY_CURRENT_USER,
+			"Software\\IPXWrapper",
+			0,
+			KEY_QUERY_VALUE,
+			&regkey
+		);
+		
+		if(reg_err != ERROR_SUCCESS) {
+			regkey = NULL;
+			debug("Could not open registry: %s", w32_error(reg_err));
+		}
+		
 		IP_ADAPTER_INFO *ifroot = get_nics();
 		IP_ADAPTER_INFO *ifptr = ifroot;
 		ipx_nic *enic = NULL;
@@ -75,6 +89,37 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 		}
 		
 		while(ifptr) {
+			struct reg_value rv;
+			int got_rv = 0;
+			
+			if(regkey) {
+				char vname[18];
+				
+				sprintf(
+					vname,
+					"%02X:%02X:%02X:%02X:%02X:%02X",
+					ifptr->Address[0],
+					ifptr->Address[1],
+					ifptr->Address[2],
+					ifptr->Address[3],
+					ifptr->Address[4],
+					ifptr->Address[5]
+				);
+				
+				DWORD rv_size = sizeof(rv);
+				
+				int reg_err = RegQueryValueEx(regkey, vname, NULL, NULL, (BYTE*)&rv, &rv_size);
+				if(reg_err == ERROR_SUCCESS && rv_size == sizeof(rv)) {
+					got_rv = 1;
+				}
+			}
+			
+			if(got_rv && !rv.enabled) {
+				/* Interface has been disabled, don't add it */
+				ifptr = ifptr->Next;
+				continue;
+			}
+			
 			ipx_nic *nnic = malloc(sizeof(ipx_nic));
 			if(!nnic) {
 				return FALSE;
@@ -89,7 +134,11 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 			nnic->end = (nnic->ipaddr & nnic->netmask) | (~nnic->netmask & ~1);
 			memcpy(nnic->hwaddr, ifptr->Address, 6);
 			
-			if(enic) {
+			if(got_rv && rv.primary) {
+				/* Force primary flag set, insert at start of NIC list */
+				nnic->next = nics;
+				nics = nnic;
+			}else if(enic) {
 				enic->next = nnic;
 			}else{
 				enic = nics = nnic;
@@ -134,6 +183,11 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 		}
 		
 		WSACleanup();
+		
+		if(regkey) {
+			RegCloseKey(regkey);
+			regkey = NULL;
+		}
 		
 		DLL_UNLOAD(winsock2_dll);
 		DLL_UNLOAD(mswsock_dll);

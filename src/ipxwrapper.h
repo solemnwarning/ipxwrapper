@@ -138,6 +138,14 @@ struct ipx_host {
 	ipx_host *next;
 };
 
+/* Interface settings stored in registry */
+struct reg_value {
+	unsigned char ipx_net[4];
+	unsigned char ipx_node[6];
+	unsigned char enabled;
+	unsigned char primary;
+} __attribute__((__packed__));
+
 extern ipx_socket *sockets;
 extern ipx_nic *nics;
 extern ipx_host *hosts;
