@@ -604,12 +604,6 @@ int WSAAPI setsockopt(SOCKET fd, int level, int optname, const char FAR *optval,
 
 int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct sockaddr *addr, int addrlen) {
 	struct sockaddr_ipx *ipxaddr = (struct sockaddr_ipx*)addr;
-	unsigned char z6[] = {0,0,0,0,0,0};
-	int sval, psize;
-	struct sockaddr_in saddr;
-	struct sockaddr_ipx baddr;
-	ipx_packet *packet;
-	ipx_nic *nic;
 	
 	ipx_socket *sockptr = get_socket(fd);
 	
@@ -623,13 +617,16 @@ int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct s
 		}
 		
 		if(!(sockptr->flags & IPX_BOUND)) {
-			baddr.sa_family = AF_IPX;
-			memset(baddr.sa_netnum, 0, 4);
-			memset(baddr.sa_nodenum, 0, 6);
-			baddr.sa_socket = 0;
+			debug("sendto() on unbound socket, attempting implicit bind");
 			
-			if(bind(fd, (struct sockaddr*)&baddr, sizeof(baddr)) == -1) {
-				debug("Implicit bind on %d failed: %s", (int)fd, w32_error(WSAGetLastError()));
+			struct sockaddr_ipx bind_addr;
+			
+			bind_addr.sa_family = AF_IPX;
+			memcpy(bind_addr.sa_netnum, ipxaddr->sa_netnum, 4);
+			memset(bind_addr.sa_nodenum, 0, 6);
+			bind_addr.sa_socket = 0;
+			
+			if(bind(fd, (struct sockaddr*)&bind_addr, sizeof(bind_addr)) == -1) {
 				RETURN(-1);
 			}
 		}
@@ -638,9 +635,9 @@ int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct s
 			RETURN_WSA(WSAEMSGSIZE, -1);
 		}
 		
-		psize = sizeof(ipx_packet)+len-1;
+		int psize = sizeof(ipx_packet)+len-1;
 		
-		packet = malloc(psize);
+		ipx_packet *packet = malloc(psize);
 		if(!packet) {
 			RETURN_WSA(ERROR_OUTOFMEMORY, -1);
 		}
@@ -652,32 +649,23 @@ int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct s
 		memcpy(packet->dest_node, ipxaddr->sa_nodenum, 6);
 		packet->dest_socket = ipxaddr->sa_socket;
 		
+		memcpy(packet->src_net, sockptr->netnum, 4);
+		memcpy(packet->src_node, sockptr->nodenum, 6);
+		packet->src_socket = sockptr->socket;
+		
 		packet->size = htons(len);
 		memcpy(packet->data, buf, len);
 		
-		lock_mutex();
+		/* TODO: Only send out enabled interfaces */
 		
-		ipx_host *hptr = find_host(packet->dest_net, packet->dest_node);
+		struct sockaddr_in saddr;
+		saddr.sin_family = AF_INET;
+		saddr.sin_addr.s_addr = INADDR_BROADCAST;
+		saddr.sin_port = htons(PORT);
 		
-		for(nic = nics; nic; nic = nic->next) {
-			if((
-				memcmp(sockptr->nodenum, nic->hwaddr, 6) == 0 ||
-				memcmp(sockptr->nodenum, z6, 6) == 0)
-			) {
-				memset(packet->src_net, 0, 4);
-				memcpy(packet->src_node, nic->hwaddr, 6);
-				packet->src_socket = htons(sockptr->socket);
-				
-				saddr.sin_family = AF_INET;
-				saddr.sin_addr.s_addr = htonl(hptr ? hptr->ipaddr : nic->bcast);
-				saddr.sin_port = htons(PORT);
-				
-				sval = r_sendto(net_fd, (char*)packet, psize, 0, (struct sockaddr*)&saddr, sizeof(saddr));
-				if(sval == -1) {
-					len = -1;
-					break;
-				}
-			}
+		int sval = r_sendto(net_fd, (char*)packet, psize, 0, (struct sockaddr*)&saddr, sizeof(saddr));
+		if(sval == -1) {
+			len = -1;
 		}
 		
 		free(packet);
