@@ -611,7 +611,9 @@ static void init_windows() {
 		create_child(windows.global_conf, 10, text_h, btn_w, row_h, "BUTTON", "Set UDP port...", BS_PUSHBUTTON | WS_TABSTOP, 0, ID_UDP_BTN);
 		windows.w95_bug = create_child(windows.global_conf, btn_w+20, text_h, cbox_w, row_h, "BUTTON", "Enable Win 95 SO_BROADCAST bug", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_W95_BUG);
 		windows.bcast_all = create_child(windows.global_conf, btn_w+20, text_h+row_h+5, cbox_w, row_h, "BUTTON", "Send broadcasts to all subnets", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_BCAST_ALL);
+		
 		Button_SetCheck(windows.w95_bug, global_conf.w95_bug ? BST_CHECKED : BST_UNCHECKED);
+		Button_SetCheck(windows.bcast_all, global_conf.bcast_all ? BST_CHECKED : BST_UNCHECKED);
 	}
 	
 	{
