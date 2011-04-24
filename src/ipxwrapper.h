@@ -87,8 +87,7 @@ struct ipx_socket {
 	uint8_t f_ptype;	/* Undefined when IPX_FILTER isn't set */
 	
 	/* The following values are undefined when IPX_BOUND is not set */
-	unsigned char netnum[4];
-	unsigned char nodenum[6];
+	ipx_nic *nic;
 	uint16_t socket; /* Stored in NETWORK BYTE ORDER */
 	
 	ipx_socket *next;
@@ -110,8 +109,8 @@ struct ipx_packet {
 } __attribute__((__packed__));
 
 struct ipx_nic {
-	/* TODO: Remove if not needed for per-interface sockets in the future */
 	uint32_t ipaddr;
+	uint32_t netmask;
 	uint32_t bcast;
 	
 	unsigned char hwaddr[6];
@@ -143,6 +142,7 @@ struct reg_value {
 struct reg_global {
 	uint16_t udp_port;
 	unsigned char w95_bug;
+	unsigned char bcast_all;
 } __attribute__((__packed__));
 
 extern ipx_socket *sockets;

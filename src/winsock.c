@@ -277,8 +277,7 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen) {
 			RETURN_WSA(WSAEADDRNOTAVAIL, -1);
 		}
 		
-		memcpy(ptr->netnum, nic->ipx_net, 4);
-		memcpy(ptr->nodenum, nic->ipx_node, 6);
+		ptr->nic = nic;
 		
 		if(ipxaddr->sa_socket == 0) {
 			/* Automatic socket allocations start at 1024, I have no idea if
@@ -366,8 +365,8 @@ int WSAAPI getsockname(SOCKET fd, struct sockaddr *addr, int *addrlen) {
 			}
 			
 			ipxaddr->sa_family = AF_IPX;
-			memcpy(ipxaddr->sa_netnum, ptr->netnum, 4);
-			memcpy(ipxaddr->sa_nodenum, ptr->nodenum, 6);
+			memcpy(ipxaddr->sa_netnum, ptr->nic->ipx_net, 4);
+			memcpy(ipxaddr->sa_nodenum, ptr->nic->ipx_node, 6);
 			ipxaddr->sa_socket = ptr->socket;
 			
 			*addrlen = sizeof(struct sockaddr_ipx);
@@ -649,45 +648,26 @@ int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct s
 		unsigned char z6[] = {0,0,0,0,0,0};
 		
 		if(memcmp(packet->dest_net, z6, 4) == 0) {
-			memcpy(packet->dest_net, sockptr->netnum, 4);
+			memcpy(packet->dest_net, sockptr->nic->ipx_net, 4);
 		}
 		
-		memcpy(packet->src_net, sockptr->netnum, 4);
-		memcpy(packet->src_node, sockptr->nodenum, 6);
+		memcpy(packet->src_net, sockptr->nic->ipx_net, 4);
+		memcpy(packet->src_node, sockptr->nic->ipx_node, 6);
 		packet->src_socket = sockptr->socket;
 		
 		packet->size = htons(len);
 		memcpy(packet->data, buf, len);
 		
+		ipx_host *host = find_host(packet->dest_net, packet->dest_node);
+		
 		struct sockaddr_in saddr;
 		saddr.sin_family = AF_INET;
 		saddr.sin_port = htons(global_conf.udp_port);
+		saddr.sin_addr.s_addr = (host ? host->ipaddr : (global_conf.bcast_all ? INADDR_BROADCAST : sockptr->nic->bcast));
 		
-		ipx_host *host = find_host(packet->dest_net, packet->dest_node);
-		
-		if(host) {
-			saddr.sin_addr.s_addr = host->ipaddr;
-			
-			int sval = r_sendto(net_fd, (char*)packet, psize, 0, (struct sockaddr*)&saddr, sizeof(saddr));
-			if(sval == -1) {
-				len = -1;
-			}
-		}else{
-			ipx_nic *nic = nics;
-			int success = 0;
-			
-			while(nic) {
-				saddr.sin_addr.s_addr = nic->bcast;
-				
-				int sval = r_sendto(net_fd, (char*)packet, psize, 0, (struct sockaddr*)&saddr, sizeof(saddr));
-				if(sval >= 0) {
-					success = 1;
-				}
-				
-				nic = nic->next;
-			}
-			
-			len = success ? len : -1;
+		int sval = r_sendto(net_fd, (char*)packet, psize, 0, (struct sockaddr*)&saddr, sizeof(saddr));
+		if(sval == -1) {
+			len = -1;
 		}
 		
 		free(packet);

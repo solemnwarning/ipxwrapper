@@ -88,6 +88,7 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 		if(!regkey || RegQueryValueEx(regkey, "global", NULL, NULL, (BYTE*)&global_conf, &gsize) != ERROR_SUCCESS || gsize != sizeof(global_conf)) {
 			global_conf.udp_port = DEFAULT_PORT;
 			global_conf.w95_bug = 1;
+			global_conf.bcast_all = 0;
 		}
 		
 		if(!load_nics()) {
@@ -333,13 +334,13 @@ static DWORD WINAPI router_main(LPVOID buf) {
 					!(sockptr->flags & IPX_FILTER) ||
 					packet->ptype == sockptr->f_ptype
 				) && (
-					memcmp(packet->dest_net, sockptr->netnum, 4) == 0 ||
+					memcmp(packet->dest_net, sockptr->nic->ipx_net, 4) == 0 ||
 					(
 						memcmp(packet->dest_net, f6, 4) == 0 &&
 						(!global_conf.w95_bug || sockptr->flags & IPX_BROADCAST)
 					)
 				) && (
-					memcmp(packet->dest_node, sockptr->nodenum, 6) == 0 ||
+					memcmp(packet->dest_node, sockptr->nic->ipx_node, 6) == 0 ||
 					(
 						memcmp(packet->dest_node, f6, 6) == 0 &&
 						(!global_conf.w95_bug || sockptr->flags & IPX_BROADCAST)
@@ -471,7 +472,8 @@ static BOOL load_nics(void) {
 		}
 		
 		nnic->ipaddr = inet_addr(ifptr->IpAddressList.IpAddress.String);
-		nnic->bcast = nnic->ipaddr | ~inet_addr(ifptr->IpAddressList.IpMask.String);
+		nnic->netmask = inet_addr(ifptr->IpAddressList.IpMask.String);
+		nnic->bcast = nnic->ipaddr | ~nnic->netmask;
 		
 		memcpy(nnic->hwaddr, ifptr->Address, 6);
 		
