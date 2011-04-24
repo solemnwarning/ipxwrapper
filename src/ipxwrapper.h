@@ -40,16 +40,6 @@
 #define IPX_SEND	(int)(1<<3)
 #define IPX_RECV	(int)(1<<4)
 
-#define INIT_SOCKET(ptr) \
-	(ptr)->fd = -1;\
-	(ptr)->flags = IPX_SEND | IPX_RECV;\
-	(ptr)->s_ptype = 0;\
-	(ptr)->f_ptype = 0;\
-	memset((ptr)->netnum, 0, 4);\
-	memset((ptr)->nodenum, 0, 6);\
-	(ptr)->socket = 0;\
-	(ptr)->next = NULL;
-
 #define RETURN(...) \
 	unlock_mutex();\
 	return __VA_ARGS__;
@@ -94,7 +84,7 @@ struct ipx_socket {
 	
 	int flags;
 	uint8_t s_ptype;
-	uint8_t f_ptype;
+	uint8_t f_ptype;	/* Undefined when IPX_FILTER isn't set */
 	
 	/* The following values are undefined when IPX_BOUND is not set */
 	unsigned char netnum[4];

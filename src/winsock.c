@@ -174,26 +174,24 @@ SOCKET WSAAPI socket(int af, int type, int protocol) {
 			RETURN_WSA(ERROR_OUTOFMEMORY, -1);
 		}
 		
-		INIT_SOCKET(nsock);
-		
 		nsock->fd = r_socket(AF_INET, SOCK_DGRAM, 0);
 		if(nsock->fd == -1) {
-			debug("...failed: %s", w32_error(WSAGetLastError()));
+			debug("Creating fake socket failed: %s", w32_error(WSAGetLastError()));
 			
 			free(nsock);
 			RETURN(-1);
 		}
 		
-		if(protocol) {
-			nsock->s_ptype = NSPROTO_IPX - protocol;
-		}
+		nsock->flags = IPX_SEND | IPX_RECV;
+		nsock->s_ptype = (protocol ? nsock->s_ptype = NSPROTO_IPX - protocol : 0);
 		
 		lock_mutex();
 		
 		nsock->next = sockets;
 		sockets = nsock;
 		
-		debug("...success: fd=%d", nsock->fd);
+		debug("Socket created (fd=%d)", nsock->fd);
+		
 		RETURN(nsock->fd);
 	}else{
 		return r_socket(af, type, protocol);
