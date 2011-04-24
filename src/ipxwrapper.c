@@ -39,6 +39,7 @@ ipx_nic *nics = NULL;
 ipx_host *hosts = NULL;
 SOCKET net_fd = -1;
 struct reg_global global_conf;
+static void *router_buf = NULL;
 
 HMODULE winsock2_dll = NULL;
 HMODULE mswsock_dll = NULL;
@@ -112,12 +113,14 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 		if(!init_router()) {
 			return FALSE;
 		}
-	}
-	if(why == DLL_PROCESS_DETACH) {
+	}else if(why == DLL_PROCESS_DETACH) {
 		if(router_thread && GetCurrentThreadId() != router_tid) {
 			TerminateThread(router_thread, 0);
 			router_thread = NULL;
 		}
+		
+		free(router_buf);
+		router_buf = NULL;
 		
 		if(net_fd >= 0) {
 			closesocket(net_fd);
@@ -279,14 +282,13 @@ static int init_router(void) {
 	setsockopt(net_fd, SOL_SOCKET, SO_RCVBUF, (char*)&bufsize, sizeof(int));
 	setsockopt(net_fd, SOL_SOCKET, SO_SNDBUF, (char*)&bufsize, sizeof(int));
 	
-	/* Memory leak, ah well... */
-	void *pbuf = malloc(PACKET_BUF_SIZE);
-	if(!pbuf) {
-		debug("Not enough memory for packet buffer (64KiB)");
+	router_buf = malloc(PACKET_BUF_SIZE);
+	if(!router_buf) {
+		debug("Not enough memory for router buffer (64KiB)");
 		return 0;
 	}
 	
-	router_thread = CreateThread(NULL, 0, &router_main, pbuf, 0, &router_tid);
+	router_thread = CreateThread(NULL, 0, &router_main, NULL, 0, &router_tid);
 	if(!router_thread) {
 		debug("Failed to create router thread");
 		return 0;
@@ -301,7 +303,7 @@ static int init_router(void) {
  * to the UDP sockets which emulate IPX.
 */
 static DWORD WINAPI router_main(LPVOID buf) {
-	ipx_packet *packet = buf;
+	ipx_packet *packet = router_buf;
 	int addrlen, rval, sval;
 	unsigned char f6[] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
 	struct sockaddr_in addr;
