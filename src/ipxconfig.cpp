@@ -353,6 +353,8 @@ static LRESULT CALLBACK addr_dialog_wproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM
 					PostMessage(hwnd, WM_CLOSE, 0, 0);
 				}
 			}
+			
+			break;
 		
 		default:
 			return DefWindowProc(hwnd, msg, wp, lp);
