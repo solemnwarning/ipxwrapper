@@ -143,6 +143,7 @@ struct reg_global {
 	uint16_t udp_port;
 	unsigned char w95_bug;
 	unsigned char bcast_all;
+	unsigned char filter;
 } __attribute__((__packed__));
 
 extern ipx_socket *sockets;

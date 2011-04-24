@@ -36,6 +36,7 @@
 #define ID_W95_BUG 7
 #define ID_UDP_BTN 8
 #define ID_BCAST_ALL 9
+#define ID_FILTER 10
 
 #define ID_DIALOG_TXT 1
 #define ID_DIALOG_OK 2
@@ -64,6 +65,7 @@ struct reg_global {
 	uint16_t udp_port;
 	unsigned char w95_bug;
 	unsigned char bcast_all;
+	unsigned char filter;
 } __attribute__((__packed__));
 
 typedef std::vector<iface> iface_list;
@@ -101,6 +103,7 @@ static struct {
 	HWND global_conf;
 	HWND w95_bug;
 	HWND bcast_all;
+	HWND filter;
 	
 	HWND button_box;
 } windows;
@@ -192,6 +195,10 @@ static LRESULT CALLBACK main_wproc(HWND window, UINT msg, WPARAM wp, LPARAM lp) 
 					
 					case ID_BCAST_ALL:
 						global_conf.bcast_all = Button_GetCheck(windows.bcast_all) == BST_CHECKED;
+						break;
+					
+					case ID_FILTER:
+						global_conf.filter = Button_GetCheck(windows.filter) == BST_CHECKED;
 						break;
 					
 					default:
@@ -409,6 +416,7 @@ int main() {
 		global_conf.udp_port = PORT;
 		global_conf.w95_bug = 1;
 		global_conf.bcast_all = 0;
+		global_conf.filter = 1;
 	}
 	
 	get_nics();
@@ -612,8 +620,13 @@ static void init_windows() {
 		windows.w95_bug = create_child(windows.global_conf, btn_w+20, text_h, cbox_w, row_h, "BUTTON", "Enable Win 95 SO_BROADCAST bug", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_W95_BUG);
 		windows.bcast_all = create_child(windows.global_conf, btn_w+20, text_h+row_h+5, cbox_w, row_h, "BUTTON", "Send broadcasts to all subnets", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_BCAST_ALL);
 		
+		int cbox2_w = get_text_width(windows.global_conf, "Filter received packets by subnet");
+		
+		windows.filter = create_child(windows.global_conf, btn_w+cbox_w+30, text_h, cbox2_w, row_h, "BUTTON", "Filter received packets by subnet", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_FILTER);
+		
 		Button_SetCheck(windows.w95_bug, global_conf.w95_bug ? BST_CHECKED : BST_UNCHECKED);
 		Button_SetCheck(windows.bcast_all, global_conf.bcast_all ? BST_CHECKED : BST_UNCHECKED);
+		Button_SetCheck(windows.filter, global_conf.filter ? BST_CHECKED : BST_UNCHECKED);
 	}
 	
 	{

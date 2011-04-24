@@ -89,6 +89,7 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 			global_conf.udp_port = DEFAULT_PORT;
 			global_conf.w95_bug = 1;
 			global_conf.bcast_all = 0;
+			global_conf.filter = 1;
 		}
 		
 		if(!load_nics()) {
@@ -312,6 +313,23 @@ static DWORD WINAPI router_main(LPVOID buf) {
 		if(rval <= 0) {
 			debug("Error recieving packet: %s", w32_error(WSAGetLastError()));
 			continue;
+		}
+		
+		if(global_conf.filter) {
+			ipx_nic *nic = nics;
+			
+			while(nic) {
+				if((nic->ipaddr & nic->netmask) == (addr.sin_addr.s_addr & nic->netmask)) {
+					break;
+				}
+				
+				nic = nic->next;
+			}
+			
+			if(!nic) {
+				/* Packet not recieved from subnet of an enabled interface */
+				continue;
+			}
 		}
 		
 		packet->size = ntohs(packet->size);
