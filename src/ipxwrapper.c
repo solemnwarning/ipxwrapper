@@ -53,6 +53,7 @@ static HMODULE load_sysdll(char const *name);
 static int init_router(void);
 static DWORD WINAPI router_main(LPVOID argp);
 static void add_host(const unsigned char *net, const unsigned char *node, uint32_t ipaddr);
+static BOOL load_nics(void);
 
 BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 	if(why == DLL_PROCESS_ATTACH) {
@@ -81,83 +82,9 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 			debug("Could not open registry: %s", w32_error(reg_err));
 		}
 		
-		IP_ADAPTER_INFO *ifroot = get_nics();
-		IP_ADAPTER_INFO *ifptr = ifroot;
-		ipx_nic *enic = NULL;
-		
-		if(!ifptr) {
-			debug("No NICs: %s", w32_error(WSAGetLastError()));
+		if(!load_nics()) {
+			return FALSE;
 		}
-		
-		while(ifptr) {
-			struct reg_value rv;
-			int got_rv = 0;
-			
-			if(regkey) {
-				char vname[18];
-				
-				sprintf(
-					vname,
-					"%02X:%02X:%02X:%02X:%02X:%02X",
-					ifptr->Address[0],
-					ifptr->Address[1],
-					ifptr->Address[2],
-					ifptr->Address[3],
-					ifptr->Address[4],
-					ifptr->Address[5]
-				);
-				
-				DWORD rv_size = sizeof(rv);
-				
-				int reg_err = RegQueryValueEx(regkey, vname, NULL, NULL, (BYTE*)&rv, &rv_size);
-				if(reg_err == ERROR_SUCCESS && rv_size == sizeof(rv)) {
-					got_rv = 1;
-				}
-			}
-			
-			if(got_rv && !rv.enabled) {
-				/* Interface has been disabled, don't add it */
-				ifptr = ifptr->Next;
-				continue;
-			}
-			
-			ipx_nic *nnic = malloc(sizeof(ipx_nic));
-			if(!nnic) {
-				return FALSE;
-			}
-			
-			nnic->ipaddr = ntohl(inet_addr(ifptr->IpAddressList.IpAddress.String));
-			nnic->bcast = nnic->ipaddr | ~ntohl(inet_addr(ifptr->IpAddressList.IpMask.String));
-			
-			memcpy(nnic->hwaddr, ifptr->Address, 6);
-			
-			if(got_rv) {
-				memcpy(nnic->ipx_net, rv.ipx_net, 4);
-				memcpy(nnic->ipx_node, rv.ipx_node, 6);
-			}else{
-				unsigned char net[] = {0,0,0,1};
-				
-				memcpy(nnic->ipx_net, net, 4);
-				memcpy(nnic->ipx_node, nnic->hwaddr, 6);
-			}
-			
-			nnic->next = NULL;
-			
-			if(got_rv && rv.primary) {
-				/* Force primary flag set, insert at start of NIC list */
-				nnic->next = nics;
-				nics = nnic;
-			}else if(enic) {
-				enic->next = nnic;
-				enic = nnic;
-			}else{
-				enic = nics = nnic;
-			}
-			
-			ifptr = ifptr->Next;
-		}
-		
-		free(ifroot);
 		
 		mutex = CreateMutex(NULL, FALSE, NULL);
 		if(!mutex) {
@@ -503,4 +430,76 @@ ipx_host *find_host(const unsigned char *net, const unsigned char *node) {
 	}
 	
 	return NULL;
+}
+
+static BOOL load_nics(void) {
+	IP_ADAPTER_INFO *ifroot = get_nics();
+	IP_ADAPTER_INFO *ifptr = ifroot;
+	ipx_nic *enic = NULL;
+	
+	if(!ifptr) {
+		debug("No NICs: %s", w32_error(WSAGetLastError()));
+	}
+	
+	while(ifptr) {
+		struct reg_value rv;
+		int got_rv = 0;
+		
+		if(regkey) {
+			char vname[18];
+			NODE_TO_STRING(vname, ifptr->Address);
+			
+			DWORD rv_size = sizeof(rv);
+			
+			int reg_err = RegQueryValueEx(regkey, vname, NULL, NULL, (BYTE*)&rv, &rv_size);
+			if(reg_err == ERROR_SUCCESS && rv_size == sizeof(rv)) {
+				got_rv = 1;
+			}
+		}
+		
+		if(got_rv && !rv.enabled) {
+			/* Interface has been disabled, don't add it */
+			ifptr = ifptr->Next;
+			continue;
+		}
+		
+		ipx_nic *nnic = malloc(sizeof(ipx_nic));
+		if(!nnic) {
+			return FALSE;
+		}
+		
+		nnic->ipaddr = ntohl(inet_addr(ifptr->IpAddressList.IpAddress.String));
+		nnic->bcast = nnic->ipaddr | ~ntohl(inet_addr(ifptr->IpAddressList.IpMask.String));
+		
+		memcpy(nnic->hwaddr, ifptr->Address, 6);
+		
+		if(got_rv) {
+			memcpy(nnic->ipx_net, rv.ipx_net, 4);
+			memcpy(nnic->ipx_node, rv.ipx_node, 6);
+		}else{
+			unsigned char net[] = {0,0,0,1};
+			
+			memcpy(nnic->ipx_net, net, 4);
+			memcpy(nnic->ipx_node, nnic->hwaddr, 6);
+		}
+		
+		nnic->next = NULL;
+		
+		if(got_rv && rv.primary) {
+			/* Force primary flag set, insert at start of NIC list */
+			nnic->next = nics;
+			nics = nnic;
+		}else if(enic) {
+			enic->next = nnic;
+			enic = nnic;
+		}else{
+			enic = nics = nnic;
+		}
+		
+		ifptr = ifptr->Next;
+	}
+	
+	free(ifroot);
+	
+	return TRUE;
 }
