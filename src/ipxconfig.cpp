@@ -216,9 +216,9 @@ static LRESULT CALLBACK main_wproc(HWND window, UINT msg, WPARAM wp, LPARAM lp) 
 			int btn_w = rect.right - rect.left;
 			
 			MoveWindow(windows.nic_list, 0, 0, width, height-conf_h-gc_h, TRUE);
-			MoveWindow(windows.nic_conf, 0, height-conf_h-gc_h, width-btn_w-1, conf_h, TRUE);
-			MoveWindow(windows.global_conf, 0, height-gc_h, width-btn_w-1, gc_h, TRUE);
-			MoveWindow(windows.button_box, width-btn_w, height-conf_h-gc_h, btn_w, conf_h+gc_h, TRUE);
+			MoveWindow(windows.nic_conf, 0, height-conf_h-gc_h, width, conf_h, TRUE);
+			MoveWindow(windows.global_conf, 0, height-gc_h, width-btn_w-5, gc_h, TRUE);
+			MoveWindow(windows.button_box, width-btn_w, height-gc_h, btn_w, gc_h, TRUE);
 		
 			break;
 		
