@@ -21,6 +21,7 @@
 #include <winsock2.h>
 #include <iphlpapi.h>
 #include <stdint.h>
+#include <stdio.h>
 
 #define PORT 54792
 #define TTL 60
@@ -110,9 +111,10 @@ struct ipx_socket {
 	uint8_t s_ptype;
 	uint8_t f_ptype;
 	
+	/* The following values are undefined when IPX_BOUND is not set */
 	unsigned char netnum[4];
 	unsigned char nodenum[6];
-	uint16_t socket;
+	uint16_t socket; /* Stored in NETWORK BYTE ORDER */
 	
 	ipx_socket *next;
 };

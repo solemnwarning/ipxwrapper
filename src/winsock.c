@@ -235,21 +235,107 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen) {
 	
 	if(ptr) {
 		struct sockaddr_ipx *ipxaddr = (struct sockaddr_ipx*)addr;
+		char net_s[12], node_s[18];
 		
-		debug(
-			"bind(%d, net=%hhx:%hhx:%hhx:%hhx node=%hhx:%hhx:%hhx:%hhx:%hhx:%hhx socket=%hu)", fd,
-			ipxaddr->sa_netnum[0],
-			ipxaddr->sa_netnum[1],
-			ipxaddr->sa_netnum[2],
-			ipxaddr->sa_netnum[3],
-			ipxaddr->sa_nodenum[0],
-			ipxaddr->sa_nodenum[1],
-			ipxaddr->sa_nodenum[2],
-			ipxaddr->sa_nodenum[3],
-			ipxaddr->sa_nodenum[4],
-			ipxaddr->sa_nodenum[5],
-			ntohs(ipxaddr->sa_socket)
-		);
+		NET_TO_STRING(net_s, ipxaddr->sa_netnum);
+		NODE_TO_STRING(node_s, ipxaddr->sa_nodenum);
+		
+		debug("bind(%d, net=%s node=%s socket=%hu)", fd, net_s, node_s, ntohs(ipxaddr->sa_socket));
+		
+		if(ptr->flags & IPX_BOUND) {
+			debug("bind failed: socket already bound");
+			RETURN_WSA(WSAEINVAL, -1);
+		}
+		
+		/* Network number 00:00:00:00 is specified as the "current" network, this code
+		 * treats it as a wildcard when used for the network OR node numbers.
+		 *
+		 * According to MSDN 6, IPX socket numbers are unique to systems rather than
+		 * interfaces and as such, the same socket number cannot be bound to more than
+		 * one interface, my code lacks any "catch all" address like INADDR_ANY as I have
+		 * not found any mentions of an equivalent address for IPX. This means that a
+		 * given socket number may only be used on one interface.
+		 *
+		 * If you know the above information about IPX socket numbers to be incorrect,
+		 * PLEASE email me with corrections!
+		*/
+		
+		unsigned char z6[] = {0,0,0,0,0,0};
+		ipx_nic *nic = nics;
+		
+		while(nic) {
+			if(
+				(memcmp(ipxaddr->sa_netnum, nic->ipx_net, 4) == 0 || memcmp(ipxaddr->sa_netnum, z6, 4) == 0) &&
+				(memcmp(ipxaddr->sa_nodenum, nic->ipx_node, 6) == 0 || memcmp(ipxaddr->sa_nodenum, z6, 6) == 0)
+			) {
+				break;
+			}
+			
+			nic = nic->next;
+		}
+		
+		if(!nic) {
+			debug("bind failed: no such address");
+			RETURN_WSA(WSAEADDRNOTAVAIL, -1);
+		}
+		
+		memcpy(ptr->netnum, nic->ipx_net, 4);
+		memcpy(ptr->nodenum, nic->ipx_node, 6);
+		
+		if(ipxaddr->sa_socket == 0) {
+			/* Automatic socket allocations start at 1024, I have no idea if
+			 * this is normal IPX behaviour, but IP does it and it doesn't seem
+			 * to interfere with any IPX software I've tested.
+			*/
+			
+			uint16_t s = 1024;
+			ipx_socket *socket = sockets;
+			
+			while(socket) {
+				if(ntohs(socket->socket) == s && socket->flags & IPX_BOUND) {
+					if(s == 65535) {
+						debug("bind failed: out of sockets?!");
+						RETURN_WSA(WSAEADDRNOTAVAIL, -1);
+					}
+					
+					s++;
+					socket = sockets;
+					
+					continue;
+				}
+				
+				socket = socket->next;
+			}
+			
+			ptr->socket = htons(s);
+		}else{
+			/* Test if any bound socket is using the requested socket number. */
+			
+			ipx_socket *socket = sockets;
+			
+			while(socket) {
+				if(socket->socket == ipxaddr->sa_socket && socket->flags & IPX_BOUND) {
+					debug("bind failed: requested socket in use");
+					RETURN_WSA(WSAEADDRINUSE, -1);
+				}
+				
+				socket = socket->next;
+			}
+			
+			ptr->socket = ipxaddr->sa_socket;
+		}
+		
+		NET_TO_STRING(net_s, nic->ipx_net);
+		NODE_TO_STRING(node_s, nic->ipx_node);
+		
+		debug("bind address: net=%s node=%s socket=%hu", net_s, node_s, ntohs(ptr->socket));
+		
+		/* TODO: Bind fake socket in socket() call rather than here?
+		 *
+		 * I think I put the bind() call for it here so that the fd given to the
+		 * program would be in the expected un-bound state, although I'm not sure
+		 * if there are any winsock calls it could ONLY make on such a socket.
+		*/
 		
 		struct sockaddr_in bind_addr;
 		bind_addr.sin_family = AF_INET;
@@ -259,54 +345,9 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen) {
 		int rval = r_bind(fd, (struct sockaddr*)&bind_addr, sizeof(bind_addr));
 		
 		if(rval == 0) {
-			memcpy(ptr->netnum, ipxaddr->sa_netnum, 4);
-			
-			ipx_nic *nic = nics;
-			int first = 1;
-			
-			while(nic) {
-				if(first || memcmp(ipxaddr->sa_nodenum, nic->hwaddr, 6) == 0) {
-					memcpy(ptr->nodenum, nic->hwaddr, 6);
-					first = 0;
-				}
-				
-				nic = nic->next;
-			}
-			
-			ptr->socket = ntohs(ipxaddr->sa_socket);
-			if(ptr->socket == 0) {
-				ptr->socket = 1024;
-				
-				ipx_socket *sptr = sockets;
-				
-				while(sptr) {
-					if(sptr != ptr && sptr->socket == ptr->socket) {
-						ptr->socket++;
-						sptr = sockets;
-						continue;
-					}
-					
-					sptr = sptr->next;
-				}
-			}
-			
 			ptr->flags |= IPX_BOUND;
-			
-			debug("...bound to net=%hhx:%hhx:%hhx:%hhx node=%hhx:%hhx:%hhx:%hhx:%hhx:%hhx socket=%hu)",
-				ptr->netnum[0],
-				ptr->netnum[1],
-				ptr->netnum[2],
-				ptr->netnum[3],
-				ptr->nodenum[0],
-				ptr->nodenum[1],
-				ptr->nodenum[2],
-				ptr->nodenum[3],
-				ptr->nodenum[4],
-				ptr->nodenum[5],
-				ptr->socket
-			);
 		}else{
-			debug("...failed");
+			debug("Binding fake socket failed: %s", w32_error(WSAGetLastError()));
 		}
 		
 		RETURN(rval);

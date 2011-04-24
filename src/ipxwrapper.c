@@ -168,6 +168,8 @@ void debug(char const *fmt, ...) {
 
 /* Lock the mutex and search the sockets list for an ipx_socket structure with
  * the requested fd, if no matching fd is found, unlock the mutex
+ *
+ * TODO: Change this behaviour. It is almost as bad as the BKL.
 */
 ipx_socket *get_socket(SOCKET fd) {
 	lock_mutex();
