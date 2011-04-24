@@ -25,7 +25,7 @@
 #include <vector>
 #include <stdint.h>
 
-#define PORT 54792
+#include "config.h"
 
 #define ID_NIC_LIST 1
 #define ID_NIC_ENABLE 2
@@ -53,20 +53,6 @@ struct iface {
 	bool enabled;
 	bool primary;
 };
-
-struct reg_value {
-	unsigned char ipx_net[4];
-	unsigned char ipx_node[6];
-	unsigned char enabled;
-	unsigned char primary;
-} __attribute__((__packed__));
-
-struct reg_global {
-	uint16_t udp_port;
-	unsigned char w95_bug;
-	unsigned char bcast_all;
-	unsigned char filter;
-} __attribute__((__packed__));
 
 typedef std::vector<iface> iface_list;
 
@@ -413,7 +399,7 @@ int main() {
 	DWORD gsize = sizeof(global_conf);
 	
 	if(!regkey || RegQueryValueEx(regkey, "global", NULL, NULL, (BYTE*)&global_conf, &gsize) != ERROR_SUCCESS || gsize != sizeof(global_conf)) {
-		global_conf.udp_port = PORT;
+		global_conf.udp_port = DEFAULT_PORT;
 		global_conf.w95_bug = 1;
 		global_conf.bcast_all = 0;
 		global_conf.filter = 1;

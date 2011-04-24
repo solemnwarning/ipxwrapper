@@ -1,5 +1,5 @@
 /* ipxwrapper - Library header
- * Copyright (C) 2008 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2008-2011 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -23,8 +23,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#define DEFAULT_PORT 54792
-#define TTL 60
+#include "config.h"
 
 #define DEBUG "ipxwrapper.log"
 
@@ -130,21 +129,6 @@ struct ipx_host {
 	
 	ipx_host *next;
 };
-
-/* Interface settings stored in registry */
-struct reg_value {
-	unsigned char ipx_net[4];
-	unsigned char ipx_node[6];
-	unsigned char enabled;
-	unsigned char primary;
-} __attribute__((__packed__));
-
-struct reg_global {
-	uint16_t udp_port;
-	unsigned char w95_bug;
-	unsigned char bcast_all;
-	unsigned char filter;
-} __attribute__((__packed__));
 
 extern ipx_socket *sockets;
 extern ipx_nic *nics;
