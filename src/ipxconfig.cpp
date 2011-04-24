@@ -23,6 +23,9 @@
 #include <assert.h>
 #include <string>
 #include <vector>
+#include <stdint.h>
+
+#define PORT 54792
 
 #define ID_NIC_LIST 1
 #define ID_NIC_ENABLE 2
@@ -30,6 +33,7 @@
 #define ID_SAVE 4
 #define ID_NIC_NET 5
 #define ID_NIC_NODE 6
+#define ID_W95_BUG 7
 
 #define ID_DIALOG_TXT 1
 #define ID_DIALOG_OK 2
@@ -54,6 +58,11 @@ struct reg_value {
 	unsigned char primary;
 } __attribute__((__packed__));
 
+struct reg_global {
+	uint16_t udp_port;
+	unsigned char w95_bug;
+} __attribute__((__packed__));
+
 typedef std::vector<iface> iface_list;
 
 static void addr_input_dialog(const char *desc, char *dest, int size);
@@ -70,6 +79,7 @@ static int get_text_width(HWND hwnd, const char *txt);
 static int get_text_height(HWND hwnd);
 
 static iface_list nics;
+static reg_global global_conf;
 static HKEY regkey = NULL;
 
 typedef LRESULT CALLBACK (*wproc_fptr)(HWND,UINT,WPARAM,LPARAM);
@@ -85,7 +95,10 @@ static struct {
 	HWND nic_enabled;
 	HWND nic_primary;
 	
-	HWND save_btn;
+	HWND global_conf;
+	HWND w95_bug;
+	
+	HWND button_box;
 } windows;
 
 /* Callback for the main window */
@@ -165,6 +178,10 @@ static LRESULT CALLBACK main_wproc(HWND window, UINT msg, WPARAM wp, LPARAM lp) 
 						save_nics();
 						break;
 					
+					case ID_W95_BUG:
+						global_conf.w95_bug = Button_GetCheck(windows.w95_bug) == BST_CHECKED;
+						break;
+					
 					default:
 						break;
 				}
@@ -180,13 +197,13 @@ static LRESULT CALLBACK main_wproc(HWND window, UINT msg, WPARAM wp, LPARAM lp) 
 			assert(GetWindowRect(windows.nic_conf, &rect));
 			int conf_h = rect.bottom - rect.top;
 			
-			assert(GetWindowRect(windows.save_btn, &rect));
-			int save_h = rect.bottom - rect.top;
-			int save_w = rect.right - rect.left;
+			assert(GetWindowRect(windows.button_box, &rect));
+			int btn_w = rect.right - rect.left;
 			
-			MoveWindow(windows.nic_list, 0, 0, width, height-conf_h, TRUE);
-			MoveWindow(windows.nic_conf, 0, height-conf_h, width-save_w-1, conf_h, TRUE);
-			MoveWindow(windows.save_btn, width-save_w, height-save_h, save_w, save_h, TRUE);
+			MoveWindow(windows.nic_list, 0, 0, width, height-conf_h*2, TRUE);
+			MoveWindow(windows.nic_conf, 0, height-conf_h*2, width-btn_w, conf_h, TRUE);
+			MoveWindow(windows.global_conf, 0, height-conf_h, width-btn_w, conf_h, TRUE);
+			MoveWindow(windows.button_box, width-btn_w, height-conf_h*2, btn_w, conf_h*2, TRUE);
 		
 			break;
 		
@@ -347,6 +364,13 @@ int main() {
 		NULL
 	) == ERROR_SUCCESS);
 	
+	DWORD gsize = sizeof(global_conf);
+	
+	if(!regkey || RegQueryValueEx(regkey, "global", NULL, NULL, (BYTE*)&global_conf, &gsize) != ERROR_SUCCESS || gsize != sizeof(global_conf)) {
+		global_conf.udp_port = PORT;
+		global_conf.w95_bug = 1;
+	}
+	
 	get_nics();
 	
 	init_windows();
@@ -438,6 +462,15 @@ static void save_nics() {
 		
 		assert(RegSetValueEx(regkey, i->hwaddr, 0, REG_BINARY, (BYTE*)&rval, sizeof(rval)) == ERROR_SUCCESS);
 	}
+	
+	assert(RegSetValueEx(regkey, "global", 0, REG_BINARY, (BYTE*)&global_conf, sizeof(global_conf)) == ERROR_SUCCESS);
+	
+	MessageBox(
+		windows.main,
+		"Settings saved successfully",
+		"Message",
+		MB_OK | MB_ICONINFORMATION
+	);
 }
 
 /* Convert string format address to binary
@@ -509,26 +542,43 @@ static void init_windows() {
 	add_list_column(windows.nic_list, 3, "Enabled", 60);
 	add_list_column(windows.nic_list, 4, "Primary", 60);
 	
-	windows.nic_conf = create_child(windows.main, 0, 0, 0, 0, "BUTTON", "Interface settings", BS_GROUPBOX);
-	
 	int window_edge = GetSystemMetrics(SM_CYEDGE);
 	int text_h = get_text_height(windows.nic_conf);
 	int row_h = window_edge*2 + text_h;
 	
-	int btn_w = get_text_width(windows.nic_conf, "Set IPX network number...") + 2*window_edge;
-	int cbox_w = get_text_width(windows.nic_conf, "Make primary interface");
+	{
+		windows.nic_conf = create_child(windows.main, 0, 0, 0, 0, "BUTTON", "Interface settings", BS_GROUPBOX);
+		
+		int btn_w = get_text_width(windows.nic_conf, "Set IPX network number...") + 2*window_edge;
+		int cbox_w = get_text_width(windows.nic_conf, "Make primary interface");
+		
+		MoveWindow(windows.nic_conf, 0, 0, 0, text_h + 2*row_h + 15, TRUE);
+		
+		windows.nic_net = create_child(windows.nic_conf, 10, text_h, btn_w, row_h, "BUTTON", "Set IPX network number...", WS_TABSTOP | BS_PUSHBUTTON, 0, ID_NIC_NET);
+		windows.nic_node = create_child(windows.nic_conf, 10, text_h+row_h+5, btn_w, row_h, "BUTTON", "Set IPX node number...", WS_TABSTOP | BS_PUSHBUTTON, 0, ID_NIC_NODE);
+		
+		windows.nic_enabled = create_child(windows.nic_conf, 20+btn_w, text_h, cbox_w, row_h, "BUTTON", "Enable interface", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_NIC_ENABLE);
+		windows.nic_primary = create_child(windows.nic_conf, 20+btn_w, text_h+row_h+5, cbox_w, row_h, "BUTTON", "Make primary interface", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_NIC_PRIMARY);
+		
+		update_nic_conf();
+	}
 	
-	MoveWindow(windows.nic_conf, 0, 0, 0, text_h + 2*row_h + 15, TRUE);
+	{
+		windows.global_conf = create_child(windows.main, 0, 0, 0, 0, "BUTTON", "Global settings", BS_GROUPBOX);
+		
+		int cbox_w = get_text_width(windows.global_conf, "Enable Win 95 SO_BROADCAST bug");
+		windows.w95_bug = create_child(windows.global_conf, 10, text_h, cbox_w, row_h, "BUTTON", "Enable Win 95 SO_BROADCAST bug", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_W95_BUG);
+		Button_SetCheck(windows.w95_bug, global_conf.w95_bug ? BST_CHECKED : BST_UNCHECKED);
+	}
 	
-	windows.nic_net = create_child(windows.nic_conf, 10, text_h, btn_w, row_h, "BUTTON", "Set IPX network number...", WS_TABSTOP | BS_PUSHBUTTON, 0, ID_NIC_NET);
-	windows.nic_node = create_child(windows.nic_conf, 10, text_h+row_h+5, btn_w, row_h, "BUTTON", "Set IPX node number...", WS_TABSTOP | BS_PUSHBUTTON, 0, ID_NIC_NODE);
-	
-	windows.nic_enabled = create_child(windows.nic_conf, 20+btn_w, text_h, cbox_w, row_h, "BUTTON", "Enable interface", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_NIC_ENABLE);
-	windows.nic_primary = create_child(windows.nic_conf, 20+btn_w, text_h+row_h+5, cbox_w, row_h, "BUTTON", "Make primary interface", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_NIC_PRIMARY);
-	
-	update_nic_conf();
-	
-	windows.save_btn = create_child(windows.main, 0, 0, 75, row_h, "BUTTON", "Save", BS_PUSHBUTTON | WS_TABSTOP, 0, ID_SAVE);
+	{
+		windows.button_box = create_child(windows.main, 0, 0, 0, 0, "BUTTON", NULL, BS_GROUPBOX);
+		
+		int btn_w = get_text_width(windows.button_box, "Save settings") + 2*window_edge;
+		create_child(windows.button_box, 10, text_h, btn_w, row_h, "BUTTON", "Save settings", BS_PUSHBUTTON | WS_TABSTOP, 0, ID_SAVE);
+		
+		MoveWindow(windows.button_box, 0, 0, btn_w+20, 0, TRUE);
+	}
 	
 	LVITEM lvi;
 	
@@ -548,6 +598,8 @@ static void init_windows() {
 	UpdateWindow(windows.main);
 	
 	groupbox_wproc = (wproc_fptr)SetWindowLongPtr(windows.nic_conf, GWLP_WNDPROC, (LONG)&conf_group_wproc);
+	SetWindowLongPtr(windows.global_conf, GWLP_WNDPROC, (LONG)&conf_group_wproc);
+	SetWindowLongPtr(windows.button_box, GWLP_WNDPROC, (LONG)&conf_group_wproc);
 }
 
 static void update_nic_conf() {
