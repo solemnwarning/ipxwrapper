@@ -34,6 +34,7 @@
 #define ID_NIC_NET 5
 #define ID_NIC_NODE 6
 #define ID_W95_BUG 7
+#define ID_UDP_BTN 8
 
 #define ID_DIALOG_TXT 1
 #define ID_DIALOG_OK 2
@@ -182,6 +183,10 @@ static LRESULT CALLBACK main_wproc(HWND window, UINT msg, WPARAM wp, LPARAM lp) 
 						global_conf.w95_bug = Button_GetCheck(windows.w95_bug) == BST_CHECKED;
 						break;
 					
+					case ID_UDP_BTN:
+						addr_input_dialog("UDP port", NULL, 2);
+						break;
+					
 					default:
 						break;
 				}
@@ -197,13 +202,16 @@ static LRESULT CALLBACK main_wproc(HWND window, UINT msg, WPARAM wp, LPARAM lp) 
 			assert(GetWindowRect(windows.nic_conf, &rect));
 			int conf_h = rect.bottom - rect.top;
 			
+			assert(GetWindowRect(windows.global_conf, &rect));
+			int gc_h = rect.bottom - rect.top;
+			
 			assert(GetWindowRect(windows.button_box, &rect));
 			int btn_w = rect.right - rect.left;
 			
-			MoveWindow(windows.nic_list, 0, 0, width, height-conf_h*2, TRUE);
-			MoveWindow(windows.nic_conf, 0, height-conf_h*2, width-btn_w, conf_h, TRUE);
-			MoveWindow(windows.global_conf, 0, height-conf_h, width-btn_w, conf_h, TRUE);
-			MoveWindow(windows.button_box, width-btn_w, height-conf_h*2, btn_w, conf_h*2, TRUE);
+			MoveWindow(windows.nic_list, 0, 0, width, height-conf_h-gc_h, TRUE);
+			MoveWindow(windows.nic_conf, 0, height-conf_h-gc_h, width-btn_w-1, conf_h, TRUE);
+			MoveWindow(windows.global_conf, 0, height-gc_h, width-btn_w-1, gc_h, TRUE);
+			MoveWindow(windows.button_box, width-btn_w, height-conf_h-gc_h, btn_w, conf_h+gc_h, TRUE);
 		
 			break;
 		
@@ -239,6 +247,14 @@ static LRESULT CALLBACK addr_dialog_wproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM
 		case WM_CREATE:
 			CREATESTRUCT *cs = (CREATESTRUCT*)lp;
 			vars = (addr_dialog_vars*)cs->lpCreateParams;
+			
+			if(vars->size == 2) {
+				char buf[16];
+				sprintf(buf, "%hu", global_conf.udp_port);
+				vars->dest = buf;
+				
+				SetWindowText(hwnd, "Set UDP port");
+			}
 			
 			HWND edit = create_child(hwnd, 0, 0, 0, 0, "EDIT", vars->dest, WS_TABSTOP, WS_EX_CLIENTEDGE, ID_DIALOG_TXT);
 			HWND ok = create_child(hwnd, 0, 0, 0, 0, "BUTTON", "OK", BS_PUSHBUTTON | WS_TABSTOP, 0, ID_DIALOG_OK);
@@ -292,6 +308,20 @@ static LRESULT CALLBACK addr_dialog_wproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM
 				if(btn == ID_DIALOG_OK) {
 					char text[256];
 					GetWindowText(GetDlgItem(hwnd, ID_DIALOG_TXT), text, sizeof(text));
+					
+					if(vars->size == 2) {
+						char *endptr;
+						int p = strtol(text, &endptr, 10);
+						
+						if(p < 1 || p > 65535) {
+							MessageBox(hwnd, "Invalid port number specified", NULL, MB_OK| MB_ICONERROR);
+						}else{
+							global_conf.udp_port = p;
+							PostMessage(hwnd, WM_CLOSE, 0, 0);
+						}
+						
+						return 0;
+					}
 					
 					int buf[6];
 					
@@ -542,14 +572,14 @@ static void init_windows() {
 	add_list_column(windows.nic_list, 3, "Enabled", 60);
 	add_list_column(windows.nic_list, 4, "Primary", 60);
 	
+	windows.nic_conf = create_child(windows.main, 0, 0, 0, 0, "BUTTON", "Interface settings", BS_GROUPBOX);
+	
 	int window_edge = GetSystemMetrics(SM_CYEDGE);
 	int text_h = get_text_height(windows.nic_conf);
 	int row_h = window_edge*2 + text_h;
+	int btn_w = get_text_width(windows.nic_conf, "Set IPX network number...") + 2*window_edge;
 	
 	{
-		windows.nic_conf = create_child(windows.main, 0, 0, 0, 0, "BUTTON", "Interface settings", BS_GROUPBOX);
-		
-		int btn_w = get_text_width(windows.nic_conf, "Set IPX network number...") + 2*window_edge;
 		int cbox_w = get_text_width(windows.nic_conf, "Make primary interface");
 		
 		MoveWindow(windows.nic_conf, 0, 0, 0, text_h + 2*row_h + 15, TRUE);
@@ -564,10 +594,12 @@ static void init_windows() {
 	}
 	
 	{
-		windows.global_conf = create_child(windows.main, 0, 0, 0, 0, "BUTTON", "Global settings", BS_GROUPBOX);
+		windows.global_conf = create_child(windows.main, 0, 0, 0, text_h + row_h + 10, "BUTTON", "Global settings", BS_GROUPBOX);
 		
 		int cbox_w = get_text_width(windows.global_conf, "Enable Win 95 SO_BROADCAST bug");
-		windows.w95_bug = create_child(windows.global_conf, 10, text_h, cbox_w, row_h, "BUTTON", "Enable Win 95 SO_BROADCAST bug", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_W95_BUG);
+		
+		create_child(windows.global_conf, 10, text_h, btn_w, row_h, "BUTTON", "Set UDP port...", BS_PUSHBUTTON | WS_TABSTOP, 0, ID_UDP_BTN);
+		windows.w95_bug = create_child(windows.global_conf, btn_w+20, text_h, cbox_w, row_h, "BUTTON", "Enable Win 95 SO_BROADCAST bug", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_W95_BUG);
 		Button_SetCheck(windows.w95_bug, global_conf.w95_bug ? BST_CHECKED : BST_UNCHECKED);
 	}
 	
