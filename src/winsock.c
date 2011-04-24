@@ -405,7 +405,7 @@ int WSAAPI recvfrom(SOCKET fd, char *buf, int len, int flags, struct sockaddr *a
 			from->sa_family = AF_IPX;
 			memcpy(from->sa_netnum, packet->src_net, 4);
 			memcpy(from->sa_nodenum, packet->src_node, 6);
-			from->sa_socket = htons(packet->src_socket);
+			from->sa_socket = packet->src_socket;
 			
 			if(addrlen) {
 				*addrlen = sizeof(struct sockaddr_ipx);
