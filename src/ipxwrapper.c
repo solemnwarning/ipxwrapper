@@ -322,7 +322,7 @@ static DWORD WINAPI router_main(LPVOID buf) {
 		
 		lock_mutex();
 		
-		add_host(packet->src_net, packet->src_node, ntohl(addr.sin_addr.s_addr));
+		add_host(packet->src_net, packet->src_node, addr.sin_addr.s_addr);
 		
 		for(sockptr = sockets; sockptr; sockptr = sockptr->next) {
 			if(
@@ -470,8 +470,8 @@ static BOOL load_nics(void) {
 			return FALSE;
 		}
 		
-		nnic->ipaddr = ntohl(inet_addr(ifptr->IpAddressList.IpAddress.String));
-		nnic->bcast = nnic->ipaddr | ~ntohl(inet_addr(ifptr->IpAddressList.IpMask.String));
+		nnic->ipaddr = inet_addr(ifptr->IpAddressList.IpAddress.String);
+		nnic->bcast = nnic->ipaddr | ~inet_addr(ifptr->IpAddressList.IpMask.String);
 		
 		memcpy(nnic->hwaddr, ifptr->Address, 6);
 		

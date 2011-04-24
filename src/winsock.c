@@ -659,16 +659,35 @@ int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct s
 		packet->size = htons(len);
 		memcpy(packet->data, buf, len);
 		
-		/* TODO: Only send out enabled interfaces */
-		
 		struct sockaddr_in saddr;
 		saddr.sin_family = AF_INET;
-		saddr.sin_addr.s_addr = INADDR_BROADCAST;
 		saddr.sin_port = htons(global_conf.udp_port);
 		
-		int sval = r_sendto(net_fd, (char*)packet, psize, 0, (struct sockaddr*)&saddr, sizeof(saddr));
-		if(sval == -1) {
-			len = -1;
+		ipx_host *host = find_host(packet->dest_net, packet->dest_node);
+		
+		if(host) {
+			saddr.sin_addr.s_addr = host->ipaddr;
+			
+			int sval = r_sendto(net_fd, (char*)packet, psize, 0, (struct sockaddr*)&saddr, sizeof(saddr));
+			if(sval == -1) {
+				len = -1;
+			}
+		}else{
+			ipx_nic *nic = nics;
+			int success = 0;
+			
+			while(nic) {
+				saddr.sin_addr.s_addr = nic->bcast;
+				
+				int sval = r_sendto(net_fd, (char*)packet, psize, 0, (struct sockaddr*)&saddr, sizeof(saddr));
+				if(sval >= 0) {
+					success = 1;
+				}
+				
+				nic = nic->next;
+			}
+			
+			len = success ? len : -1;
 		}
 		
 		free(packet);
