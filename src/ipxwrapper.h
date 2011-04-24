@@ -23,7 +23,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#define PORT 54792
+#define DEFAULT_PORT 54792
 #define TTL 60
 
 #define DEBUG "ipxwrapper.log"
@@ -140,10 +140,16 @@ struct reg_value {
 	unsigned char primary;
 } __attribute__((__packed__));
 
+struct reg_global {
+	uint16_t udp_port;
+	unsigned char w95_bug;
+} __attribute__((__packed__));
+
 extern ipx_socket *sockets;
 extern ipx_nic *nics;
 extern ipx_host *hosts;
 extern SOCKET net_fd;
+extern struct reg_global global_conf;
 
 extern HMODULE winsock2_dll;
 extern HMODULE mswsock_dll;

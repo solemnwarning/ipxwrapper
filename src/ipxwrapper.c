@@ -38,6 +38,7 @@ ipx_socket *sockets = NULL;
 ipx_nic *nics = NULL;
 ipx_host *hosts = NULL;
 SOCKET net_fd = -1;
+struct reg_global global_conf;
 
 HMODULE winsock2_dll = NULL;
 HMODULE mswsock_dll = NULL;
@@ -80,6 +81,13 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 		if(reg_err != ERROR_SUCCESS) {
 			regkey = NULL;
 			debug("Could not open registry: %s", w32_error(reg_err));
+		}
+		
+		DWORD gsize = sizeof(global_conf);
+		
+		if(!regkey || RegQueryValueEx(regkey, "global", NULL, NULL, (BYTE*)&global_conf, &gsize) != ERROR_SUCCESS || gsize != sizeof(global_conf)) {
+			global_conf.udp_port = DEFAULT_PORT;
+			global_conf.w95_bug = 1;
 		}
 		
 		if(!load_nics()) {
@@ -255,7 +263,7 @@ static int init_router(void) {
 	struct sockaddr_in bind_addr;
 	bind_addr.sin_family = AF_INET;
 	bind_addr.sin_addr.s_addr = INADDR_ANY;
-	bind_addr.sin_port = htons(PORT);
+	bind_addr.sin_port = htons(global_conf.udp_port);
 	
 	if(bind(net_fd, (struct sockaddr*)&bind_addr, sizeof(bind_addr)) == -1) {
 		debug("Failed to bind network socket: %s", w32_error(WSAGetLastError()));
@@ -317,10 +325,6 @@ static DWORD WINAPI router_main(LPVOID buf) {
 		add_host(packet->src_net, packet->src_node, ntohl(addr.sin_addr.s_addr));
 		
 		for(sockptr = sockets; sockptr; sockptr = sockptr->next) {
-			/* TODO: Don't require IPX_BROADCAST for recieving broadcast packets
-			 * (Make it optional? It was a bug in win95.)
-			*/
-			
 			if(
 				sockptr->flags & IPX_BOUND &&
 				sockptr->flags & IPX_RECV &&
@@ -332,13 +336,13 @@ static DWORD WINAPI router_main(LPVOID buf) {
 					memcmp(packet->dest_net, sockptr->netnum, 4) == 0 ||
 					(
 						memcmp(packet->dest_net, f6, 4) == 0 &&
-						sockptr->flags & IPX_BROADCAST
+						(!global_conf.w95_bug || sockptr->flags & IPX_BROADCAST)
 					)
 				) && (
 					memcmp(packet->dest_node, sockptr->nodenum, 6) == 0 ||
 					(
 						memcmp(packet->dest_node, f6, 6) == 0 &&
-						sockptr->flags & IPX_BROADCAST
+						(!global_conf.w95_bug || sockptr->flags & IPX_BROADCAST)
 					)
 				)
 			) {

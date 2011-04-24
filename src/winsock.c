@@ -664,7 +664,7 @@ int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct s
 		struct sockaddr_in saddr;
 		saddr.sin_family = AF_INET;
 		saddr.sin_addr.s_addr = INADDR_BROADCAST;
-		saddr.sin_port = htons(PORT);
+		saddr.sin_port = htons(global_conf.udp_port);
 		
 		int sval = r_sendto(net_fd, (char*)packet, psize, 0, (struct sockaddr*)&saddr, sizeof(saddr));
 		if(sval == -1) {
