@@ -649,6 +649,12 @@ int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct s
 		memcpy(packet->dest_node, ipxaddr->sa_nodenum, 6);
 		packet->dest_socket = ipxaddr->sa_socket;
 		
+		unsigned char z6[] = {0,0,0,0,0,0};
+		
+		if(memcmp(packet->dest_net, z6, 4) == 0) {
+			memcpy(packet->dest_net, sockptr->netnum, 4);
+		}
+		
 		memcpy(packet->src_net, sockptr->netnum, 4);
 		memcpy(packet->src_node, sockptr->nodenum, 6);
 		packet->src_socket = sockptr->socket;
