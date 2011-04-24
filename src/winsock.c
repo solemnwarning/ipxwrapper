@@ -520,8 +520,8 @@ int WSAAPI getsockopt(SOCKET fd, int level, int optname, char FAR *optval, int F
 					return -1;
 				}
 				
-				memset(ipxdata->netnum, 0, 4);
-				memcpy(ipxdata->nodenum, nic->hwaddr, 6);
+				memcpy(ipxdata->netnum, nic->ipx_net, 4);
+				memcpy(ipxdata->nodenum, nic->ipx_node, 6);
 				
 				/* TODO: LAN/WAN detection, link speed detection */
 				ipxdata->wan = FALSE;
@@ -532,6 +532,11 @@ int WSAAPI getsockopt(SOCKET fd, int level, int optname, char FAR *optval, int F
 				RETURN(0);
 			}
 			
+			/* NOTE: IPX_MAX_ADAPTER_NUM implies it may be the maximum index
+			 * for referencing an IPX interface. This behaviour makes no sense
+			 * and a code example in MSDN implies it should be the number of
+			 * IPX interfaces, this code follows the latter.
+			*/
 			if(optname == IPX_MAX_ADAPTER_NUM) {
 				CHECK_OPTLEN(sizeof(int));
 				
