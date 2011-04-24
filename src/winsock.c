@@ -370,7 +370,7 @@ int WSAAPI getsockname(SOCKET fd, struct sockaddr *addr, int *addrlen) {
 			ipxaddr->sa_family = AF_IPX;
 			memcpy(ipxaddr->sa_netnum, ptr->netnum, 4);
 			memcpy(ipxaddr->sa_nodenum, ptr->nodenum, 6);
-			ipxaddr->sa_socket = htons(ptr->socket);
+			ipxaddr->sa_socket = ptr->socket;
 			
 			*addrlen = sizeof(struct sockaddr_ipx);
 			
