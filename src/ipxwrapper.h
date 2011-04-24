@@ -50,21 +50,6 @@
 	(ptr)->socket = 0;\
 	(ptr)->next = NULL;
 
-#define INIT_PACKET(ptr) \
-	(ptr)->ptype = 0;\
-	memset((ptr)->dest_net, 0, 4);\
-	memset((ptr)->dest_node, 0, 6);\
-	(ptr)->dest_socket = 0;\
-	memset((ptr)->src_net, 0, 4);\
-	memset((ptr)->src_node, 0, 6);\
-	(ptr)->src_socket = 0;\
-	(ptr)->size = 0;
-
-#define INIT_HOST(ptr) \
-	memset((ptr)->hwaddr, 0, 6);\
-	(ptr)->ipaddr = 0;\
-	(ptr)->next = NULL;
-
 #define RETURN(...) \
 	unlock_mutex();\
 	return __VA_ARGS__;

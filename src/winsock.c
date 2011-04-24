@@ -642,7 +642,6 @@ int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct s
 			RETURN_WSA(ERROR_OUTOFMEMORY, -1);
 		}
 		
-		INIT_PACKET(packet);
 		packet->ptype = sockptr->s_ptype;
 		
 		memcpy(packet->dest_net, ipxaddr->sa_netnum, 4);

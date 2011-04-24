@@ -305,18 +305,10 @@ static DWORD WINAPI router_main(LPVOID buf) {
 			continue;
 		}
 		
-		if(rval < sizeof(ipx_packet)) {
-			debug("Recieved undersized packet, discarding");
-			continue;
-		}
-		
-		packet->dest_socket = ntohs(packet->dest_socket);
-		packet->src_socket = ntohs(packet->src_socket);
 		packet->size = ntohs(packet->size);
 		
-		/* Prevent buffer overflows */
-		if(packet->size > MAX_PACKET_SIZE) {
-			debug("Recieved oversized packet, discarding");
+		if(packet->size > MAX_PACKET_SIZE || packet->size+sizeof(ipx_packet)-1 != rval) {
+			debug("Recieved packet with incorrect size field, discarding");
 			continue;
 		}
 		
@@ -325,6 +317,10 @@ static DWORD WINAPI router_main(LPVOID buf) {
 		add_host(packet->src_net, packet->src_node, ntohl(addr.sin_addr.s_addr));
 		
 		for(sockptr = sockets; sockptr; sockptr = sockptr->next) {
+			/* TODO: Don't require IPX_BROADCAST for recieving broadcast packets
+			 * (Make it optional? It was a bug in win95.)
+			*/
+			
 			if(
 				sockptr->flags & IPX_BOUND &&
 				sockptr->flags & IPX_RECV &&
