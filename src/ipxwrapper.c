@@ -126,11 +126,22 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 				return FALSE;
 			}
 			
-			INIT_NIC(nnic);
-			
 			nnic->ipaddr = ntohl(inet_addr(ifptr->IpAddressList.IpAddress.String));
 			nnic->bcast = nnic->ipaddr | ~ntohl(inet_addr(ifptr->IpAddressList.IpMask.String));
+			
 			memcpy(nnic->hwaddr, ifptr->Address, 6);
+			
+			if(got_rv) {
+				memcpy(nnic->ipx_net, rv.ipx_net, 4);
+				memcpy(nnic->ipx_node, rv.ipx_node, 6);
+			}else{
+				unsigned char net[] = {0,0,0,1};
+				
+				memcpy(nnic->ipx_net, net, 4);
+				memcpy(nnic->ipx_node, nnic->hwaddr, 6);
+			}
+			
+			nnic->next = NULL;
 			
 			if(got_rv && rv.primary) {
 				/* Force primary flag set, insert at start of NIC list */

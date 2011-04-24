@@ -59,12 +59,6 @@
 	(ptr)->src_socket = 0;\
 	(ptr)->size = 0;
 
-#define INIT_NIC(ptr) \
-	(ptr)->ipaddr = 0;\
-	(ptr)->bcast = 0;\
-	memset((ptr)->hwaddr, 0, 6);\
-	(ptr)->next = NULL;
-
 #define INIT_HOST(ptr) \
 	memset((ptr)->hwaddr, 0, 6);\
 	(ptr)->ipaddr = 0;\
@@ -119,10 +113,14 @@ struct ipx_packet {
 } __attribute__((__packed__));
 
 struct ipx_nic {
+	/* TODO: Remove if not needed for per-interface sockets in the future */
 	uint32_t ipaddr;
 	uint32_t bcast;
 	
 	unsigned char hwaddr[6];
+	
+	unsigned char ipx_net[4];
+	unsigned char ipx_node[6];
 	
 	ipx_nic *next;
 };
