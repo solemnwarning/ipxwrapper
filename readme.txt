@@ -7,15 +7,17 @@ Read license.txt for licensing terms.
 
 -- INTRODUCTION --
 
-IPXwrapper is a winsock wrapper which transparently tunnels IPX packets over IP
-using UDP port 54792. To use it, simply copy ipxwrapper.dll, wsock32.dll and
-mswsock.dll to the directory containing your legacy program.
+IPXwrapper is a winsock wrapper which transparently tunnels IPX packets over a
+chosen UDP port (54792 by default). To use it, simply copy the three included
+DLL files to the directory containing your legacy program.
 
 DO NOT REPLACE THE WINSOCK DLLS THAT ARE IN YOUR WINDOWS/SYSTEM32 DIRECTORY AS
 THIS WILL BREAK ALL NETWORKING SOFTWARE ON YOUR SYSTEM!
 
 Software using IPXWrapper can't communicate with software that is using the real
-IPX protocol and vice-versa.
+IPX protocol and vice-versa. Software using IPXWrapper 0.1 may be communicated
+with by using 00:00:00:00 as the network number, however I recommend updating to
+a newer version instead.
 
 -- CONFIGURATION --
 
@@ -41,8 +43,6 @@ Send broadcasts to all	- Send broadcast packets to all subnets rather than the b
 	subnets		  address of the bound interface
 Filter recieved packets	- Ignore packets not recieved from an enabled interface
 	by subnet
-
-		
 
 -- COMPATIBILITY --
 
