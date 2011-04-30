@@ -28,13 +28,13 @@ clean:
 	rm -f src/*_stubs.s
 
 ipxwrapper.dll: $(IPXWRAPPER_DEPS)
-	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -shared -o ipxwrapper.dll $(IPXWRAPPER_DEPS) -liphlpapi
+	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup,-s -shared -o ipxwrapper.dll $(IPXWRAPPER_DEPS) -liphlpapi
 
 wsock32.dll: $(WSOCK32_DEPS)
-	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -shared -o wsock32.dll $(WSOCK32_DEPS)
+	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup,-s -shared -o wsock32.dll $(WSOCK32_DEPS)
 
 mswsock.dll: $(MSWSOCK_DEPS)
-	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -shared -o mswsock.dll $(MSWSOCK_DEPS)
+	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup,-s -shared -o mswsock.dll $(MSWSOCK_DEPS)
 
 src/ipxwrapper.o: src/ipxwrapper.c src/ipxwrapper.h
 	$(CC) $(CFLAGS) -c -o src/ipxwrapper.o src/ipxwrapper.c

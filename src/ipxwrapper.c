@@ -302,7 +302,7 @@ static int init_router(void) {
  * The router thread recieves packets from the listening port and forwards them
  * to the UDP sockets which emulate IPX.
 */
-static DWORD WINAPI router_main(LPVOID buf) {
+static DWORD WINAPI router_main(LPVOID notused) {
 	ipx_packet *packet = router_buf;
 	int addrlen, rval, sval;
 	unsigned char f6[] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
@@ -372,7 +372,7 @@ static DWORD WINAPI router_main(LPVOID buf) {
 					continue;
 				}
 				
-				sval = r_sendto(sockptr->fd, (char*)buf, rval, 0, (struct sockaddr*)&addr, addrlen);
+				sval = r_sendto(sockptr->fd, (char*)packet, rval, 0, (struct sockaddr*)&addr, addrlen);
 				if(sval == -1) {
 					debug("Error relaying packet: %s", w32_error(WSAGetLastError()));
 				}
