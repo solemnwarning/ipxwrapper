@@ -1,5 +1,5 @@
 # ipxwrapper - Makefile
-# Copyright (C) 2008 Daniel Collins <solemnwarning@solemnwarning.net>
+# Copyright (C) 2011 Daniel Collins <solemnwarning@solemnwarning.net>
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License version 2 as published by
@@ -64,4 +64,4 @@ src/mswsock_stubs.s: src/mswsock_stubs.txt
 	perl mkstubs.pl src/mswsock_stubs.txt src/mswsock_stubs.s mswsock.dll
 
 ipxconfig.exe: src/ipxconfig.cpp
-	$(CXX) $(CXXFLAGS) -D_WIN32_IE=0x0400 -mwindows -o ipxconfig.exe src/ipxconfig.cpp -liphlpapi
+	$(CXX) $(CXXFLAGS) -Wl,-s -D_WIN32_IE=0x0400 -mwindows -o ipxconfig.exe src/ipxconfig.cpp -liphlpapi

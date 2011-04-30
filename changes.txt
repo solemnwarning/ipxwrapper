@@ -1,0 +1,30 @@
+Version 0.2:
+	Implemented ioctlsocket() function with support for FIONREAD.
+	
+	Load interface settings from the registry.
+	
+	Wrote graphical configuration program.
+	
+	Store IPX network/node number in the NIC structure and a pointer to the
+	bound interface in the socket structure.
+	
+	Host addresses referenced by IPX network AND node numbers, expire 60
+	seconds after the last recieved packet.
+	
+	Updated winsock wrapper functions to behave closer to the original
+	winsock implementation.
+	
+	Only require SO_BROADCAST for receiving broadcast packets if the win95
+	SO_BROADCAST bug is enabled, which it is by default.
+	
+	Restrict UDP broadcasts and receives to selected interfaces by default.
+	
+	Allow UDP port to be changed in configuration program.
+	
+	Store router buffer globally so it can be free'd rather than leaking
+	64KiB every time the IPXWrapper DLL is unloaded.
+	
+	Changed Makefile to build stripped binaries.
+
+Version 0.1:
+	Initial release
