@@ -26,23 +26,24 @@ extern char const *dllname;
 void __stdcall *find_sym(char const *symbol);
 void debug(char const *fmt, ...);
 
-BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
+static void load_dlls() {
 	char sysdir[1024], path[1024];
 	
-	if(why == DLL_PROCESS_ATTACH) {
-		GetSystemDirectory(sysdir, 1024);
-		snprintf(path, 1024, "%s\\%s", sysdir, dllname);
-		
-		ipxdll = LoadLibrary("ipxwrapper.dll");
-		if(!ipxdll) {
-			return 0;
-		}
-		
-		sysdll = LoadLibrary(path);
-		if(!sysdll) {
-			return 0;
-		}
+	GetSystemDirectory(sysdir, 1024);
+	snprintf(path, 1024, "%s\\%s", sysdir, dllname);
+	
+	ipxdll = LoadLibrary("ipxwrapper.dll");
+	if(!ipxdll) {
+		abort();
 	}
+	
+	sysdll = LoadLibrary(path);
+	if(!sysdll) {
+		abort();
+	}
+}
+
+BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 	if(why == DLL_PROCESS_DETACH) {
 		if(sysdll) {
 			FreeLibrary(sysdll);
@@ -59,14 +60,16 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 }
 
 void __stdcall *find_sym(char const *symbol) {
-	void *ptr = NULL;
-	
-	if(!ptr) {
-		ptr = GetProcAddress(ipxdll, symbol);
+	if(!ipxdll) {
+		load_dlls();
 	}
+	
+	void *ptr = GetProcAddress(ipxdll, symbol);
+	
 	if(!ptr) {
 		ptr = GetProcAddress(sysdll, symbol);
 	}
+	
 	if(!ptr) {
 		debug("Missing symbol in %s: %s", dllname, symbol);
 		abort();
