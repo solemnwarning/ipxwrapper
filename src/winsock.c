@@ -394,10 +394,12 @@ int WSAAPI recvfrom(SOCKET fd, char *buf, int len, int flags, struct sockaddr *a
 			RETURN_WSA(ERROR_OUTOFMEMORY, -1);
 		}
 		
+		unlock_mutex();
+		
 		int rval = r_recv(fd, (char*)packet, PACKET_BUF_SIZE, flags);
 		if(rval == -1) {
 			free(packet);
-			RETURN(-1);
+			return -1;
 		}
 		
 		if(from) {
@@ -416,15 +418,16 @@ int WSAAPI recvfrom(SOCKET fd, char *buf, int len, int flags, struct sockaddr *a
 			rval = packet->size;
 			free(packet);
 			
-			RETURN(rval);
+			return rval;
 		}else{
 			memcpy(buf, packet->data, len);
 			free(packet);
 			
-			RETURN_WSA(WSAEMSGSIZE, -1);
+			WSASetLastError(WSAEMSGSIZE);
+			return -1;
 		}
 	}else{
-		RETURN(r_recvfrom(fd, buf, len, flags, addr, addrlen));
+		return r_recvfrom(fd, buf, len, flags, addr, addrlen);
 	}
 }
 
