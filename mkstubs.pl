@@ -45,12 +45,13 @@ for($n = 0; $n < @stubs; $n++) {
 	my $func = $stubs[$n];
 	$func =~ s/^r_//;
 	
-	print CODE "\tname$n:\tdb\t'$func'\n";
+	print CODE "\tname$n:\tdb\t'$func', 0\n";
 	print CODE "\taddr$n:\tdd\t0\n";
 }
 
 print CODE "\nsection .text\n";
 print CODE "\textern\t_find_sym\n";
+#print CODE "\textern\t_log_call\n";
 
 for($n = 0; $n < @stubs; $n++) {
 	my $func = $stubs[$n];
@@ -61,9 +62,10 @@ for($n = 0; $n < @stubs; $n++) {
 	my $func = $stubs[$n];
 
 	print CODE "\n_$func:\n";
+	#print CODE "\tpush\tname$n\n";
+	#print CODE "\tcall\t_log_call\n";
 	print CODE "\tcmp\tdword [addr$n], 0\n";
-	print CODE "\tjne\tjmp$n\n\n";
-	
+	print CODE "\tjne\tjmp$n\n";
 	print CODE "\tpush\tname$n\n";
 	print CODE "\tcall\t_find_sym\n";
 	print CODE "\tmov\t[addr$n], eax\n";

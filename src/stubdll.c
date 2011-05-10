@@ -23,6 +23,10 @@ static HMODULE ipxdll = NULL;
 static HMODULE sysdll = NULL;
 extern char const *dllname;
 
+#ifdef LOG_CALLS
+static FILE *call_log = NULL;
+#endif
+
 void __stdcall *find_sym(char const *symbol);
 void debug(char const *fmt, ...);
 
@@ -44,6 +48,12 @@ static void load_dlls() {
 }
 
 BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
+	if(why == DLL_PROCESS_ATTACH) {
+		#ifdef LOG_CALLS
+		call_log = fopen("calls.log", "a");
+		#endif
+	}
+	
 	if(why == DLL_PROCESS_DETACH) {
 		if(sysdll) {
 			FreeLibrary(sysdll);
@@ -54,6 +64,11 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 			FreeLibrary(ipxdll);
 			ipxdll = NULL;
 		}
+		
+		#ifdef LOG_CALLS
+		fclose(call_log);
+		call_log = NULL;
+		#endif
 	}
 	
 	return TRUE;
@@ -94,3 +109,10 @@ void debug(char const *fmt, ...) {
 		real_debug("%s", msgbuf);
 	}
 }
+
+#ifdef LOG_CALLS
+void __stdcall log_call(const char *sym) {
+	fprintf(call_log, "%s\n", sym);
+	fflush(call_log);
+}
+#endif
