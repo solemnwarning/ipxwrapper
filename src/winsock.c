@@ -383,90 +383,89 @@ int WSAAPI getsockname(SOCKET fd, struct sockaddr *addr, int *addrlen) {
 	}
 }
 
-int WSAAPI recvfrom(SOCKET fd, char *buf, int len, int flags, struct sockaddr *addr, int *addrlen) {
-	struct sockaddr_ipx *from = (struct sockaddr_ipx*)addr;
-	ipx_socket *ptr = get_socket(fd);
+/* Recieve a packet from an IPX socket
+ * addr must be NULL or a region of memory big enough for a sockaddr_ipx
+ *
+ * The mutex should be locked before calling and will be released before returning
+*/
+static int recv_packet(ipx_socket *sockptr, char *buf, int bufsize, int flags, struct sockaddr_ipx *addr) {
+	SOCKET fd = sockptr->fd;
+	int is_bound = sockptr->flags & IPX_BOUND;
 	
-	if(ptr) {
-		if(!(ptr->flags & IPX_BOUND)) {
-			RETURN_WSA(WSAEINVAL, -1);
-		}
+	unlock_mutex();
+	
+	if(!is_bound) {
+		WSASetLastError(WSAEINVAL);
+		return -1;
+	}
+	
+	struct ipx_packet *packet = malloc(PACKET_BUF_SIZE);
+	if(!packet) {
+		WSASetLastError(ERROR_OUTOFMEMORY);
+		return -1;
+	}
+	
+	int rval = r_recv(fd, (char*)packet, PACKET_BUF_SIZE, flags);
+	if(rval == -1) {
+		free(packet);
+		return -1;
+	}
+	
+	if(addr) {
+		addr->sa_family = AF_IPX;
+		memcpy(addr->sa_netnum, packet->src_net, 4);
+		memcpy(addr->sa_nodenum, packet->src_node, 6);
+		addr->sa_socket = packet->src_socket;
+	}
+	
+	if(packet->size <= bufsize) {
+		memcpy(buf, packet->data, packet->size);
+		rval = packet->size;
+		free(packet);
 		
-		struct ipx_packet *packet = malloc(PACKET_BUF_SIZE);
-		if(!packet) {
-			RETURN_WSA(ERROR_OUTOFMEMORY, -1);
-		}
+		return rval;
+	}else{
+		memcpy(buf, packet->data, bufsize);
+		free(packet);
 		
-		unlock_mutex();
-		
-		int rval = r_recv(fd, (char*)packet, PACKET_BUF_SIZE, flags);
-		if(rval == -1) {
-			free(packet);
+		WSASetLastError(WSAEMSGSIZE);
+		return -1;
+	}
+}
+
+int WSAAPI recvfrom(SOCKET fd, char *buf, int len, int flags, struct sockaddr *addr, int *addrlen) {
+	ipx_socket *sockptr = get_socket(fd);
+	
+	if(sockptr) {
+		if(addr && addrlen && *addrlen < sizeof(struct sockaddr_ipx)) {
+			unlock_mutex();
+			
+			WSASetLastError(WSAEFAULT);
 			return -1;
 		}
 		
-		if(from) {
-			from->sa_family = AF_IPX;
-			memcpy(from->sa_netnum, packet->src_net, 4);
-			memcpy(from->sa_nodenum, packet->src_node, 6);
-			from->sa_socket = packet->src_socket;
-			
-			if(addrlen) {
-				*addrlen = sizeof(struct sockaddr_ipx);
-			}
+		int rval = recv_packet(sockptr, buf, len, flags, (struct sockaddr_ipx*)addr);
+		
+		/* The value pointed to by addrlen is only set if the recv call was
+		 * successful, may not be correct.
+		*/
+		if(rval >= 0 && addr && addrlen) {
+			*addrlen = sizeof(struct sockaddr_ipx);
 		}
 		
-		if(packet->size <= len) {
-			memcpy(buf, packet->data, packet->size);
-			rval = packet->size;
-			free(packet);
-			
-			return rval;
-		}else{
-			memcpy(buf, packet->data, len);
-			free(packet);
-			
-			WSASetLastError(WSAEMSGSIZE);
-			return -1;
-		}
+		return rval;
 	}else{
 		return r_recvfrom(fd, buf, len, flags, addr, addrlen);
 	}
 }
 
 int WSAAPI recv(SOCKET fd, char *buf, int len, int flags) {
-	ipx_socket *ptr = get_socket(fd);
+	ipx_socket *sockptr = get_socket(fd);
 	
-	if(ptr) {
-		if(!(ptr->flags & IPX_BOUND)) {
-			RETURN_WSA(WSAEINVAL, -1);
-		}
-		
-		struct ipx_packet *packet = malloc(PACKET_BUF_SIZE);
-		if(!packet) {
-			RETURN_WSA(ERROR_OUTOFMEMORY, -1);
-		}
-		
-		int rval = r_recv(fd, (char*)packet, PACKET_BUF_SIZE, flags);
-		if(rval == -1) {
-			free(packet);
-			RETURN(-1);
-		}
-		
-		if(packet->size <= len) {
-			memcpy(buf, packet->data, packet->size);
-			rval = packet->size;
-			free(packet);
-			
-			RETURN(rval);
-		}else{
-			memcpy(buf, packet->data, len);
-			free(packet);
-			
-			RETURN_WSA(WSAEMSGSIZE, -1);
-		}
+	if(sockptr) {
+		return recv_packet(sockptr, buf, len, flags, NULL);
 	}else{
-		RETURN(r_recv(fd, buf, len, flags));
+		return r_recv(fd, buf, len, flags);
 	}
 }
 
