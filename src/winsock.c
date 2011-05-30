@@ -128,40 +128,43 @@ INT APIENTRY EnumProtocolsW(LPINT protocols, LPVOID buf, LPDWORD bsptr) {
 }
 
 int PASCAL WSARecvEx(SOCKET fd, char *buf, int len, int *flags) {
-	ipx_socket *ptr = get_socket(fd);
+	ipx_socket *sockptr = get_socket(fd);
 	
-	if(ptr) {
-		if(!(ptr->flags & IPX_BOUND)) {
-			RETURN_WSA(WSAEINVAL, -1);
+	if(sockptr) {
+		if(!(sockptr->flags & IPX_BOUND)) {
+			unlock_mutex();
+			
+			WSASetLastError(WSAEINVAL);
+			return -1;
 		}
+		
+		unlock_mutex();
 		
 		struct ipx_packet *packet = malloc(PACKET_BUF_SIZE);
 		if(!packet) {
-			RETURN_WSA(ERROR_OUTOFMEMORY, -1);
+			WSASetLastError(ERROR_OUTOFMEMORY);
+			return -1;
 		}
 		
 		int rval = r_WSARecvEx(fd, (char*)packet, PACKET_BUF_SIZE, flags);
 		if(rval == -1) {
-			RETURN(-1);
+			return -1;
 		}
 		
 		if(packet->size <= len) {
 			memcpy(buf, packet->data, packet->size);
-			len = packet->size;
-			free(packet);
-			
 			*flags = 0;
-			RETURN(len);
 		}else{
 			memcpy(buf, packet->data, len);
-			len = packet->size;
-			free(packet);
-			
 			*flags = MSG_PARTIAL;
-			RETURN(len);
 		}
+		
+		len = packet->size;
+		free(packet);
+		
+		return len;
 	}else{
-		RETURN(r_WSARecvEx(fd, buf, len, flags));
+		return r_WSARecvEx(fd, buf, len, flags);
 	}
 }
 
