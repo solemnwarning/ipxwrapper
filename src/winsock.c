@@ -127,47 +127,6 @@ INT APIENTRY EnumProtocolsW(LPINT protocols, LPVOID buf, LPDWORD bsptr) {
 	return rval;
 }
 
-int PASCAL WSARecvEx(SOCKET fd, char *buf, int len, int *flags) {
-	ipx_socket *sockptr = get_socket(fd);
-	
-	if(sockptr) {
-		if(!(sockptr->flags & IPX_BOUND)) {
-			unlock_mutex();
-			
-			WSASetLastError(WSAEINVAL);
-			return -1;
-		}
-		
-		unlock_mutex();
-		
-		struct ipx_packet *packet = malloc(PACKET_BUF_SIZE);
-		if(!packet) {
-			WSASetLastError(ERROR_OUTOFMEMORY);
-			return -1;
-		}
-		
-		int rval = r_WSARecvEx(fd, (char*)packet, PACKET_BUF_SIZE, flags);
-		if(rval == -1) {
-			return -1;
-		}
-		
-		if(packet->size <= len) {
-			memcpy(buf, packet->data, packet->size);
-			*flags = 0;
-		}else{
-			memcpy(buf, packet->data, len);
-			*flags = MSG_PARTIAL;
-		}
-		
-		len = packet->size;
-		free(packet);
-		
-		return len;
-	}else{
-		return r_WSARecvEx(fd, buf, len, flags);
-	}
-}
-
 SOCKET WSAAPI socket(int af, int type, int protocol) {
 	debug("socket(%d, %d, %d)", af, type, protocol);
 	
@@ -387,6 +346,7 @@ int WSAAPI getsockname(SOCKET fd, struct sockaddr *addr, int *addrlen) {
  * addr must be NULL or a region of memory big enough for a sockaddr_ipx
  *
  * The mutex should be locked before calling and will be released before returning
+ * The size of the packet will be returned on success, even if it was truncated
 */
 static int recv_packet(ipx_socket *sockptr, char *buf, int bufsize, int flags, struct sockaddr_ipx *addr) {
 	SOCKET fd = sockptr->fd;
@@ -418,19 +378,11 @@ static int recv_packet(ipx_socket *sockptr, char *buf, int bufsize, int flags, s
 		addr->sa_socket = packet->src_socket;
 	}
 	
-	if(packet->size <= bufsize) {
-		memcpy(buf, packet->data, packet->size);
-		rval = packet->size;
-		free(packet);
-		
-		return rval;
-	}else{
-		memcpy(buf, packet->data, bufsize);
-		free(packet);
-		
-		WSASetLastError(WSAEMSGSIZE);
-		return -1;
-	}
+	memcpy(buf, packet->data, packet->size <= bufsize ? packet->size : bufsize);
+	rval = packet->size;
+	free(packet);
+	
+	return rval;
 }
 
 int WSAAPI recvfrom(SOCKET fd, char *buf, int len, int flags, struct sockaddr *addr, int *addrlen) {
@@ -453,6 +405,11 @@ int WSAAPI recvfrom(SOCKET fd, char *buf, int len, int flags, struct sockaddr *a
 			*addrlen = sizeof(struct sockaddr_ipx);
 		}
 		
+		if(rval > len) {
+			WSASetLastError(WSAEMSGSIZE);
+			return -1;
+		}
+		
 		return rval;
 	}else{
 		return r_recvfrom(fd, buf, len, flags, addr, addrlen);
@@ -463,9 +420,40 @@ int WSAAPI recv(SOCKET fd, char *buf, int len, int flags) {
 	ipx_socket *sockptr = get_socket(fd);
 	
 	if(sockptr) {
-		return recv_packet(sockptr, buf, len, flags, NULL);
+		int rval = recv_packet(sockptr, buf, len, flags, NULL);
+		
+		if(rval > len) {
+			WSASetLastError(WSAEMSGSIZE);
+			return -1;
+		}
+		
+		return rval;
 	}else{
 		return r_recv(fd, buf, len, flags);
+	}
+}
+
+int PASCAL WSARecvEx(SOCKET fd, char *buf, int len, int *flags) {
+	ipx_socket *sockptr = get_socket(fd);
+	
+	if(sockptr) {
+		int rval = recv_packet(sockptr, buf, len, 0, NULL);
+		
+		if(rval > len) {
+			*flags = MSG_PARTIAL;
+			
+			/* Wording of MSDN is unclear on what should be returned when
+			 * an incomplete message is read, I think it should return the
+			 * amount of data copied to the buffer.
+			*/
+			rval = len;
+		}else if(rval != -1) {
+			*flags = 0;
+		}
+		
+		return rval;
+	}else{
+		return r_WSARecvEx(fd, buf, len, flags);
 	}
 }
 
