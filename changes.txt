@@ -1,3 +1,14 @@
+Version 0.2.1:
+	Bugfix: Delay stub DLL LoadLibrary calls until first API call as using
+	LoadLibrary in DllMain crashes under some conditions.
+	
+	Bugfix: Updated recv, recvfrom and WSARecvEx functions to release mutex
+	before calling recv to avoid deadlocks in multithreaded applications.
+	
+	Bugfix: Correctly terminate symbol names used within stub DLLs.
+	
+	Cleanup: Combined common code between recv, recvfrom and WSARecvEx.
+
 Version 0.2:
 	Implemented ioctlsocket() function with support for FIONREAD.
 	
