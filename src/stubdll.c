@@ -1,5 +1,5 @@
-/* ipxwrapper - Stub DLL functions
- * Copyright (C) 2008 Daniel Collins <solemnwarning@solemnwarning.net>
+/* IPXWrapper - Stub DLL functions
+ * Copyright (C) 2008-2011 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -23,9 +23,7 @@ static HMODULE ipxdll = NULL;
 static HMODULE sysdll = NULL;
 extern char const *dllname;
 
-#ifdef LOG_CALLS
-static FILE *call_log = NULL;
-#endif
+FILE *call_log = NULL;
 
 void __stdcall *find_sym(char const *symbol);
 void debug(char const *fmt, ...);
@@ -49,9 +47,21 @@ static void load_dlls() {
 
 BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 	if(why == DLL_PROCESS_ATTACH) {
-		#ifdef LOG_CALLS
-		call_log = fopen("calls.log", "a");
-		#endif
+		HKEY key;
+		
+		if(RegOpenKeyEx(HKEY_CURRENT_USER, "Software\\IPXWrapper", 0, KEY_QUERY_VALUE, &key) == ERROR_SUCCESS) {
+			DWORD size = 1;
+			unsigned char log_calls;
+			
+			if(RegQueryValueEx(key, "log_calls", NULL, NULL, (BYTE*)&log_calls, &size) == ERROR_SUCCESS && size == 1) {
+				if(log_calls && (call_log = fopen("winsock_calls.log", "a"))) {
+					setbuf(call_log, NULL);
+					fprintf(call_log, "%s loaded\n", dllname);
+				}
+			}
+			
+			RegCloseKey(key);
+		}
 	}
 	
 	if(why == DLL_PROCESS_DETACH) {
@@ -65,10 +75,10 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 			ipxdll = NULL;
 		}
 		
-		#ifdef LOG_CALLS
-		fclose(call_log);
-		call_log = NULL;
-		#endif
+		if(call_log) {
+			fclose(call_log);
+			call_log = NULL;
+		}
 	}
 	
 	return TRUE;
@@ -109,10 +119,3 @@ void debug(char const *fmt, ...) {
 		real_debug("%s", msgbuf);
 	}
 }
-
-#ifdef LOG_CALLS
-void __stdcall log_call(const char *sym) {
-	fprintf(call_log, "%s\n", sym);
-	fflush(call_log);
-}
-#endif
