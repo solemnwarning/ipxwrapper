@@ -27,6 +27,12 @@ clean:
 	rm -f src/*.o
 	rm -f src/*_stubs.s
 
+dist: all
+	mkdir ipxwrapper-$(VERSION)
+	cp changes.txt license.txt readme.txt ipxwrapper.dll mswsock.dll wsock32.dll ipxconfig.exe ipxwrapper-$(VERSION)/
+	zip -r ipxwrapper-$(VERSION).zip ipxwrapper-$(VERSION)/
+	rm -r ipxwrapper-$(VERSION)/
+
 ipxwrapper.dll: $(IPXWRAPPER_DEPS)
 	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup,-s -shared -o ipxwrapper.dll $(IPXWRAPPER_DEPS) -liphlpapi
 
