@@ -1,4 +1,4 @@
-# ipxwrapper - Makefile
+# IPXWrapper - Makefile
 # Copyright (C) 2011 Daniel Collins <solemnwarning@solemnwarning.net>
 #
 # This program is free software; you can redistribute it and/or modify it
@@ -18,8 +18,6 @@ CFLAGS := -Wall
 CXXFLAGS := -Wall
 
 IPXWRAPPER_DEPS := src/ipxwrapper.o src/winsock.o src/ipxwrapper_stubs.o src/ipxwrapper.def
-WSOCK32_DEPS := src/stubdll.o src/wsock32_stubs.o src/wsock32.def
-MSWSOCK_DEPS := src/stubdll.o src/mswsock_stubs.o src/mswsock.def
 
 all: ipxwrapper.dll wsock32.dll mswsock.dll ipxconfig.exe
 
@@ -36,38 +34,23 @@ dist: all
 ipxwrapper.dll: $(IPXWRAPPER_DEPS)
 	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup,-s -shared -o ipxwrapper.dll $(IPXWRAPPER_DEPS) -liphlpapi
 
-wsock32.dll: $(WSOCK32_DEPS)
-	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup,-s -shared -o wsock32.dll $(WSOCK32_DEPS)
-
-mswsock.dll: $(MSWSOCK_DEPS)
-	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup,-s -shared -o mswsock.dll $(MSWSOCK_DEPS)
-
-src/ipxwrapper.o: src/ipxwrapper.c src/ipxwrapper.h
-	$(CC) $(CFLAGS) -c -o src/ipxwrapper.o src/ipxwrapper.c
-
-src/winsock.o: src/winsock.c src/ipxwrapper.h
-	$(CC) $(CFLAGS) -c -o src/winsock.o src/winsock.c
-
-src/ipxwrapper_stubs.o: src/ipxwrapper_stubs.s
-	nasm -f win32 -o src/ipxwrapper_stubs.o src/ipxwrapper_stubs.s
+ipxconfig.exe: src/ipxconfig.cpp
+	$(CXX) $(CXXFLAGS) -Wl,-s -D_WIN32_IE=0x0400 -mwindows -o ipxconfig.exe src/ipxconfig.cpp -liphlpapi
 
 src/ipxwrapper_stubs.s: src/ipxwrapper_stubs.txt
 	perl mkstubs.pl src/ipxwrapper_stubs.txt src/ipxwrapper_stubs.s
 
-src/stubdll.o: src/stubdll.c
-	$(CC) $(CFLAGS) -c -o src/stubdll.o src/stubdll.c
-
-src/wsock32_stubs.o: src/wsock32_stubs.s
-	nasm -f win32 -o src/wsock32_stubs.o src/wsock32_stubs.s
-
 src/wsock32_stubs.s: src/wsock32_stubs.txt
 	perl mkstubs.pl src/wsock32_stubs.txt src/wsock32_stubs.s wsock32.dll
-
-src/mswsock_stubs.o: src/mswsock_stubs.s
-	nasm -f win32 -o src/mswsock_stubs.o src/mswsock_stubs.s
 
 src/mswsock_stubs.s: src/mswsock_stubs.txt
 	perl mkstubs.pl src/mswsock_stubs.txt src/mswsock_stubs.s mswsock.dll
 
-ipxconfig.exe: src/ipxconfig.cpp
-	$(CXX) $(CXXFLAGS) -Wl,-s -D_WIN32_IE=0x0400 -mwindows -o ipxconfig.exe src/ipxconfig.cpp -liphlpapi
+%.dll: src/stubdll.o src/%_stubs.o src/%.def
+	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup,-s -shared -o $@ $^
+
+src/%_stubs.o: src/%_stubs.s
+	nasm -f win32 -o $@ $<
+
+src/%.o: src/%.c src/ipxwrapper.h src/config.h
+	$(CC) $(CFLAGS) -c -o $@ $<
