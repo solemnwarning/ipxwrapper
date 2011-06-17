@@ -1,4 +1,4 @@
-/* ipxwrapper - Configuration tool
+/* IPXWrapper - Configuration tool
  * Copyright (C) 2011 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -37,6 +37,7 @@
 #define ID_UDP_BTN 8
 #define ID_BCAST_ALL 9
 #define ID_FILTER 10
+#define ID_LOG 11
 
 #define ID_DIALOG_TXT 1
 #define ID_DIALOG_OK 2
@@ -72,6 +73,7 @@ static int get_text_height(HWND hwnd);
 static iface_list nics;
 static reg_global global_conf;
 static HKEY regkey = NULL;
+static unsigned char log_calls;
 
 typedef LRESULT CALLBACK (*wproc_fptr)(HWND,UINT,WPARAM,LPARAM);
 static wproc_fptr groupbox_wproc = NULL;
@@ -90,6 +92,7 @@ static struct {
 	HWND w95_bug;
 	HWND bcast_all;
 	HWND filter;
+	HWND log;
 	
 	HWND button_box;
 } windows;
@@ -185,6 +188,10 @@ static LRESULT CALLBACK main_wproc(HWND window, UINT msg, WPARAM wp, LPARAM lp) 
 					
 					case ID_FILTER:
 						global_conf.filter = Button_GetCheck(windows.filter) == BST_CHECKED;
+						break;
+					
+					case ID_LOG:
+						log_calls = Button_GetCheck(windows.log) == BST_CHECKED;
 						break;
 					
 					default:
@@ -405,6 +412,12 @@ int main() {
 		global_conf.filter = 1;
 	}
 	
+	gsize = 1;
+	
+	if(!regkey || RegQueryValueEx(regkey, "log_calls", NULL, NULL, (BYTE*)&log_calls, &gsize) != ERROR_SUCCESS || gsize != 1) {
+		log_calls = 0;
+	}
+	
 	get_nics();
 	
 	init_windows();
@@ -498,6 +511,7 @@ static void save_nics() {
 	}
 	
 	assert(RegSetValueEx(regkey, "global", 0, REG_BINARY, (BYTE*)&global_conf, sizeof(global_conf)) == ERROR_SUCCESS);
+	assert(RegSetValueEx(regkey, "log_calls", 0, REG_BINARY, (BYTE*)&log_calls, 1) == ERROR_SUCCESS);
 	
 	MessageBox(
 		windows.main,
@@ -609,10 +623,12 @@ static void init_windows() {
 		int cbox2_w = get_text_width(windows.global_conf, "Filter received packets by subnet");
 		
 		windows.filter = create_child(windows.global_conf, btn_w+cbox_w+30, text_h, cbox2_w, row_h, "BUTTON", "Filter received packets by subnet", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_FILTER);
+		windows.log = create_child(windows.global_conf, btn_w+cbox_w+30, text_h+row_h+5, cbox2_w, row_h, "BUTTON", "Log all WinSock calls", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_LOG);
 		
 		Button_SetCheck(windows.w95_bug, global_conf.w95_bug ? BST_CHECKED : BST_UNCHECKED);
 		Button_SetCheck(windows.bcast_all, global_conf.bcast_all ? BST_CHECKED : BST_UNCHECKED);
 		Button_SetCheck(windows.filter, global_conf.filter ? BST_CHECKED : BST_UNCHECKED);
+		Button_SetCheck(windows.log, log_calls ? BST_CHECKED : BST_UNCHECKED);
 	}
 	
 	{

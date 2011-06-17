@@ -8,6 +8,8 @@ Version 0.2.1:
 	Bugfix: Correctly terminate symbol names used within stub DLLs.
 	
 	Cleanup: Combined common code between recv, recvfrom and WSARecvEx.
+	
+	Feature: Optionally log names of all WinSock calls.
 
 Version 0.2:
 	Implemented ioctlsocket() function with support for FIONREAD.
