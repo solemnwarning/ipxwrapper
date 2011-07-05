@@ -69,6 +69,8 @@ static HWND create_child(HWND parent, int x, int y, int w, int h, LPCTSTR class_
 static void add_list_column(HWND hwnd, int id, char *text, int width);
 static int get_text_width(HWND hwnd, const char *txt);
 static int get_text_height(HWND hwnd);
+static std::string w32_errmsg(DWORD errnum);
+static void die(std::string msg);
 
 static iface_list nics;
 static reg_global global_conf;
@@ -391,7 +393,7 @@ static void addr_input_dialog(const char *desc, char *dest, int size) {
 }
 
 int main() {
-	assert(RegCreateKeyEx(
+	int err = RegCreateKeyEx(
 		HKEY_CURRENT_USER,
 		"Software\\IPXWrapper",
 		0,
@@ -401,7 +403,10 @@ int main() {
 		NULL,
 		&regkey,
 		NULL
-	) == ERROR_SUCCESS);
+	);
+	if(err != ERROR_SUCCESS) {
+		die("Error opening registry: " + w32_errmsg(err));
+	}
 	
 	DWORD gsize = sizeof(global_conf);
 	
@@ -443,14 +448,14 @@ static void get_nics() {
 	
 	int rval = GetAdaptersInfo(&tbuf, &bufsize);
 	if(rval != ERROR_SUCCESS && rval != ERROR_BUFFER_OVERFLOW) {
-		assert(0);
+		die("Error getting network interfaces: " + w32_errmsg(rval));
 	}
 	
 	IP_ADAPTER_INFO *buf = new IP_ADAPTER_INFO[bufsize / sizeof(tbuf)];
 	
 	rval = GetAdaptersInfo(buf, &bufsize);
 	if(rval != ERROR_SUCCESS) {
-		assert(0);
+		die("Error getting network interfaces: " + w32_errmsg(rval));
 	}
 	
 	for(IP_ADAPTER_INFO *ptr = buf; ptr; ptr = ptr->Next) {
@@ -498,6 +503,18 @@ static void set_primary(unsigned int id) {
 	}
 }
 
+static bool reg_write(const char *name, void *value, size_t size) {
+	int err = RegSetValueEx(regkey, name, 0, REG_BINARY, (BYTE*)value, size);
+	if(err != ERROR_SUCCESS) {
+		std::string msg = "Error writing value to registry: " + w32_errmsg(err);
+		MessageBox(NULL, msg.c_str(), "Error", MB_OK | MB_TASKMODAL | MB_ICONERROR);
+		
+		return false;
+	}
+	
+	return true;
+}
+
 static void save_nics() {
 	for(iface_list::iterator i = nics.begin(); i != nics.end(); i++) {
 		reg_value rval;
@@ -507,11 +524,14 @@ static void save_nics() {
 		rval.enabled = i->enabled;
 		rval.primary = i->primary;
 		
-		assert(RegSetValueEx(regkey, i->hwaddr, 0, REG_BINARY, (BYTE*)&rval, sizeof(rval)) == ERROR_SUCCESS);
+		if(!reg_write(i->hwaddr, &rval, sizeof(rval))) {
+			return;
+		}
 	}
 	
-	assert(RegSetValueEx(regkey, "global", 0, REG_BINARY, (BYTE*)&global_conf, sizeof(global_conf)) == ERROR_SUCCESS);
-	assert(RegSetValueEx(regkey, "log_calls", 0, REG_BINARY, (BYTE*)&log_calls, 1) == ERROR_SUCCESS);
+	if(!reg_write("global", &global_conf, sizeof(global_conf)) || !reg_write("log_calls", &log_calls, 1)) {
+		return;
+	}
 	
 	MessageBox(
 		windows.main,
@@ -731,4 +751,18 @@ static int get_text_height(HWND hwnd) {
 	ReleaseDC(hwnd, dc);
 	
 	return tm.tmHeight;
+}
+
+/* Convert a win32 error number to a message */
+static std::string w32_errmsg(DWORD errnum) {
+	char buf[256] = {'\0'};
+	
+	FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, NULL, errnum, 0, buf, sizeof(buf), NULL);
+	buf[strcspn(buf, "\r\n")] = '\0';
+	return buf;	
+}
+
+static void die(std::string msg) {
+	MessageBox(NULL, msg.c_str(), "Fatal error", MB_OK | MB_TASKMODAL | MB_ICONERROR);
+	exit(1);
 }
