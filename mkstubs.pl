@@ -36,7 +36,7 @@ print CODE "section .rdata:\n";
 
 if(@ARGV == 3) {
 	print CODE "\tglobal\t_dllname\n";
-	print CODE "\tdllname_s:\tdb\t'wsock32.dll'\n";
+	print CODE "\tdllname_s:\tdb\t'".$ARGV[2]."'\n";
 	print CODE "\t_dllname:\tdd\tdllname_s\n";
 }
 
