@@ -12,6 +12,8 @@ Version 0.2.1:
 	Feature: Optionally log names of all WinSock calls.
 	
 	Bugfix: Store correct DLL name in stub DLLs.
+	
+	Cleanup: Replace assert calls with proper error checks in ipxconfig.
 
 Version 0.2:
 	Implemented ioctlsocket() function with support for FIONREAD.

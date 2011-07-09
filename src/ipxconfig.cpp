@@ -21,7 +21,6 @@
 #include <commctrl.h>
 #include <iphlpapi.h>
 #include <iostream>
-#include <assert.h>
 #include <string>
 #include <vector>
 #include <stdint.h>
@@ -70,6 +69,7 @@ static HWND create_child(HWND parent, int x, int y, int w, int h, LPCTSTR class_
 static void add_list_column(HWND hwnd, int id, char *text, int width);
 static int get_text_width(HWND hwnd, const char *txt);
 static int get_text_height(HWND hwnd);
+static RECT get_window_rect(HWND hwnd);
 static std::string w32_errmsg(DWORD errnum);
 static void die(std::string msg);
 
@@ -207,15 +207,13 @@ static LRESULT CALLBACK main_wproc(HWND window, UINT msg, WPARAM wp, LPARAM lp) 
 		case WM_SIZE:
 			int width = LOWORD(lp), height = HIWORD(lp);
 			
-			RECT rect;
-			
-			assert(GetWindowRect(windows.nic_conf, &rect));
+			RECT rect = get_window_rect(windows.nic_conf);
 			int conf_h = rect.bottom - rect.top;
 			
-			assert(GetWindowRect(windows.global_conf, &rect));
+			rect = get_window_rect(windows.global_conf);
 			int gc_h = rect.bottom - rect.top;
 			
-			assert(GetWindowRect(windows.button_box, &rect));
+			rect = get_window_rect(windows.button_box);
 			int btn_w = rect.right - rect.left;
 			
 			MoveWindow(windows.nic_list, 0, 0, width, height-conf_h-gc_h, TRUE);
@@ -280,14 +278,16 @@ static LRESULT CALLBACK addr_dialog_wproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM
 			MoveWindow(ok, edit_w+10, 5, btn_w, height, TRUE);
 			MoveWindow(cancel, edit_w+btn_w+15, 5, btn_w, height, TRUE);
 			
-			RECT crect, brect;
-			assert(GetClientRect(hwnd, &crect));
-			assert(GetWindowRect(hwnd, &brect));
+			RECT crect, brect = get_window_rect(hwnd);
+			
+			if(!GetClientRect(hwnd, &crect)) {
+				die("GetClientRect failed: " + w32_errmsg(GetLastError()));
+			}
 			
 			int win_w = ((brect.right - brect.left) - crect.right) + edit_w + 2*btn_w + 20;
 			int win_h = ((brect.bottom - brect.top) - crect.bottom) + height + 10;
 			
-			assert(GetWindowRect(windows.main, &brect));
+			brect = get_window_rect(windows.main);
 			
 			int win_x = brect.left + (brect.right - brect.left) / 2 - win_w / 2;
 			int win_y = brect.top + (brect.bottom - brect.top) / 2 - win_h / 2;
@@ -744,10 +744,14 @@ static void add_list_column(HWND hwnd, int id, char *text, int width) {
 
 static int get_text_width(HWND hwnd, const char *txt) {
 	HDC dc = GetDC(hwnd);
-	assert(dc);
+	if(!dc) {
+		die("GetDC failed");
+	}
 	
 	SIZE size;
-	assert(GetTextExtentPoint32(dc, txt, strlen(txt), &size));
+	if(!GetTextExtentPoint32(dc, txt, strlen(txt), &size)) {
+		die("GetTextExtentPoint32 failed");
+	}
 	
 	ReleaseDC(hwnd, dc);
 	
@@ -756,14 +760,28 @@ static int get_text_width(HWND hwnd, const char *txt) {
 
 static int get_text_height(HWND hwnd) {
 	HDC dc = GetDC(hwnd);
-	assert(dc);
+	if(!dc) {
+		die("GetDC failed");
+	}
 	
 	TEXTMETRIC tm;
-	assert(GetTextMetrics(dc, &tm));
+	if(!GetTextMetrics(dc, &tm)) {
+		die("GetTextMetrics failed");
+	}
 	
 	ReleaseDC(hwnd, dc);
 	
 	return tm.tmHeight;
+}
+
+static RECT get_window_rect(HWND hwnd) {
+	RECT rect;
+	
+	if(!GetWindowRect(hwnd, &rect)) {
+		die("GetWindowRect failed: " + w32_errmsg(GetLastError()));
+	}
+	
+	return rect;
 }
 
 /* Convert a win32 error number to a message */
