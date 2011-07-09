@@ -152,7 +152,7 @@ SOCKET WSAAPI socket(int af, int type, int protocol) {
 		nsock->next = sockets;
 		sockets = nsock;
 		
-		debug("Socket created (fd=%d)", nsock->fd);
+		debug("IPX socket created (fd = %d)", nsock->fd);
 		
 		RETURN(nsock->fd);
 	}else{
@@ -161,17 +161,22 @@ SOCKET WSAAPI socket(int af, int type, int protocol) {
 }
 
 int WSAAPI closesocket(SOCKET fd) {
-	debug("closesocket(%d)", fd);
-	
-	if(r_closesocket(fd) == SOCKET_ERROR) {
-		debug("...failed");
-		RETURN(SOCKET_ERROR);
-	}
+	int ret = r_closesocket(fd);
 	
 	ipx_socket *ptr = get_socket(fd);
 	ipx_socket *pptr = sockets;
 	
-	debug("...success");
+	if(!ptr) {
+		/* Not an IPX socket */
+		return ret;
+	}
+	
+	if(ret == SOCKET_ERROR) {
+		debug("closesocket(%d) failed: %s", fd, w32_error(WSAGetLastError()));
+		RETURN(SOCKET_ERROR);
+	}
+	
+	debug("IPX socket closed (fd = %d)", fd);
 	
 	if(ptr == sockets) {
 		sockets = ptr->next;
