@@ -10,6 +10,8 @@ Version 0.2.1:
 	Cleanup: Combined common code between recv, recvfrom and WSARecvEx.
 	
 	Feature: Optionally log names of all WinSock calls.
+	
+	Bugfix: Store correct DLL name in stub DLLs.
 
 Version 0.2:
 	Implemented ioctlsocket() function with support for FIONREAD.
