@@ -15,6 +15,7 @@
  * Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
+#include <iostream>
 #include <windows.h>
 #include <windowsx.h>
 #include <commctrl.h>
@@ -379,7 +380,7 @@ static void addr_input_dialog(const char *desc, char *dest, int size) {
 	v->dest = dest;
 	v->size = size;
 	
-	assert(CreateWindow(
+	if(!CreateWindow(
 		"ipxconfig_dialog",
 		desc,
 		WS_DLGFRAME,
@@ -389,7 +390,9 @@ static void addr_input_dialog(const char *desc, char *dest, int size) {
 		NULL,
 		NULL,
 		v
-	));
+	)) {
+		std::cerr << "Failed to create dialog: " << w32_errmsg(GetLastError()) << std::endl;
+	}
 }
 
 int main() {
@@ -431,7 +434,9 @@ int main() {
 	BOOL mret;
 	
 	while((mret = GetMessage(&msg, NULL, 0, 0))) {
-		assert(mret != -1);
+		if(mret == -1) {
+			die("GetMessage failed: " + w32_errmsg(GetLastError()));
+		}
 		
 		TranslateMessage(&msg);
 		DispatchMessage(&msg);
@@ -579,12 +584,16 @@ static void init_windows() {
 	wclass.lpszMenuName  = NULL;
 	wclass.lpszClassName = "ipxconfig_class";
 	
-	assert(RegisterClass(&wclass));
+	if(!RegisterClass(&wclass)) {
+		die("Failed to register ipxconfig_class: " + w32_errmsg(GetLastError()));
+	}
 	
 	wclass.lpfnWndProc = &addr_dialog_wproc;
 	wclass.lpszClassName = "ipxconfig_dialog";
 	
-	assert(RegisterClass(&wclass));
+	if(!RegisterClass(&wclass)) {
+		die("Failed to register ipxconfig_dialog: " + w32_errmsg(GetLastError()));
+	}
 	
 	windows.main = CreateWindow(
 		"ipxconfig_class",
@@ -598,7 +607,9 @@ static void init_windows() {
 		NULL
 	);
 	
-	assert(windows.main);
+	if(!windows.main) {
+		die("Failed to create main window: " + w32_errmsg(GetLastError()));
+	}
 	
 	windows.nic_list = create_child(windows.main, 0, 0, 0, 0, WC_LISTVIEW, NULL, LVS_SINGLESEL | LVS_REPORT | WS_TABSTOP, WS_EX_CLIENTEDGE, ID_NIC_LIST);
 	
@@ -712,7 +723,9 @@ static HWND create_child(HWND parent, int x, int y, int w, int h, LPCTSTR class_
 		NULL
 	);
 	
-	assert(hwnd);
+	if(!hwnd) {
+		die(std::string("Failed to create child window (") + class_name + "): " + w32_errmsg(GetLastError()));
+	}
 	
 	SendMessage(hwnd, WM_SETFONT, (WPARAM)GetStockObject(DEFAULT_GUI_FONT), TRUE);
 	
