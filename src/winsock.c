@@ -145,7 +145,7 @@ SOCKET WSAAPI socket(int af, int type, int protocol) {
 		}
 		
 		nsock->flags = IPX_SEND | IPX_RECV;
-		nsock->s_ptype = (protocol ? nsock->s_ptype = NSPROTO_IPX - protocol : 0);
+		nsock->s_ptype = (protocol ? NSPROTO_IPX - protocol : 0);
 		
 		lock_mutex();
 		
