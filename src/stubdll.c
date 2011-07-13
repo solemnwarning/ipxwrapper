@@ -25,8 +25,9 @@ extern char const *dllname;
 
 FILE *call_log = NULL;
 
-void __stdcall *find_sym(char const *symbol);
-void debug(char const *fmt, ...);
+void log_open();
+void log_close();
+void log_printf(const char *fmt, ...);
 
 static void load_dlls() {
 	char sysdir[1024], path[1024];
@@ -47,6 +48,8 @@ static void load_dlls() {
 
 BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 	if(why == DLL_PROCESS_ATTACH) {
+		log_open();
+		
 		HKEY key;
 		
 		if(RegOpenKeyEx(HKEY_CURRENT_USER, "Software\\IPXWrapper", 0, KEY_QUERY_VALUE, &key) == ERROR_SUCCESS) {
@@ -62,9 +65,7 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 			
 			RegCloseKey(key);
 		}
-	}
-	
-	if(why == DLL_PROCESS_DETACH) {
+	}else if(why == DLL_PROCESS_DETACH) {
 		if(sysdll) {
 			FreeLibrary(sysdll);
 			sysdll = NULL;
@@ -79,6 +80,8 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 			fclose(call_log);
 			call_log = NULL;
 		}
+		
+		log_close();
 	}
 	
 	return TRUE;
@@ -96,26 +99,9 @@ void __stdcall *find_sym(char const *symbol) {
 	}
 	
 	if(!ptr) {
-		debug("Missing symbol in %s: %s", dllname, symbol);
+		log_printf("Missing symbol in %s: %s", dllname, symbol);
 		abort();
 	}
 	
 	return ptr;
-}
-
-void debug(char const *fmt, ...) {
-	static void (*real_debug)(char const*,...) = NULL;
-	char msgbuf[1024];
-	va_list argv;
-	
-	if(ipxdll && !real_debug) {
-		real_debug = (void*)GetProcAddress(ipxdll, "debug");
-	}
-	if(real_debug) {
-		va_start(argv, fmt);
-		vsnprintf(msgbuf, 1024, fmt, argv);
-		va_end(argv);
-		
-		real_debug("%s", msgbuf);
-	}
 }

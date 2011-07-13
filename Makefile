@@ -17,7 +17,7 @@
 CFLAGS := -Wall
 CXXFLAGS := -Wall
 
-IPXWRAPPER_DEPS := src/ipxwrapper.o src/winsock.o src/ipxwrapper_stubs.o src/ipxwrapper.def
+IPXWRAPPER_DEPS := src/ipxwrapper.o src/winsock.o src/ipxwrapper_stubs.o src/log.o src/ipxwrapper.def
 
 all: ipxwrapper.dll wsock32.dll mswsock.dll ipxconfig.exe
 
@@ -46,7 +46,7 @@ src/wsock32_stubs.s: src/wsock32_stubs.txt
 src/mswsock_stubs.s: src/mswsock_stubs.txt
 	perl mkstubs.pl src/mswsock_stubs.txt src/mswsock_stubs.s mswsock.dll
 
-%.dll: src/stubdll.o src/%_stubs.o src/%.def
+%.dll: src/stubdll.o src/%_stubs.o src/log.o src/%.def
 	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup,-s -shared -o $@ $^
 
 src/%_stubs.o: src/%_stubs.s

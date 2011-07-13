@@ -45,7 +45,6 @@ HMODULE winsock2_dll = NULL;
 HMODULE mswsock_dll = NULL;
 HMODULE wsock32_dll = NULL;
 
-static FILE *debug_fh = NULL;
 static HANDLE mutex = NULL;
 static HANDLE router_thread = NULL;
 static DWORD router_tid = 0;
@@ -59,9 +58,7 @@ static BOOL load_nics(void);
 
 BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 	if(why == DLL_PROCESS_ATTACH) {
-		#ifdef DEBUG
-		debug_fh = fopen(DEBUG, "w");
-		#endif
+		log_open();
 		
 		winsock2_dll = load_sysdll("ws2_32.dll");
 		mswsock_dll = load_sysdll("mswsock.dll");
@@ -81,7 +78,7 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 		
 		if(reg_err != ERROR_SUCCESS) {
 			regkey = NULL;
-			debug("Could not open registry: %s", w32_error(reg_err));
+			log_printf("Could not open registry: %s", w32_error(reg_err));
 		}
 		
 		DWORD gsize = sizeof(global_conf);
@@ -99,14 +96,14 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 		
 		mutex = CreateMutex(NULL, FALSE, NULL);
 		if(!mutex) {
-			debug("Failed to create mutex");
+			log_printf("Failed to create mutex");
 			return FALSE;
 		}
 		
 		WSADATA wsdata;
 		int err = WSAStartup(MAKEWORD(1,1), &wsdata);
 		if(err) {
-			debug("Failed to initialize winsock: %s", w32_error(err));
+			log_printf("Failed to initialize winsock: %s", w32_error(err));
 			return FALSE;
 		}
 		
@@ -142,6 +139,8 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 		DLL_UNLOAD(winsock2_dll);
 		DLL_UNLOAD(mswsock_dll);
 		DLL_UNLOAD(wsock32_dll);
+		
+		log_close();
 	}
 	
 	return TRUE;
@@ -158,25 +157,11 @@ void __stdcall *find_sym(char const *symbol) {
 	}
 	
 	if(!addr) {
-		debug("Unknown symbol: %s", symbol);
+		log_printf("Unknown symbol: %s", symbol);
 		abort();
 	}
 	
 	return addr;
-}
-
-void debug(char const *fmt, ...) {
-	char msg[1024];
-	va_list argv;
-	
-	if(debug_fh) {
-		va_start(argv, fmt);
-		vsnprintf(msg, 1024, fmt, argv);
-		va_end(argv);
-		
-		fprintf(debug_fh, "%s\n", msg);
-		fflush(debug_fh);
-	}
 }
 
 /* Lock the mutex and search the sockets list for an ipx_socket structure with
@@ -251,7 +236,7 @@ static HMODULE load_sysdll(char const *name) {
 	
 	ret = LoadLibrary(path);
 	if(!ret) {
-		debug("Error loading %s: %s", path, w32_error(GetLastError()));
+		log_printf("Error loading %s: %s", path, w32_error(GetLastError()));
 	}
 	
 	return ret;
@@ -259,9 +244,9 @@ static HMODULE load_sysdll(char const *name) {
 
 /* Initialize and start the router thread */
 static int init_router(void) {
-	net_fd = socket(AF_INET, SOCK_DGRAM, 0);
+	net_fd = r_socket(AF_INET, SOCK_DGRAM, 0);
 	if(net_fd == -1) {
-		debug("Failed to create network socket: %s", w32_error(WSAGetLastError()));
+		log_printf("Failed to create network socket: %s", w32_error(WSAGetLastError()));
 		return 0;
 	}
 	
@@ -270,27 +255,27 @@ static int init_router(void) {
 	bind_addr.sin_addr.s_addr = INADDR_ANY;
 	bind_addr.sin_port = htons(global_conf.udp_port);
 	
-	if(bind(net_fd, (struct sockaddr*)&bind_addr, sizeof(bind_addr)) == -1) {
-		debug("Failed to bind network socket: %s", w32_error(WSAGetLastError()));
+	if(r_bind(net_fd, (struct sockaddr*)&bind_addr, sizeof(bind_addr)) == -1) {
+		log_printf("Failed to bind network socket: %s", w32_error(WSAGetLastError()));
 		return 0;
 	}
 	
 	BOOL broadcast = TRUE;
 	int bufsize = 524288;	/* 512KiB */
 	
-	setsockopt(net_fd, SOL_SOCKET, SO_BROADCAST, (char*)&broadcast, sizeof(BOOL));
-	setsockopt(net_fd, SOL_SOCKET, SO_RCVBUF, (char*)&bufsize, sizeof(int));
-	setsockopt(net_fd, SOL_SOCKET, SO_SNDBUF, (char*)&bufsize, sizeof(int));
+	r_setsockopt(net_fd, SOL_SOCKET, SO_BROADCAST, (char*)&broadcast, sizeof(BOOL));
+	r_setsockopt(net_fd, SOL_SOCKET, SO_RCVBUF, (char*)&bufsize, sizeof(int));
+	r_setsockopt(net_fd, SOL_SOCKET, SO_SNDBUF, (char*)&bufsize, sizeof(int));
 	
 	router_buf = malloc(PACKET_BUF_SIZE);
 	if(!router_buf) {
-		debug("Not enough memory for router buffer (64KiB)");
+		log_printf("Not enough memory for router buffer (64KiB)");
 		return 0;
 	}
 	
 	router_thread = CreateThread(NULL, 0, &router_main, NULL, 0, &router_tid);
 	if(!router_thread) {
-		debug("Failed to create router thread");
+		log_printf("Failed to create router thread");
 		return 0;
 	}
 	
@@ -311,9 +296,9 @@ static DWORD WINAPI router_main(LPVOID notused) {
 	
 	while(1) {
 		addrlen = sizeof(addr);
-		rval = recvfrom(net_fd, (char*)packet, PACKET_BUF_SIZE, 0, (struct sockaddr*)&addr, &addrlen);
+		rval = r_recvfrom(net_fd, (char*)packet, PACKET_BUF_SIZE, 0, (struct sockaddr*)&addr, &addrlen);
 		if(rval <= 0) {
-			debug("Error recieving packet: %s", w32_error(WSAGetLastError()));
+			log_printf("Error recieving packet: %s", w32_error(WSAGetLastError()));
 			continue;
 		}
 		
@@ -337,7 +322,7 @@ static DWORD WINAPI router_main(LPVOID notused) {
 		packet->size = ntohs(packet->size);
 		
 		if(packet->size > MAX_PACKET_SIZE || packet->size+sizeof(ipx_packet)-1 != rval) {
-			debug("Recieved packet with incorrect size field, discarding");
+			log_printf("Recieved packet with incorrect size field, discarding");
 			continue;
 		}
 		
@@ -374,7 +359,7 @@ static DWORD WINAPI router_main(LPVOID notused) {
 				
 				sval = r_sendto(sockptr->fd, (char*)packet, rval, 0, (struct sockaddr*)&addr, addrlen);
 				if(sval == -1) {
-					debug("Error relaying packet: %s", w32_error(WSAGetLastError()));
+					log_printf("Error relaying packet: %s", w32_error(WSAGetLastError()));
 				}
 			}
 		}
@@ -411,7 +396,7 @@ static void add_host(const unsigned char *net, const unsigned char *node, uint32
 	
 	hptr = malloc(sizeof(ipx_host));
 	if(!hptr) {
-		debug("No memory for hosts list entry");
+		log_printf("No memory for hosts list entry");
 		return;
 	}
 	
@@ -461,7 +446,7 @@ static BOOL load_nics(void) {
 	ipx_nic *enic = NULL;
 	
 	if(!ifptr) {
-		debug("No NICs: %s", w32_error(WSAGetLastError()));
+		log_printf("No NICs: %s", w32_error(WSAGetLastError()));
 	}
 	
 	while(ifptr) {

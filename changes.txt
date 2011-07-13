@@ -14,6 +14,11 @@ Version 0.2.1:
 	Bugfix: Store correct DLL name in stub DLLs.
 	
 	Cleanup: Replace assert calls with proper error checks in ipxconfig.
+	
+	Cleanup: Cleaned up logging code and added timestamps using GetTickCount.
+	
+	Cleanup: Call r_ winsock calls directly in router code to prevent it from
+	generating extra log messages.
 
 Version 0.2:
 	Implemented ioctlsocket() function with support for FIONREAD.

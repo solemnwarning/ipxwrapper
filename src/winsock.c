@@ -128,7 +128,7 @@ INT APIENTRY EnumProtocolsW(LPINT protocols, LPVOID buf, LPDWORD bsptr) {
 }
 
 SOCKET WSAAPI socket(int af, int type, int protocol) {
-	debug("socket(%d, %d, %d)", af, type, protocol);
+	log_printf("socket(%d, %d, %d)", af, type, protocol);
 	
 	if(af == AF_IPX) {
 		ipx_socket *nsock = malloc(sizeof(ipx_socket));
@@ -138,7 +138,7 @@ SOCKET WSAAPI socket(int af, int type, int protocol) {
 		
 		nsock->fd = r_socket(AF_INET, SOCK_DGRAM, 0);
 		if(nsock->fd == -1) {
-			debug("Creating fake socket failed: %s", w32_error(WSAGetLastError()));
+			log_printf("Creating fake socket failed: %s", w32_error(WSAGetLastError()));
 			
 			free(nsock);
 			RETURN(-1);
@@ -152,7 +152,7 @@ SOCKET WSAAPI socket(int af, int type, int protocol) {
 		nsock->next = sockets;
 		sockets = nsock;
 		
-		debug("IPX socket created (fd = %d)", nsock->fd);
+		log_printf("IPX socket created (fd = %d)", nsock->fd);
 		
 		RETURN(nsock->fd);
 	}else{
@@ -172,11 +172,11 @@ int WSAAPI closesocket(SOCKET fd) {
 	}
 	
 	if(ret == SOCKET_ERROR) {
-		debug("closesocket(%d) failed: %s", fd, w32_error(WSAGetLastError()));
+		log_printf("closesocket(%d) failed: %s", fd, w32_error(WSAGetLastError()));
 		RETURN(SOCKET_ERROR);
 	}
 	
-	debug("IPX socket closed (fd = %d)", fd);
+	log_printf("IPX socket closed (fd = %d)", fd);
 	
 	if(ptr == sockets) {
 		sockets = ptr->next;
@@ -205,10 +205,10 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen) {
 		NET_TO_STRING(net_s, ipxaddr->sa_netnum);
 		NODE_TO_STRING(node_s, ipxaddr->sa_nodenum);
 		
-		debug("bind(%d, net=%s node=%s socket=%hu)", fd, net_s, node_s, ntohs(ipxaddr->sa_socket));
+		log_printf("bind(%d, net=%s node=%s socket=%hu)", fd, net_s, node_s, ntohs(ipxaddr->sa_socket));
 		
 		if(ptr->flags & IPX_BOUND) {
-			debug("bind failed: socket already bound");
+			log_printf("bind failed: socket already bound");
 			RETURN_WSA(WSAEINVAL, -1);
 		}
 		
@@ -240,7 +240,7 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen) {
 		}
 		
 		if(!nic) {
-			debug("bind failed: no such address");
+			log_printf("bind failed: no such address");
 			RETURN_WSA(WSAEADDRNOTAVAIL, -1);
 		}
 		
@@ -258,7 +258,7 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen) {
 			while(socket) {
 				if(ntohs(socket->socket) == s && socket->flags & IPX_BOUND) {
 					if(s == 65535) {
-						debug("bind failed: out of sockets?!");
+						log_printf("bind failed: out of sockets?!");
 						RETURN_WSA(WSAEADDRNOTAVAIL, -1);
 					}
 					
@@ -279,7 +279,7 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen) {
 			
 			while(socket) {
 				if(socket->socket == ipxaddr->sa_socket && socket->flags & IPX_BOUND) {
-					debug("bind failed: requested socket in use");
+					log_printf("bind failed: requested socket in use");
 					RETURN_WSA(WSAEADDRINUSE, -1);
 				}
 				
@@ -292,7 +292,7 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen) {
 		NET_TO_STRING(net_s, nic->ipx_net);
 		NODE_TO_STRING(node_s, nic->ipx_node);
 		
-		debug("bind address: net=%s node=%s socket=%hu", net_s, node_s, ntohs(ptr->socket));
+		log_printf("bind address: net=%s node=%s socket=%hu", net_s, node_s, ntohs(ptr->socket));
 		
 		/* TODO: Bind fake socket in socket() call rather than here?
 		 *
@@ -311,7 +311,7 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen) {
 		if(rval == 0) {
 			ptr->flags |= IPX_BOUND;
 		}else{
-			debug("Binding fake socket failed: %s", w32_error(WSAGetLastError()));
+			log_printf("Binding fake socket failed: %s", w32_error(WSAGetLastError()));
 		}
 		
 		RETURN(rval);
@@ -612,7 +612,7 @@ int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct s
 		}
 		
 		if(!(sockptr->flags & IPX_BOUND)) {
-			debug("sendto() on unbound socket, attempting implicit bind");
+			log_printf("sendto() on unbound socket, attempting implicit bind");
 			
 			struct sockaddr_ipx bind_addr;
 			

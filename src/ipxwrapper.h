@@ -25,8 +25,6 @@
 
 #include "config.h"
 
-#define DEBUG "ipxwrapper.log"
-
 /* Maximum UDP data size is 65467, we use a smaller value to ensure we have
  * plenty of space to play with for headers, etc
 */
@@ -141,13 +139,16 @@ extern HMODULE mswsock_dll;
 extern HMODULE wsock32_dll;
 
 void __stdcall *find_sym(char const *sym);
-void debug(char const *fmt, ...);
 ipx_socket *get_socket(SOCKET fd);
 void lock_mutex(void);
 void unlock_mutex(void);
 IP_ADAPTER_INFO *get_nics(void);
 char const *w32_error(DWORD errnum);
 ipx_host *find_host(const unsigned char *net, const unsigned char *node);
+
+void log_open();
+void log_close();
+void log_printf(const char *fmt, ...);
 
 INT APIENTRY r_EnumProtocolsA(LPINT,LPVOID,LPDWORD);
 INT APIENTRY r_EnumProtocolsW(LPINT,LPVOID,LPDWORD);
