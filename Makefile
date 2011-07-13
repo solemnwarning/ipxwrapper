@@ -35,7 +35,7 @@ ipxwrapper.dll: $(IPXWRAPPER_DEPS)
 	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup,-s -shared -o ipxwrapper.dll $(IPXWRAPPER_DEPS) -liphlpapi
 
 ipxconfig.exe: src/ipxconfig.cpp
-	$(CXX) $(CXXFLAGS) -Wl,-s -D_WIN32_IE=0x0400 -mwindows -o ipxconfig.exe src/ipxconfig.cpp -liphlpapi
+	$(CXX) $(CXXFLAGS) -static-libgcc -static-libstdc++ -Wl,-s -D_WIN32_IE=0x0400 -mwindows -o ipxconfig.exe src/ipxconfig.cpp -liphlpapi
 
 src/ipxwrapper_stubs.s: src/ipxwrapper_stubs.txt
 	perl mkstubs.pl src/ipxwrapper_stubs.txt src/ipxwrapper_stubs.s
