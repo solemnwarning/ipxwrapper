@@ -24,6 +24,7 @@
 #include <string>
 #include <vector>
 #include <stdint.h>
+#include <stdio.h>
 
 #include "config.h"
 
@@ -66,7 +67,7 @@ static void baddr_to_str(char *str, const unsigned char *bin, int size);
 static void init_windows();
 static void update_nic_conf();
 static HWND create_child(HWND parent, int x, int y, int w, int h, LPCTSTR class_name, LPCTSTR title, DWORD style = 0, DWORD ex_style = 0, unsigned int id = 0);
-static void add_list_column(HWND hwnd, int id, char *text, int width);
+static void add_list_column(HWND hwnd, int id, const char *text, int width);
 static int get_text_width(HWND hwnd, const char *txt);
 static int get_text_height(HWND hwnd);
 static RECT get_window_rect(HWND hwnd);
@@ -103,15 +104,17 @@ static struct {
 /* Callback for the main window */
 static LRESULT CALLBACK main_wproc(HWND window, UINT msg, WPARAM wp, LPARAM lp) {
 	switch(msg) {
-		case WM_CLOSE:
+		case WM_CLOSE: {
 			DestroyWindow(window);
 			break;
-			
-		case WM_DESTROY:
+		}
+		
+		case WM_DESTROY: {
 			PostQuitMessage(0);
 			break;
+		}
 		
-		case WM_NOTIFY:
+		case WM_NOTIFY: {
 			NMHDR *nhdr = (NMHDR*)lp;
 			
 			if(nhdr->idFrom == ID_NIC_LIST) {
@@ -138,21 +141,23 @@ static LRESULT CALLBACK main_wproc(HWND window, UINT msg, WPARAM wp, LPARAM lp) 
 			}
 			
 			break;
-			
-		case WM_COMMAND:
+		}
+		
+		case WM_COMMAND: {
 			if(HIWORD(wp) == BN_CLICKED) {
 				int selected_nic = ListView_GetNextItem(windows.nic_list, (LPARAM)-1, LVNI_FOCUSED);
 				
 				switch(LOWORD(wp)) {
-					case ID_NIC_ENABLE:
+					case ID_NIC_ENABLE: {
 						nics[selected_nic].enabled = Button_GetCheck(windows.nic_enabled) == BST_CHECKED;
 						update_nic_conf();
 						
 						ListView_Update(windows.nic_list, selected_nic);
 						
 						break;
+					}
 					
-					case ID_NIC_PRIMARY:
+					case ID_NIC_PRIMARY: {
 						if(Button_GetCheck(windows.nic_primary) == BST_CHECKED) {
 							set_primary(selected_nic);
 						}else{
@@ -164,38 +169,47 @@ static LRESULT CALLBACK main_wproc(HWND window, UINT msg, WPARAM wp, LPARAM lp) 
 						}
 						
 						break;
+					}
 					
-					case ID_NIC_NET:
+					case ID_NIC_NET: {
 						addr_input_dialog("Network number", nics[selected_nic].ipx_net, 4);
 						break;
+					}
 					
-					case ID_NIC_NODE:
+					case ID_NIC_NODE: {
 						addr_input_dialog("Node number", nics[selected_nic].ipx_node, 6);
 						break;
+					}
 					
-					case ID_SAVE:
+					case ID_SAVE: {
 						save_nics();
 						break;
+					}
 					
-					case ID_W95_BUG:
+					case ID_W95_BUG: {
 						global_conf.w95_bug = Button_GetCheck(windows.w95_bug) == BST_CHECKED;
 						break;
+					}
 					
-					case ID_UDP_BTN:
+					case ID_UDP_BTN: {
 						addr_input_dialog("UDP port", NULL, 2);
 						break;
+					}
 					
-					case ID_BCAST_ALL:
+					case ID_BCAST_ALL: {
 						global_conf.bcast_all = Button_GetCheck(windows.bcast_all) == BST_CHECKED;
 						break;
+					}
 					
-					case ID_FILTER:
+					case ID_FILTER: {
 						global_conf.filter = Button_GetCheck(windows.filter) == BST_CHECKED;
 						break;
+					}
 					
-					case ID_LOG:
+					case ID_LOG: {
 						log_calls = Button_GetCheck(windows.log) == BST_CHECKED;
 						break;
+					}
 					
 					default:
 						break;
@@ -203,8 +217,9 @@ static LRESULT CALLBACK main_wproc(HWND window, UINT msg, WPARAM wp, LPARAM lp) 
 			}
 			
 			break;
+		}
 		
-		case WM_SIZE:
+		case WM_SIZE: {
 			int width = LOWORD(lp), height = HIWORD(lp);
 			
 			RECT rect = get_window_rect(windows.nic_conf);
@@ -220,8 +235,9 @@ static LRESULT CALLBACK main_wproc(HWND window, UINT msg, WPARAM wp, LPARAM lp) 
 			MoveWindow(windows.nic_conf, 0, height-conf_h-gc_h, width, conf_h, TRUE);
 			MoveWindow(windows.global_conf, 0, height-gc_h, width-btn_w-5, gc_h, TRUE);
 			MoveWindow(windows.button_box, width-btn_w, height-gc_h, btn_w, gc_h, TRUE);
-		
+			
 			break;
+		}
 		
 		default:
 			return DefWindowProc(window, msg, wp, lp);
@@ -252,7 +268,7 @@ static LRESULT CALLBACK addr_dialog_wproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM
 	static addr_dialog_vars *vars = NULL;
 	
 	switch(msg) {
-		case WM_CREATE:
+		case WM_CREATE: {
 			CREATESTRUCT *cs = (CREATESTRUCT*)lp;
 			vars = (addr_dialog_vars*)cs->lpCreateParams;
 			
@@ -300,8 +316,9 @@ static LRESULT CALLBACK addr_dialog_wproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM
 			UpdateWindow(hwnd);
 			
 			break;
+		}
 		
-		case WM_CLOSE:
+		case WM_CLOSE: {
 			delete vars;
 			
 			EnableWindow(windows.main, TRUE);
@@ -310,8 +327,9 @@ static LRESULT CALLBACK addr_dialog_wproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM
 			DestroyWindow(hwnd);
 			
 			break;
+		}
 		
-		case WM_COMMAND:
+		case WM_COMMAND: {
 			if(HIWORD(wp) == BN_CLICKED) {
 				int btn = LOWORD(wp);
 				
@@ -365,6 +383,7 @@ static LRESULT CALLBACK addr_dialog_wproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM
 			}
 			
 			break;
+		}
 		
 		default:
 			return DefWindowProc(hwnd, msg, wp, lp);
@@ -732,12 +751,12 @@ static HWND create_child(HWND parent, int x, int y, int w, int h, LPCTSTR class_
 	return hwnd;
 }
 
-static void add_list_column(HWND hwnd, int id, char *text, int width) {
+static void add_list_column(HWND hwnd, int id, const char *text, int width) {
 	LVCOLUMN lvc;
 	lvc.mask = LVCF_FMT | LVCF_WIDTH | LVCF_TEXT;
 	lvc.fmt = LVCFMT_LEFT;
 	lvc.cx = width;
-	lvc.pszText = text;
+	lvc.pszText = (char*)text;
 	
 	ListView_InsertColumn(hwnd, id, &lvc);
 }
