@@ -72,7 +72,7 @@ void log_printf(const char *fmt, ...) {
 	vsnprintf(msg, 1024, fmt, argv);
 	va_end(argv);
 	
-	snprintf(tstr, 32, "[%u.%u] ", (unsigned int)(called/1000), (unsigned int)((called % 1000) / 10));
+	snprintf(tstr, 32, "[%u.%02u] ", (unsigned int)(called/1000), (unsigned int)((called % 1000) / 10));
 	
 	OVERLAPPED off;
 	off.Offset = 0;

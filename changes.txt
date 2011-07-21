@@ -19,6 +19,8 @@ Version 0.2.1:
 	
 	Cleanup: Call r_ winsock calls directly in router code to prevent it from
 	generating extra log messages.
+	
+	Bugfix: Fixed buffer overflow when converting certain addresses to text.
 
 Version 0.2:
 	Implemented ioctlsocket() function with support for FIONREAD.
