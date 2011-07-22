@@ -15,12 +15,10 @@
  * Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
-#include <iostream>
 #include <windows.h>
 #include <windowsx.h>
 #include <commctrl.h>
 #include <iphlpapi.h>
-#include <iostream>
 #include <string>
 #include <vector>
 #include <stdint.h>
@@ -410,7 +408,7 @@ static void addr_input_dialog(const char *desc, char *dest, int size) {
 		NULL,
 		v
 	)) {
-		std::cerr << "Failed to create dialog: " << w32_errmsg(GetLastError()) << std::endl;
+		fprintf(stderr, "Failed to create dialog: %s\r\n", w32_errmsg(GetLastError()).c_str());
 	}
 }
 
