@@ -11,38 +11,17 @@ IPXwrapper is a winsock wrapper which transparently tunnels IPX packets over a
 chosen UDP port (54792 by default). To use it, simply copy the three included
 DLL files to the directory containing your legacy program.
 
-DO NOT REPLACE THE WINSOCK DLLS THAT ARE IN YOUR WINDOWS/SYSTEM32 DIRECTORY AS
-THIS WILL BREAK ALL NETWORKING SOFTWARE ON YOUR SYSTEM!
+Most software binds only to the default interface, if you get no errors but still
+can't connect to other computers, try running the ipxconfig program and forcing
+the appropriate network interface to be the primary.
+
+The other settings can usually be ignored, but some software or networking
+configrations may require further tweaking.
 
 Software using IPXWrapper can't communicate with software that is using the real
 IPX protocol and vice-versa. Software using IPXWrapper 0.1 may be communicated
 with by using 00:00:00:00 as the network number, however I recommend updating to
 a newer version instead.
-
--- CONFIGURATION --
-
-The ipxconfig program may be used to set additional options, in most cases this is
-unnecessary and the default options will work fine. All options are stored in the
-registry under HKEY_CURRENT_USER\Software\IPXWrapper.
-
-Interface settings:
-
-IPX network number	- If you don't know what this is, the default will be fine
-IPX node number		- Address of the host, defaults to the MAC address of the card
-Enable interface	- Sets whether IPX will be emulated for this interface
-Make primary interface	- Forces this interface to be the first one in the adapter list
-
-Global settings:
-
-UDP port		- UDP port number to use for tunneling IPX packets. Everyone must
-			  use the same port number.
-Win 95 SO_BROADCAST bug	- Emulate a bug in the windows 95 IPX implementation, most
-			  software probably expects and/or relies on this bug so it is
-			  enabled by default
-Send broadcasts to all	- Send broadcast packets to all subnets rather than the broadcast
-	subnets		  address of the bound interface
-Filter recieved packets	- Ignore packets not recieved from an enabled interface
-	by subnet
 
 -- COMPATIBILITY --
 
