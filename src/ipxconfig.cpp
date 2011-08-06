@@ -378,7 +378,7 @@ static void get_nics() {
 		
 		reg_value regval;
 		
-		if(reg_read(new_if.hwaddr, &regval, sizeof(regval)) != sizeof(regval)) {
+		if(reg_read(new_if.hwaddr, &regval, sizeof(regval)) == sizeof(regval)) {
 			baddr_to_str(new_if.ipx_net, regval.ipx_net, 4);
 			baddr_to_str(new_if.ipx_node, regval.ipx_node, 6);
 			
