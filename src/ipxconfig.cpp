@@ -332,7 +332,9 @@ int main() {
 		
 		if(inv_window && !PeekMessage(&msg, NULL, 0, 0, 0)) {
 			MessageBox(windows.main, inv_error.c_str(), "Error", MB_OK);
+			
 			SetFocus(inv_window);
+			Edit_SetSel(inv_window, 0, Edit_GetTextLength(inv_window));
 			
 			inv_window = NULL;
 		}
@@ -459,7 +461,9 @@ static bool save_config() {
 	
 	if(port < 1 || port > 65535 || *endptr) {
 		MessageBox(windows.main, "Invalid port number.\nPort number must be an integer in the range 1 - 65535", "Error", MB_OK);
+		
 		SetFocus(windows.opt_port);
+		Edit_SetSel(windows.opt_port, 0, Edit_GetTextLength(windows.opt_port));
 		
 		return false;
 	}
