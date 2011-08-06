@@ -61,6 +61,8 @@ struct iface {
 typedef std::vector<iface> iface_list;
 
 static void get_nics();
+static bool reg_write(const char *name, void *value, size_t size);
+static size_t reg_read(const char *name, void *buf, size_t max_size);
 static bool save_config();
 static bool store_nic();
 static bool saddr_to_bin(unsigned char *bin, const char *str, int nbytes);
@@ -286,33 +288,30 @@ static LRESULT CALLBACK groupbox_wproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
 }
 
 int main() {
-	int err = RegCreateKeyEx(
+	int err = RegOpenKeyEx(
 		HKEY_CURRENT_USER,
 		"Software\\IPXWrapper",
 		0,
-		NULL,
-		0,
 		KEY_QUERY_VALUE | KEY_SET_VALUE,
-		NULL,
-		&regkey,
-		NULL
+		&regkey
 	);
+	
 	if(err != ERROR_SUCCESS) {
-		die("Error opening registry: " + w32_errmsg(err));
+		if(err != ERROR_FILE_NOT_FOUND) {
+			die("Error opening registry key: " + w32_errmsg(err));
+		}
+		
+		regkey = NULL;
 	}
 	
-	DWORD gsize = sizeof(global_conf);
-	
-	if(!regkey || RegQueryValueEx(regkey, "global", NULL, NULL, (BYTE*)&global_conf, &gsize) != ERROR_SUCCESS || gsize != sizeof(global_conf)) {
+	if(reg_read("global", &global_conf, sizeof(global_conf)) != sizeof(global_conf)) {
 		global_conf.udp_port = DEFAULT_PORT;
 		global_conf.w95_bug = 1;
 		global_conf.bcast_all = 0;
 		global_conf.filter = 1;
 	}
 	
-	gsize = 1;
-	
-	if(!regkey || RegQueryValueEx(regkey, "log_calls", NULL, NULL, (BYTE*)&log_calls, &gsize) != ERROR_SUCCESS || gsize != 1) {
+	if(reg_read("log_calls", &log_calls, 1) != 1) {
 		log_calls = 0;
 	}
 	
@@ -377,16 +376,14 @@ static void get_nics() {
 		new_if.enabled = true;
 		new_if.primary = false;
 		
-		reg_value rval;
-		DWORD rsize = sizeof(rval);
-		bool primary = false;
+		reg_value regval;
 		
-		if(RegQueryValueEx(regkey, new_if.hwaddr, NULL, NULL, (BYTE*)&rval, &rsize) == ERROR_SUCCESS && rsize == sizeof(rval)) {
-			baddr_to_str(new_if.ipx_net, rval.ipx_net, 4);
-			baddr_to_str(new_if.ipx_node, rval.ipx_node, 6);
+		if(reg_read(new_if.hwaddr, &regval, sizeof(regval)) != sizeof(regval)) {
+			baddr_to_str(new_if.ipx_net, regval.ipx_net, 4);
+			baddr_to_str(new_if.ipx_node, regval.ipx_node, 6);
 			
-			new_if.enabled = rval.enabled;
-			primary = rval.primary;
+			new_if.enabled = regval.enabled;
+			new_if.primary = regval.primary;
 		}
 		
 		nics.push_back(new_if);
@@ -396,6 +393,29 @@ static void get_nics() {
 }
 
 static bool reg_write(const char *name, void *value, size_t size) {
+	if(!regkey) {
+		int err = RegCreateKeyEx(
+			HKEY_CURRENT_USER,
+			"Software\\IPXWrapper",
+			0,
+			NULL,
+			0,
+			KEY_QUERY_VALUE | KEY_SET_VALUE,
+			NULL,
+			&regkey,
+			NULL
+		);
+		
+		if(err != ERROR_SUCCESS) {
+			std::string msg = "Error creating registry key: " + w32_errmsg(err);
+			MessageBox(NULL, msg.c_str(), "Error", MB_OK | MB_TASKMODAL | MB_ICONERROR);
+			
+			regkey = NULL;
+			
+			return false;
+		}
+	}
+	
 	int err = RegSetValueEx(regkey, name, 0, REG_BINARY, (BYTE*)value, size);
 	if(err != ERROR_SUCCESS) {
 		std::string msg = "Error writing value to registry: " + w32_errmsg(err);
@@ -405,6 +425,26 @@ static bool reg_write(const char *name, void *value, size_t size) {
 	}
 	
 	return true;
+}
+
+static size_t reg_read(const char *name, void *buf, size_t max_size) {
+	if(!regkey) {
+		return 0;
+	}
+	
+	DWORD size = max_size;
+	
+	int err = RegQueryValueEx(regkey, name, NULL, NULL, (BYTE*)buf, &size);
+	if(err != ERROR_SUCCESS) {
+		if(err != ERROR_MORE_DATA && err != ERROR_FILE_NOT_FOUND) {
+			std::string msg = "Error reading value from registry: " + w32_errmsg(err);
+			MessageBox(NULL, msg.c_str(), "Error", MB_OK | MB_TASKMODAL | MB_ICONERROR);
+		}
+		
+		return 0;
+	}
+	
+	return size;
 }
 
 static bool save_config() {
@@ -446,13 +486,6 @@ static bool save_config() {
 	if(!reg_write("global", &global_conf, sizeof(global_conf)) || !reg_write("log_calls", &log_calls, 1)) {
 		return false;
 	}
-	
-	MessageBox(
-		windows.main,
-		"Settings saved successfully",
-		"Message",
-		MB_OK | MB_ICONINFORMATION
-	);
 	
 	return true;
 }
