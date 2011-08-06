@@ -23,24 +23,26 @@
 #include <vector>
 #include <stdint.h>
 #include <stdio.h>
+#include <ctype.h>
 
 #include "config.h"
 
-#define ID_NIC_LIST 1
-#define ID_NIC_ENABLE 2
-#define ID_NIC_PRIMARY 3
-#define ID_SAVE 4
-#define ID_NIC_NET 5
-#define ID_NIC_NODE 6
-#define ID_W95_BUG 7
-#define ID_UDP_BTN 8
-#define ID_BCAST_ALL 9
-#define ID_FILTER 10
-#define ID_LOG 11
+#define ID_PRI_LIST 1
 
-#define ID_DIALOG_TXT 1
-#define ID_DIALOG_OK 2
-#define ID_DIALOG_CANCEL 3
+#define ID_NIC_LIST 11
+#define ID_NIC_ENABLED 12
+#define ID_NIC_NET 13
+#define ID_NIC_NODE 14
+
+#define ID_OPT_PORT 21
+#define ID_OPT_W95 22
+#define ID_OPT_BCAST 23
+#define ID_OPT_FILTER 24
+#define ID_OPT_LOG 25
+
+#define ID_OK 31
+#define ID_CANCEL 32
+#define ID_APPLY 33
 
 struct iface {
 	/* C style strings used so they can be passed directly to the listview */
@@ -52,20 +54,22 @@ struct iface {
 	
 	bool enabled;
 	bool primary;
+	
+	int pri_index;
 };
 
 typedef std::vector<iface> iface_list;
 
-static void addr_input_dialog(const char *desc, char *dest, int size);
 static void get_nics();
-static void set_primary(unsigned int id);
-static void save_nics();
-static void saddr_to_bin(unsigned char *bin, const char *str);
-static void baddr_to_str(char *str, const unsigned char *bin, int size);
+static bool save_config();
+static bool store_nic();
+static bool saddr_to_bin(unsigned char *bin, const char *str, int nbytes);
+static void baddr_to_str(char *str, const unsigned char *bin, int nbytes);
 static void init_windows();
 static void update_nic_conf();
+static void init_pri_list();
 static HWND create_child(HWND parent, int x, int y, int w, int h, LPCTSTR class_name, LPCTSTR title, DWORD style = 0, DWORD ex_style = 0, unsigned int id = 0);
-static void add_list_column(HWND hwnd, int id, const char *text, int width);
+static HWND create_group(HWND parent, int x, int y, int w, int h, LPCTSTR title);
 static int get_text_width(HWND hwnd, const char *txt);
 static int get_text_height(HWND hwnd);
 static RECT get_window_rect(HWND hwnd);
@@ -77,26 +81,37 @@ static reg_global global_conf;
 static HKEY regkey = NULL;
 static unsigned char log_calls;
 
+static std::string inv_error;
+static HWND inv_window = NULL;
+
 typedef LRESULT CALLBACK (*wproc_fptr)(HWND,UINT,WPARAM,LPARAM);
-static wproc_fptr groupbox_wproc = NULL;
+static wproc_fptr default_groupbox_wproc = NULL;
 
 static struct {
 	HWND main;
+	
+	HWND primary_group;
+	HWND primary;
+	
+	HWND nic_group;
 	HWND nic_list;
-	
-	HWND nic_conf;
-	HWND nic_net;
-	HWND nic_node;
 	HWND nic_enabled;
-	HWND nic_primary;
+	HWND nic_net_lbl;
+	HWND nic_net;
+	HWND nic_node_lbl;
+	HWND nic_node;
 	
-	HWND global_conf;
-	HWND w95_bug;
-	HWND bcast_all;
-	HWND filter;
-	HWND log;
+	HWND opt_group;
+	HWND opt_w95;
+	HWND opt_bcast;
+	HWND opt_filter;
+	HWND opt_log;
+	HWND opt_port_lbl;
+	HWND opt_port;
 	
-	HWND button_box;
+	HWND ok_btn;
+	HWND can_btn;
+	HWND app_btn;
 } windows;
 
 /* Callback for the main window */
@@ -116,24 +131,19 @@ static LRESULT CALLBACK main_wproc(HWND window, UINT msg, WPARAM wp, LPARAM lp) 
 			NMHDR *nhdr = (NMHDR*)lp;
 			
 			if(nhdr->idFrom == ID_NIC_LIST) {
-				if(nhdr->code == LVN_GETDISPINFO) {
-					NMLVDISPINFO *di = (NMLVDISPINFOA*)lp;
-					
-					char *values[] = {
-						nics[di->item.iItem].name,
-						nics[di->item.iItem].ipx_net,
-						nics[di->item.iItem].ipx_node,
-						(char*)(nics[di->item.iItem].enabled ? "Yes" : "No"),
-						(char*)(nics[di->item.iItem].primary ? "Yes" : "No")
-					};
-					
-					di->item.pszText = values[di->item.iSubItem];
-					di->item.cchTextMax = strlen(di->item.pszText);
-				}else if(nhdr->code == LVN_ITEMCHANGED) {
+				if(nhdr->code == LVN_ITEMCHANGED) {
 					NMLISTVIEW *lv = (NMLISTVIEW*)lp;
 					
 					if(lv->uNewState & LVIS_FOCUSED) {
 						update_nic_conf();
+					}
+				}else if(nhdr->code == LVN_ITEMCHANGING) {
+					NMLISTVIEW *lv = (NMLISTVIEW*)lp;
+					
+					if((lv->uOldState & LVIS_FOCUSED && !(lv->uNewState & LVIS_FOCUSED)) || (lv->uOldState & LVIS_SELECTED && !(lv->uNewState & LVIS_SELECTED))) {
+						if(!store_nic()) {
+							return TRUE;
+						}
 					}
 				}
 			}
@@ -143,74 +153,43 @@ static LRESULT CALLBACK main_wproc(HWND window, UINT msg, WPARAM wp, LPARAM lp) 
 		
 		case WM_COMMAND: {
 			if(HIWORD(wp) == BN_CLICKED) {
-				int selected_nic = ListView_GetNextItem(windows.nic_list, (LPARAM)-1, LVNI_FOCUSED);
-				
 				switch(LOWORD(wp)) {
-					case ID_NIC_ENABLE: {
-						nics[selected_nic].enabled = Button_GetCheck(windows.nic_enabled) == BST_CHECKED;
+					case ID_NIC_ENABLED: {
+						int nic = ListView_GetNextItem(windows.nic_list, (LPARAM)-1, LVNI_FOCUSED);
+						nics[nic].enabled = Button_GetCheck(windows.nic_enabled) == BST_CHECKED;
+						
+						init_pri_list();
 						update_nic_conf();
 						
-						ListView_Update(windows.nic_list, selected_nic);
-						
 						break;
 					}
 					
-					case ID_NIC_PRIMARY: {
-						if(Button_GetCheck(windows.nic_primary) == BST_CHECKED) {
-							set_primary(selected_nic);
-						}else{
-							nics[selected_nic].primary = false;
-						}
-						
-						for(unsigned int i = 0; i < nics.size(); i++) {
-							ListView_Update(windows.nic_list, i);
+					case ID_OK: {
+						if(save_config()) {
+							PostMessage(windows.main, WM_CLOSE, 0, 0);
 						}
 						
 						break;
 					}
 					
-					case ID_NIC_NET: {
-						addr_input_dialog("Network number", nics[selected_nic].ipx_net, 4);
+					case ID_CANCEL: {
+						PostMessage(windows.main, WM_CLOSE, 0, 0);
 						break;
 					}
 					
-					case ID_NIC_NODE: {
-						addr_input_dialog("Node number", nics[selected_nic].ipx_node, 6);
-						break;
-					}
-					
-					case ID_SAVE: {
-						save_nics();
-						break;
-					}
-					
-					case ID_W95_BUG: {
-						global_conf.w95_bug = Button_GetCheck(windows.w95_bug) == BST_CHECKED;
-						break;
-					}
-					
-					case ID_UDP_BTN: {
-						addr_input_dialog("UDP port", NULL, 2);
-						break;
-					}
-					
-					case ID_BCAST_ALL: {
-						global_conf.bcast_all = Button_GetCheck(windows.bcast_all) == BST_CHECKED;
-						break;
-					}
-					
-					case ID_FILTER: {
-						global_conf.filter = Button_GetCheck(windows.filter) == BST_CHECKED;
-						break;
-					}
-					
-					case ID_LOG: {
-						log_calls = Button_GetCheck(windows.log) == BST_CHECKED;
+					case ID_APPLY: {
+						save_config();
 						break;
 					}
 					
 					default:
 						break;
+				}
+			}else if(HIWORD(wp) == CBN_SELCHANGE && LOWORD(wp) == ID_PRI_LIST) {
+				int nic = ComboBox_GetCurSel(windows.primary);
+				
+				for(iface_list::iterator i = nics.begin(); i != nics.end(); i++) {
+					i->primary = (nic > 0 && i - nics.begin() == nic - 1);
 				}
 			}
 			
@@ -220,19 +199,69 @@ static LRESULT CALLBACK main_wproc(HWND window, UINT msg, WPARAM wp, LPARAM lp) 
 		case WM_SIZE: {
 			int width = LOWORD(lp), height = HIWORD(lp);
 			
-			RECT rect = get_window_rect(windows.nic_conf);
-			int conf_h = rect.bottom - rect.top;
+			int edge = GetSystemMetrics(SM_CYEDGE);
+			int text_h = get_text_height(windows.primary_group);
+			int edit_h = text_h + 2 * edge;
+			int pri_h = edit_h + text_h + 10;
 			
-			rect = get_window_rect(windows.global_conf);
-			int gc_h = rect.bottom - rect.top;
+			MoveWindow(windows.primary_group, 0, 0, width, pri_h, TRUE);
+			MoveWindow(windows.primary, 10, text_h, width - 20, edit_h, TRUE);
 			
-			rect = get_window_rect(windows.button_box);
-			int btn_w = rect.right - rect.left;
+			/* Buttons */
 			
-			MoveWindow(windows.nic_list, 0, 0, width, height-conf_h-gc_h, TRUE);
-			MoveWindow(windows.nic_conf, 0, height-conf_h-gc_h, width, conf_h, TRUE);
-			MoveWindow(windows.global_conf, 0, height-gc_h, width-btn_w-5, gc_h, TRUE);
-			MoveWindow(windows.button_box, width-btn_w, height-gc_h, btn_w, gc_h, TRUE);
+			RECT btn_rect = get_window_rect(windows.ok_btn);
+			int btn_w = btn_rect.right - btn_rect.left;
+			int btn_h = btn_rect.bottom - btn_rect.top;
+			
+			MoveWindow(windows.app_btn, width - btn_w - 6, height - btn_h - 6, btn_w, btn_h, TRUE);
+			MoveWindow(windows.can_btn, width - btn_w * 2 - 12, height - btn_h - 6, btn_w, btn_h, TRUE);
+			MoveWindow(windows.ok_btn, width - btn_w * 3 - 18, height - btn_h - 6, btn_w, btn_h, TRUE);
+			
+			/* Options groupbox */
+			
+			int lbl_w = get_text_width(windows.nic_net_lbl, "UDP port number");
+			int edit_w = get_text_width(windows.nic_node, "000000");
+			
+			int opt_h = 5 * text_h + edit_h + 18;
+			
+			MoveWindow(windows.opt_group, 0, height - opt_h - btn_h - 12, width, opt_h, TRUE);
+			
+			int y = text_h;
+			
+			MoveWindow(windows.opt_port_lbl, 10, y + edge, lbl_w, text_h, TRUE);
+			MoveWindow(windows.opt_port, 15 + lbl_w, y, edit_w, edit_h, TRUE);
+			
+			MoveWindow(windows.opt_filter, 10, y += edit_h + 2, width - 20, text_h, TRUE);
+			MoveWindow(windows.opt_bcast, 10, y += text_h + 2, width - 20, text_h, TRUE);
+			MoveWindow(windows.opt_w95, 10, y += text_h + 2, width - 20, text_h, TRUE);
+			MoveWindow(windows.opt_log, 10, y += text_h + 2, width - 20, text_h, TRUE);
+			
+			/* NIC groupbox */
+			
+			lbl_w = get_text_width(windows.nic_net_lbl, "Network number");
+			edit_w = get_text_width(windows.nic_node, "00:00:00:00:00:00");
+			
+			int net_h = height - pri_h - opt_h - btn_h - 12;
+			
+			MoveWindow(windows.nic_group, 0, pri_h, width, net_h, TRUE);
+			
+			y = net_h - (6 + edit_h);
+			
+			MoveWindow(windows.nic_node_lbl, 10, y + edge, lbl_w, text_h, TRUE);
+			MoveWindow(windows.nic_node, 15 + lbl_w, y, edit_w, edit_h, TRUE);
+			
+			y -= 2 + edit_h;
+			
+			MoveWindow(windows.nic_net_lbl, 10, y + edge, lbl_w, text_h, TRUE);
+			MoveWindow(windows.nic_net, 15 + lbl_w, y, edit_w, edit_h, TRUE);
+			
+			y -= 2 + edit_h;
+			
+			MoveWindow(windows.nic_enabled, 10, y, width - 20, text_h, TRUE);
+			
+			y -= 6;
+			
+			MoveWindow(windows.nic_list, 10, text_h, width - 20, y - text_h, TRUE);
 			
 			break;
 		}
@@ -244,171 +273,15 @@ static LRESULT CALLBACK main_wproc(HWND window, UINT msg, WPARAM wp, LPARAM lp) 
 	return 0;
 }
 
-/* Callback for the NIC config groupbox */
-static LRESULT CALLBACK conf_group_wproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
-	if(msg == WM_COMMAND) {
-		PostMessage(windows.main, msg, wp, lp);
-		return 0;
-	}
-	
-	return groupbox_wproc(hwnd, msg, wp, lp);
-}
-
-struct addr_dialog_vars {
-	const char *desc;
-	
-	char *dest;
-	int size;
-};
-
-/* Callback for address entry dialog */
-static LRESULT CALLBACK addr_dialog_wproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
-	static addr_dialog_vars *vars = NULL;
-	
+/* Callback for groupboxes */
+static LRESULT CALLBACK groupbox_wproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 	switch(msg) {
-		case WM_CREATE: {
-			CREATESTRUCT *cs = (CREATESTRUCT*)lp;
-			vars = (addr_dialog_vars*)cs->lpCreateParams;
-			
-			if(vars->size == 2) {
-				char buf[16];
-				sprintf(buf, "%hu", global_conf.udp_port);
-				vars->dest = buf;
-				
-				SetWindowText(hwnd, "Set UDP port");
-			}
-			
-			HWND edit = create_child(hwnd, 0, 0, 0, 0, "EDIT", vars->dest, WS_TABSTOP, WS_EX_CLIENTEDGE, ID_DIALOG_TXT);
-			HWND ok = create_child(hwnd, 0, 0, 0, 0, "BUTTON", "OK", BS_PUSHBUTTON | WS_TABSTOP, 0, ID_DIALOG_OK);
-			HWND cancel = create_child(hwnd, 0, 0, 0, 0, "BUTTON", "Cancel", BS_PUSHBUTTON | WS_TABSTOP, 0, ID_DIALOG_CANCEL);
-			
-			int edge = GetSystemMetrics(SM_CYEDGE);
-			int height = get_text_height(edit) + 2*edge;
-			
-			int edit_w = get_text_width(edit, "FF:FF:FF:FF:FF:FF") + 2*edge;
-			int btn_w = (int)(get_text_width(cancel, "Cancel") * 1.5) + 2*edge;
-			
-			MoveWindow(edit, 5, 5, edit_w, height, TRUE);
-			MoveWindow(ok, edit_w+10, 5, btn_w, height, TRUE);
-			MoveWindow(cancel, edit_w+btn_w+15, 5, btn_w, height, TRUE);
-			
-			RECT crect, brect = get_window_rect(hwnd);
-			
-			if(!GetClientRect(hwnd, &crect)) {
-				die("GetClientRect failed: " + w32_errmsg(GetLastError()));
-			}
-			
-			int win_w = ((brect.right - brect.left) - crect.right) + edit_w + 2*btn_w + 20;
-			int win_h = ((brect.bottom - brect.top) - crect.bottom) + height + 10;
-			
-			brect = get_window_rect(windows.main);
-			
-			int win_x = brect.left + (brect.right - brect.left) / 2 - win_w / 2;
-			int win_y = brect.top + (brect.bottom - brect.top) / 2 - win_h / 2;
-			
-			MoveWindow(hwnd, win_x, win_y, win_w, win_h, TRUE);
-			
-			EnableWindow(windows.main, FALSE);
-			
-			ShowWindow(hwnd, SW_SHOW);
-			UpdateWindow(hwnd);
-			
-			break;
-		}
-		
-		case WM_CLOSE: {
-			delete vars;
-			
-			EnableWindow(windows.main, TRUE);
-			SetFocus(windows.main);
-			
-			DestroyWindow(hwnd);
-			
-			break;
-		}
-		
-		case WM_COMMAND: {
-			if(HIWORD(wp) == BN_CLICKED) {
-				int btn = LOWORD(wp);
-				
-				if(btn == ID_DIALOG_OK) {
-					char text[256];
-					GetWindowText(GetDlgItem(hwnd, ID_DIALOG_TXT), text, sizeof(text));
-					
-					if(vars->size == 2) {
-						char *endptr;
-						int p = strtol(text, &endptr, 10);
-						
-						if(p < 1 || p > 65535) {
-							MessageBox(hwnd, "Invalid port number specified", NULL, MB_OK| MB_ICONERROR);
-						}else{
-							global_conf.udp_port = p;
-							PostMessage(hwnd, WM_CLOSE, 0, 0);
-						}
-						
-						return 0;
-					}
-					
-					int buf[6];
-					
-					if(sscanf(text, "%02X:%02X:%02X:%02X:%02X:%02X", &buf[0], &buf[1], &buf[2], &buf[3], &buf[4], &buf[5]) == vars->size) {
-						unsigned char uc[] = {buf[0], buf[1], buf[2], buf[3], buf[4], buf[5]};
-						unsigned char f6[] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
-						unsigned char z6[] = {0,0,0,0,0,0};
-						
-						if(memcmp(uc, f6, vars->size) == 0 || memcmp(uc, z6, vars->size) == 0) {
-							std::string m = "This is not a valid network/node number.\n";
-							m += "Using it may cause problems. Use it anyway?";
-							
-							if(MessageBox(hwnd, m.c_str(), "Warning", MB_YESNO | MB_ICONWARNING) != IDYES) {
-								return 0;
-							}
-						}
-						
-						baddr_to_str(vars->dest, uc, vars->size);
-						
-						int nic = ListView_GetNextItem(windows.nic_list, (LPARAM)-1, LVNI_FOCUSED);
-						
-						ListView_Update(windows.nic_list, nic);
-						PostMessage(hwnd, WM_CLOSE, 0, 0);
-					}else{
-						std::string m = std::string("Invalid ") + vars->desc;
-						MessageBox(hwnd, m.c_str(), NULL, MB_OK | MB_ICONEXCLAMATION);
-					}
-				}else if(btn == ID_DIALOG_CANCEL) {
-					PostMessage(hwnd, WM_CLOSE, 0, 0);
-				}
-			}
-			
-			break;
-		}
+		case WM_COMMAND:
+		case WM_NOTIFY:
+			return main_wproc(windows.main, msg, wp, lp);
 		
 		default:
-			return DefWindowProc(hwnd, msg, wp, lp);
-	};
-	
-	return 0;
-}
-
-static void addr_input_dialog(const char *desc, char *dest, int size) {
-	addr_dialog_vars *v = new addr_dialog_vars;
-	
-	v->desc = desc;
-	v->dest = dest;
-	v->size = size;
-	
-	if(!CreateWindow(
-		"ipxconfig_dialog",
-		desc,
-		WS_DLGFRAME,
-		CW_USEDEFAULT, CW_USEDEFAULT,
-		CW_USEDEFAULT, CW_USEDEFAULT,
-		windows.main,
-		NULL,
-		NULL,
-		v
-	)) {
-		fprintf(stderr, "Failed to create dialog: %s\r\n", w32_errmsg(GetLastError()).c_str());
+			return default_groupbox_wproc(hwnd, msg, wp, lp);
 	}
 }
 
@@ -457,6 +330,13 @@ int main() {
 		
 		TranslateMessage(&msg);
 		DispatchMessage(&msg);
+		
+		if(inv_window && !PeekMessage(&msg, NULL, 0, 0, 0)) {
+			MessageBox(windows.main, inv_error.c_str(), "Error", MB_OK);
+			SetFocus(inv_window);
+			
+			inv_window = NULL;
+		}
 	}
 	
 	RegCloseKey(regkey);
@@ -510,19 +390,9 @@ static void get_nics() {
 		}
 		
 		nics.push_back(new_if);
-		
-		if(primary) {
-			set_primary(nics.size()-1);
-		}
 	}
 	
 	delete buf;
-}
-
-static void set_primary(unsigned int id) {
-	for(unsigned int i = 0; i < nics.size(); i++) {
-		nics[i].primary = i == id ? true : false;
-	}
 }
 
 static bool reg_write(const char *name, void *value, size_t size) {
@@ -537,22 +407,44 @@ static bool reg_write(const char *name, void *value, size_t size) {
 	return true;
 }
 
-static void save_nics() {
+static bool save_config() {
+	if(!store_nic()) {
+		return false;
+	}
+	
+	char port_s[32], *endptr;
+	GetWindowText(windows.opt_port, port_s, 32);
+	
+	int port = strtol(port_s, &endptr, 10);
+	
+	if(port < 1 || port > 65535 || *endptr) {
+		MessageBox(windows.main, "Invalid port number.\nPort number must be an integer in the range 1 - 65535", "Error", MB_OK);
+		SetFocus(windows.opt_port);
+		
+		return false;
+	}
+	
+	global_conf.udp_port = port;
+	global_conf.w95_bug = Button_GetCheck(windows.opt_w95) == BST_CHECKED;
+	global_conf.bcast_all = Button_GetCheck(windows.opt_bcast) == BST_CHECKED;
+	global_conf.filter = Button_GetCheck(windows.opt_filter) == BST_CHECKED;
+	log_calls = Button_GetCheck(windows.opt_log) == BST_CHECKED;
+	
 	for(iface_list::iterator i = nics.begin(); i != nics.end(); i++) {
 		reg_value rval;
 		
-		saddr_to_bin(rval.ipx_net, i->ipx_net);
-		saddr_to_bin(rval.ipx_node, i->ipx_node);
+		saddr_to_bin(rval.ipx_net, i->ipx_net, 4);
+		saddr_to_bin(rval.ipx_node, i->ipx_node, 6);
 		rval.enabled = i->enabled;
 		rval.primary = i->primary;
 		
 		if(!reg_write(i->hwaddr, &rval, sizeof(rval))) {
-			return;
+			return false;
 		}
 	}
 	
 	if(!reg_write("global", &global_conf, sizeof(global_conf)) || !reg_write("log_calls", &log_calls, 1)) {
-		return;
+		return false;
 	}
 	
 	MessageBox(
@@ -561,29 +453,72 @@ static void save_nics() {
 		"Message",
 		MB_OK | MB_ICONINFORMATION
 	);
+	
+	return true;
+}
+
+/* Fetch NIC settings from UI and store in NIC list */
+static bool store_nic() {
+	int selected_nic = ListView_GetNextItem(windows.nic_list, (LPARAM)-1, LVNI_FOCUSED);
+	
+	if(selected_nic == -1) {
+		/* Return success if no NIC is selected */
+		return true;
+	}
+	
+	char net[32], node[32];
+	
+	GetWindowText(windows.nic_net, net, 32);
+	GetWindowText(windows.nic_node, node, 32);
+	
+	if(!saddr_to_bin(NULL, net, 4)) {
+		inv_error = "Network number is invalid.\nValid numbers are in the format XX:XX:XX:XX";
+		inv_window = windows.nic_net;
+		
+		return false;
+	}
+	
+	if(!saddr_to_bin(NULL, node, 6)) {
+		inv_error = "Node number is invalid.\nValid numbers are in the format XX:XX:XX:XX:XX:XX";
+		inv_window = windows.nic_node;
+		
+		return false;
+	}
+	
+	strcpy(nics[selected_nic].ipx_net, net);
+	strcpy(nics[selected_nic].ipx_node, node);
+	
+	return true;
 }
 
 /* Convert string format address to binary
- * NO SANITY CHECKS, ENSURE INPUT DATA IS VALID AND BUFFER SIZE SUFFICIENT
+ * Returns true on success or false if the string is invalid
 */
-static void saddr_to_bin(unsigned char *bin, const char *str) {
-	unsigned int i = 0;
-	
-	while(*str) {
-		bin[i++] = strtoul(str, NULL, 16);
-		str += strcspn(str, ":");
-		str += strspn(str, ":");
+static bool saddr_to_bin(unsigned char *bin, const char *str, int nbytes) {
+	for(int i = 0; i < nbytes; i++) {
+		char term = (i+1 == nbytes ? '\0' : ':');
+		
+		if(isxdigit(str[0]) && (str[1] == term || (isxdigit(str[1]) && str[2] == term))) {
+			if(bin) {
+				bin[i] = strtoul(str, NULL, 16);
+			}
+			
+			str += strcspn(str, ":");
+			str += strspn(str, ":");
+		}else{
+			return false;
+		}
 	}
+	
+	return true;
 }
 
-/* Convert binary format address to string
- * Same warnings as above
-*/
-static void baddr_to_str(char *str, const unsigned char *bin, int size) {
-	for(int i = 0; i < size; i++) {
+/* Convert binary format address to string */
+static void baddr_to_str(char *str, const unsigned char *bin, int nbytes) {
+	for(int i = 0; i < nbytes; i++) {
 		sprintf(str+(i*3), "%02X", bin[i]);
 		
-		if(i+1 < size) {
+		if(i+1 < nbytes) {
 			strcat(str, ":");
 		}
 	}
@@ -605,19 +540,12 @@ static void init_windows() {
 		die("Failed to register ipxconfig_class: " + w32_errmsg(GetLastError()));
 	}
 	
-	wclass.lpfnWndProc = &addr_dialog_wproc;
-	wclass.lpszClassName = "ipxconfig_dialog";
-	
-	if(!RegisterClass(&wclass)) {
-		die("Failed to register ipxconfig_dialog: " + w32_errmsg(GetLastError()));
-	}
-	
 	windows.main = CreateWindow(
 		"ipxconfig_class",
 		"IPXWrapper configuration",
 		WS_TILEDWINDOW,
 		CW_USEDEFAULT, CW_USEDEFAULT,
-		800, 500,
+		370, 445,
 		NULL,
 		NULL,
 		NULL,
@@ -628,100 +556,117 @@ static void init_windows() {
 		die("Failed to create main window: " + w32_errmsg(GetLastError()));
 	}
 	
-	windows.nic_list = create_child(windows.main, 0, 0, 0, 0, WC_LISTVIEW, NULL, LVS_SINGLESEL | LVS_REPORT | WS_TABSTOP, WS_EX_CLIENTEDGE, ID_NIC_LIST);
+	windows.primary_group = create_group(windows.main, 0, 0, 400, 50, "Primary interface");
 	
-	ListView_SetExtendedListViewStyle(windows.nic_list, LVS_EX_FULLROWSELECT);
+	int text_h = get_text_height(windows.primary_group);
 	
-	add_list_column(windows.nic_list, 0, "Name", 200);
-	add_list_column(windows.nic_list, 1, "IPX Network Number", 120);
-	add_list_column(windows.nic_list, 2, "IPX Node Number", 150);
-	add_list_column(windows.nic_list, 3, "Enabled", 60);
-	add_list_column(windows.nic_list, 4, "Primary", 60);
-	
-	windows.nic_conf = create_child(windows.main, 0, 0, 0, 0, "BUTTON", "Interface settings", BS_GROUPBOX);
-	
-	int window_edge = GetSystemMetrics(SM_CYEDGE);
-	int text_h = get_text_height(windows.nic_conf);
-	int row_h = window_edge*2 + text_h;
-	int btn_w = get_text_width(windows.nic_conf, "Set IPX network number...") + 2*window_edge;
+	windows.primary = create_child(windows.primary_group, 10, text_h, 380, 300, WC_COMBOBOX, NULL, CBS_DROPDOWNLIST | CBS_HASSTRINGS, 0, ID_PRI_LIST);
+	init_pri_list();
 	
 	{
-		int cbox_w = get_text_width(windows.nic_conf, "Make primary interface");
+		windows.nic_group = create_group(windows.main, 0, 0, 0, 0, "Network adapters");
 		
-		MoveWindow(windows.nic_conf, 0, 0, 0, text_h + 2*row_h + 15, TRUE);
+		windows.nic_list = create_child(windows.nic_group, 0, 0, 0, 0, WC_LISTVIEW, NULL, LVS_SINGLESEL | LVS_REPORT | WS_TABSTOP | LVS_NOCOLUMNHEADER | LVS_SHOWSELALWAYS, WS_EX_CLIENTEDGE, ID_NIC_LIST);
+		//ListView_SetExtendedListViewStyle(windows.nic_list, LVS_EX_FULLROWSELECT);
 		
-		windows.nic_net = create_child(windows.nic_conf, 10, text_h, btn_w, row_h, "BUTTON", "Set IPX network number...", WS_TABSTOP | BS_PUSHBUTTON, 0, ID_NIC_NET);
-		windows.nic_node = create_child(windows.nic_conf, 10, text_h+row_h+5, btn_w, row_h, "BUTTON", "Set IPX node number...", WS_TABSTOP | BS_PUSHBUTTON, 0, ID_NIC_NODE);
+		LVCOLUMN lvc;
+		lvc.mask = LVCF_FMT | LVCF_WIDTH;
+		lvc.fmt = LVCFMT_LEFT;
+		lvc.cx = 500;
 		
-		windows.nic_enabled = create_child(windows.nic_conf, 20+btn_w, text_h, cbox_w, row_h, "BUTTON", "Enable interface", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_NIC_ENABLE);
-		windows.nic_primary = create_child(windows.nic_conf, 20+btn_w, text_h+row_h+5, cbox_w, row_h, "BUTTON", "Make primary interface", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_NIC_PRIMARY);
+		ListView_InsertColumn(windows.nic_list, 0, &lvc);
+		
+		LVITEM lvi;
+		
+		lvi.mask = LVIF_TEXT | LVIF_STATE;
+		lvi.iItem = 0;
+		lvi.iSubItem = 0;
+		lvi.state = 0;
+		lvi.stateMask = 0;
+		
+		for(iface_list::iterator i = nics.begin(); i != nics.end(); i++) {
+			lvi.pszText = i->name;
+			
+			ListView_InsertItem(windows.nic_list, &lvi);
+			lvi.iItem++;
+		}
+		
+		windows.nic_enabled = create_child(windows.nic_group, 0, 0, 0, 0, "BUTTON", "Enable interface", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_NIC_ENABLED);
+		
+		windows.nic_net_lbl = create_child(windows.nic_group, 0, 0, 0, 0, "STATIC", "Network number", SS_RIGHT);
+		windows.nic_net = create_child(windows.nic_group, 0, 0, 0, 0, "EDIT", "", WS_TABSTOP, WS_EX_CLIENTEDGE, ID_NIC_NET);
+		
+		windows.nic_node_lbl = create_child(windows.nic_group, 0, 0, 0, 0, "STATIC", "Node number", SS_RIGHT);
+		windows.nic_node = create_child(windows.nic_group, 0, 0, 0, 0, "EDIT", "", WS_TABSTOP, WS_EX_CLIENTEDGE, ID_NIC_NODE);
 		
 		update_nic_conf();
 	}
 	
 	{
-		windows.global_conf = create_child(windows.main, 0, 0, 0, text_h + 2*row_h + 15, "BUTTON", "Global settings", BS_GROUPBOX);
+		windows.opt_group = create_group(windows.main, 0, 0, 0, 0, "Options");
 		
-		int cbox_w = get_text_width(windows.global_conf, "Enable Win 95 SO_BROADCAST bug");
+		windows.opt_port_lbl = create_child(windows.opt_group, 0, 0, 0, 0, "STATIC", "UDP port number", SS_RIGHT);
+		windows.opt_port = create_child(windows.opt_group, 0, 0, 0, 0, "EDIT", "", WS_TABSTOP, WS_EX_CLIENTEDGE, ID_OPT_PORT);
 		
-		create_child(windows.global_conf, 10, text_h, btn_w, row_h, "BUTTON", "Set UDP port...", BS_PUSHBUTTON | WS_TABSTOP, 0, ID_UDP_BTN);
-		windows.w95_bug = create_child(windows.global_conf, btn_w+20, text_h, cbox_w, row_h, "BUTTON", "Enable Win 95 SO_BROADCAST bug", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_W95_BUG);
-		windows.bcast_all = create_child(windows.global_conf, btn_w+20, text_h+row_h+5, cbox_w, row_h, "BUTTON", "Send broadcasts to all subnets", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_BCAST_ALL);
+		char port_s[8];
+		sprintf(port_s, "%hu", global_conf.udp_port);
 		
-		int cbox2_w = get_text_width(windows.global_conf, "Filter received packets by subnet");
+		SetWindowText(windows.opt_port, port_s);
 		
-		windows.filter = create_child(windows.global_conf, btn_w+cbox_w+30, text_h, cbox2_w, row_h, "BUTTON", "Filter received packets by subnet", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_FILTER);
-		windows.log = create_child(windows.global_conf, btn_w+cbox_w+30, text_h+row_h+5, cbox2_w, row_h, "BUTTON", "Log all WinSock calls", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_LOG);
+		windows.opt_w95 = create_child(windows.opt_group, 0, 0, 0, 0, "BUTTON", "Enable Windows 95 SO_BROADCAST bug", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_OPT_W95);
+		windows.opt_bcast = create_child(windows.opt_group, 0, 0, 0, 0, "BUTTON", "Send broadcast packets to all subnets", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_OPT_BCAST);
+		windows.opt_filter = create_child(windows.opt_group, 0, 0, 0, 0, "BUTTON", "Filter receieved packets by subnet", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_OPT_FILTER);
+		windows.opt_log = create_child(windows.opt_group, 0, 0, 0, 0, "BUTTON", "Log all WinSock API calls", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_OPT_LOG);
 		
-		Button_SetCheck(windows.w95_bug, global_conf.w95_bug ? BST_CHECKED : BST_UNCHECKED);
-		Button_SetCheck(windows.bcast_all, global_conf.bcast_all ? BST_CHECKED : BST_UNCHECKED);
-		Button_SetCheck(windows.filter, global_conf.filter ? BST_CHECKED : BST_UNCHECKED);
-		Button_SetCheck(windows.log, log_calls ? BST_CHECKED : BST_UNCHECKED);
+		Button_SetCheck(windows.opt_w95, global_conf.w95_bug ? BST_CHECKED : BST_UNCHECKED);
+		Button_SetCheck(windows.opt_bcast, global_conf.bcast_all ? BST_CHECKED : BST_UNCHECKED);
+		Button_SetCheck(windows.opt_filter, global_conf.filter ? BST_CHECKED : BST_UNCHECKED);
+		Button_SetCheck(windows.opt_log, log_calls ? BST_CHECKED : BST_UNCHECKED);
 	}
 	
-	{
-		windows.button_box = create_child(windows.main, 0, 0, 0, 0, "BUTTON", NULL, BS_GROUPBOX);
-		
-		int btn_w = get_text_width(windows.button_box, "Save settings") + 2*window_edge;
-		create_child(windows.button_box, 10, text_h, btn_w, row_h, "BUTTON", "Save settings", BS_PUSHBUTTON | WS_TABSTOP, 0, ID_SAVE);
-		
-		MoveWindow(windows.button_box, 0, 0, btn_w+20, 0, TRUE);
-	}
+	/* TODO: Size buttons dynamically */
+	int btn_w = 75;
+	int btn_h = 23;
 	
-	LVITEM lvi;
-	
-	lvi.mask = LVIF_TEXT | LVIF_STATE;
-	lvi.iItem = 0;
-	lvi.iSubItem = 0;
-	lvi.state = 0;
-	lvi.stateMask = 0;
-	lvi.pszText = LPSTR_TEXTCALLBACK;
-	
-	for(iface_list::iterator i = nics.begin(); i != nics.end(); i++) {
-		ListView_InsertItem(windows.nic_list, &lvi);
-		lvi.iItem++;
-	}
+	windows.ok_btn = create_child(windows.main, 0, 0, btn_w, btn_h, "BUTTON", "OK", BS_PUSHBUTTON | WS_TABSTOP, 0, ID_OK);
+	windows.can_btn = create_child(windows.main, 0, 0, btn_w, btn_h, "BUTTON", "Cancel", BS_PUSHBUTTON | WS_TABSTOP, 0, ID_CANCEL);
+	windows.app_btn = create_child(windows.main, 0, 0, btn_w, btn_h, "BUTTON", "Apply", BS_PUSHBUTTON | WS_TABSTOP, 0, ID_APPLY);
 	
 	ShowWindow(windows.main, SW_SHOW);
 	UpdateWindow(windows.main);
-	
-	groupbox_wproc = (wproc_fptr)SetWindowLongPtr(windows.nic_conf, GWLP_WNDPROC, (LONG)&conf_group_wproc);
-	SetWindowLongPtr(windows.global_conf, GWLP_WNDPROC, (LONG)&conf_group_wproc);
-	SetWindowLongPtr(windows.button_box, GWLP_WNDPROC, (LONG)&conf_group_wproc);
 }
 
 static void update_nic_conf() {
 	int selected_nic = ListView_GetNextItem(windows.nic_list, (LPARAM)-1, LVNI_FOCUSED);
 	bool enabled = selected_nic >= 0 ? nics[selected_nic].enabled : false;
 	
-	EnableWindow(windows.nic_net, enabled ? TRUE : FALSE);
-	EnableWindow(windows.nic_node, enabled ? TRUE : FALSE);
-	EnableWindow(windows.nic_enabled, selected_nic >= 0 ? TRUE : FALSE);
-	EnableWindow(windows.nic_primary, enabled ? TRUE : FALSE);
+	EnableWindow(windows.nic_net, enabled);
+	EnableWindow(windows.nic_node, enabled);
+	EnableWindow(windows.nic_enabled, selected_nic >= 0);
 	
 	if(selected_nic >= 0) {
 		Button_SetCheck(windows.nic_enabled, nics[selected_nic].enabled ? BST_CHECKED : BST_UNCHECKED);
-		Button_SetCheck(windows.nic_primary, nics[selected_nic].primary ? BST_CHECKED : BST_UNCHECKED);
+		SetWindowText(windows.nic_net, nics[selected_nic].ipx_net);
+		SetWindowText(windows.nic_node, nics[selected_nic].ipx_node);
+	}
+}
+
+static void init_pri_list() {
+	ComboBox_ResetContent(windows.primary);
+	
+	ComboBox_AddString(windows.primary, "Default");
+	ComboBox_SetCurSel(windows.primary, 0);
+	
+	for(iface_list::iterator i = nics.begin(); i != nics.end(); i++) {
+		if(i->enabled) {
+			i->pri_index = ComboBox_AddString(windows.primary, i->name);
+			
+			if(i->primary) {
+				ComboBox_SetCurSel(windows.primary, i->pri_index);
+			}
+		}else{
+			i->pri_index = 0;
+		}
 	}
 }
 
@@ -749,14 +694,11 @@ static HWND create_child(HWND parent, int x, int y, int w, int h, LPCTSTR class_
 	return hwnd;
 }
 
-static void add_list_column(HWND hwnd, int id, const char *text, int width) {
-	LVCOLUMN lvc;
-	lvc.mask = LVCF_FMT | LVCF_WIDTH | LVCF_TEXT;
-	lvc.fmt = LVCFMT_LEFT;
-	lvc.cx = width;
-	lvc.pszText = (char*)text;
+static HWND create_group(HWND parent, int x, int y, int w, int h, LPCTSTR title) {
+	HWND groupbox = create_child(parent, x, y, w, h, "BUTTON", title, BS_GROUPBOX);
+	default_groupbox_wproc = (wproc_fptr)SetWindowLongPtr(groupbox, GWLP_WNDPROC, (LONG_PTR)&groupbox_wproc);
 	
-	ListView_InsertColumn(hwnd, id, &lvc);
+	return groupbox;
 }
 
 static int get_text_width(HWND hwnd, const char *txt) {
