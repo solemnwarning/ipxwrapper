@@ -1,3 +1,13 @@
+Version ???:
+	Feature: Redesigned ipxconfig UI.
+	
+	Cleanup: Use wrapper function to read registry values in ipxconfig.
+	
+	Bugfix: Only create registry key when saving configuration.
+	
+	Bugfix: Correctly order interfaces when first interface has the force
+	primary flag set.
+
 Version 0.2.1:
 	Bugfix: Delay stub DLL LoadLibrary calls until first API call as using
 	LoadLibrary in DllMain crashes under some conditions.

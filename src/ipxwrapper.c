@@ -498,6 +498,10 @@ static BOOL load_nics(void) {
 			/* Force primary flag set, insert at start of NIC list */
 			nnic->next = nics;
 			nics = nnic;
+			
+			if(!enic) {
+				enic = nnic;
+			}
 		}else if(enic) {
 			enic->next = nnic;
 			enic = nnic;
