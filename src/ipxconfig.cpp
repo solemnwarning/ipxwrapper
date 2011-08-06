@@ -570,9 +570,8 @@ static void init_windows() {
 		//ListView_SetExtendedListViewStyle(windows.nic_list, LVS_EX_FULLROWSELECT);
 		
 		LVCOLUMN lvc;
-		lvc.mask = LVCF_FMT | LVCF_WIDTH;
+		lvc.mask = LVCF_FMT;
 		lvc.fmt = LVCFMT_LEFT;
-		lvc.cx = 500;
 		
 		ListView_InsertColumn(windows.nic_list, 0, &lvc);
 		
@@ -590,6 +589,8 @@ static void init_windows() {
 			ListView_InsertItem(windows.nic_list, &lvi);
 			lvi.iItem++;
 		}
+		
+		ListView_SetColumnWidth(windows.nic_list, 0, LVSCW_AUTOSIZE);
 		
 		windows.nic_enabled = create_child(windows.nic_group, 0, 0, 0, 0, "BUTTON", "Enable interface", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_NIC_ENABLED);
 		
