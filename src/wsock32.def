@@ -23,6 +23,7 @@ EXPORTS
 	setsockopt			@21
 	shutdown			@22
 	socket				@23
+	MigrateWinsockConfiguration	@24
 	gethostbyaddr			@51
 	gethostbyname			@52
 	getprotobyname			@53
@@ -47,8 +48,17 @@ EXPORTS
 	WSAStartup			@115
 	WSACleanup			@116
 	__WSAFDIsSet			@151
+	WEP				@500
+	WSApSetPostRoutine		@1000
+	inet_network			@1100
+	getnetbyname			@1101
+	rcmd				@1102
+	rexec				@1103
+	rresvport			@1104
 	sethostname			@1105
+	dn_expand			@1106
 	WSARecvEx			@1107
+	s_perror			@1108
 	GetAddressByNameA		@1109
 	GetAddressByNameW		@1110
 	EnumProtocolsA			@1111
@@ -61,6 +71,7 @@ EXPORTS
 	SetServiceW			@1118
 	GetServiceA			@1119
 	GetServiceW			@1120
+	NPLoadNameSpaces		@1130
 	TransmitFile			@1140
 	AcceptEx			@1141
 	GetAcceptExSockaddrs		@1142

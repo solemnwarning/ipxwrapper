@@ -28,8 +28,8 @@ SRC_FILES := changes.txt license.txt Makefile mkstubs.pl readme.txt src/config.h
 all: ipxwrapper.dll wsock32.dll mswsock.dll ipxconfig.exe
 
 clean:
-	rm -f src/*.o
-	rm -f src/*_stubs.s
+	rm -f ipxwrapper.dll wsock32.dll mswsock.dll ipxconfig.exe
+	rm -f src/*.o src/*_stubs.s
 
 dist: all
 	mkdir ipxwrapper-$(VERSION)
@@ -41,6 +41,9 @@ dist: all
 	cp --parents $(SRC_FILES) ipxwrapper-$(VERSION)-src/
 	zip -r ipxwrapper-$(VERSION)-src.zip ipxwrapper-$(VERSION)-src/
 	rm -r ipxwrapper-$(VERSION)-src/
+
+.SECONDARY:
+.PHONY: all clean dist
 
 ipxwrapper.dll: $(IPXWRAPPER_DEPS)
 	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup,-s -shared -o ipxwrapper.dll $(IPXWRAPPER_DEPS) -liphlpapi

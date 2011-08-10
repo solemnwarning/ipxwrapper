@@ -7,6 +7,8 @@ Version ???:
 	
 	Bugfix: Correctly order interfaces when first interface has the force
 	primary flag set.
+	
+	Bugfix: Added missing exports to wsock32.dll and mswsock.dll.
 
 Version 0.2.1:
 	Bugfix: Delay stub DLL LoadLibrary calls until first API call as using

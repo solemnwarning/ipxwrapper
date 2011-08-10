@@ -1,7 +1,7 @@
 LIBRARY MSWSOCK.dll
 EXPORTS
-	; ServiceMain			@1
-	; SvchostPushServiceGlobals	@2
+	ServiceMain			@1
+	SvchostPushServiceGlobals	@2
 	AcceptEx			@3
 	EnumProtocolsA			@4
 	EnumProtocolsW			@5
@@ -14,10 +14,21 @@ EXPORTS
 	GetServiceW			@12
 	GetTypeByNameA			@13
 	GetTypeByNameW			@14
+	MigrateWinsockConfiguration	@15
+	NPLoadNameSpaces		@16
 	NSPStartup			@17
 	SetServiceA			@18
 	SetServiceW			@19
+	StartWsdpService		@20
+	StopWsdpService			@21
 	TransmitFile			@22
 	WSARecvEx			@23
 	WSPStartup			@24
+	dn_expand			@25
+	getnetbyname			@26
+	inet_network			@27
+	rcmd				@28
+	rexec				@29
+	rresvport			@30
+	s_perror			@31
 	sethostname			@32
