@@ -38,6 +38,7 @@ if(@ARGV == 3) {
 	print CODE "\tglobal\t_dllname\n";
 	print CODE "\tdllname_s:\tdb\t'".$ARGV[2]."'\n";
 	print CODE "\t_dllname:\tdd\tdllname_s\n";
+	print CODE "\tcall_fmt\tdb\t'\%s:\%s'\n";
 }
 
 foreach my $func(@stubs) {
@@ -50,7 +51,7 @@ foreach my $func(@stubs) {
 print CODE "\nsection .data\n";
 
 if(@ARGV == 3) {
-	print CODE "\textern\t_call_log\n";
+	print CODE "\textern\t_log_calls\n";
 }
 
 foreach my $func(@stubs) {
@@ -61,8 +62,7 @@ print CODE "\nsection .text\n";
 print CODE "\textern\t_find_sym\n";
 
 if(@ARGV == 3) {
-	print CODE "\textern\t_fputs\n";
-	print CODE "\textern\t_fputc\n";
+	print CODE "\textern\t_log_printf\n";
 }
 
 foreach my $func(@stubs) {
@@ -70,22 +70,16 @@ foreach my $func(@stubs) {
 	print CODE "_$func:\n";
 	
 	if(@ARGV == 3) {
-		print CODE "\tcmp\tdword [dword _call_log], 0\n";
+		print CODE "\tcmp\tbyte [_log_calls], 0\n";
 		print CODE "\tje\t$func\_nolog\n";
 		
-		# Write symbol name to log with fputs
+		# Write DLL and symbol name to log
 		#
-		print CODE "\tpush\tdword [dword _call_log]\n";
 		print CODE "\tpush\t$func\_sym\n";
-		print CODE "\tcall\t_fputs\n";
-		print CODE "\tadd esp, 8\n";
-		
-		# Write newline to log with fputc
-		#
-		print CODE "\tpush\tdword [dword _call_log]\n";
-		print CODE "\tpush\tdword 0x0A\n";
-		print CODE "\tcall\t_fputc\n";
-		print CODE "\tadd esp, 8\n";
+		print CODE "\tpush\tdllname_s\n";
+		print CODE "\tpush\tcall_fmt\n";
+		print CODE "\tcall\t_log_printf\n";
+		print CODE "\tadd esp, 12\n";
 		
 		print CODE "\t$func\_nolog:\n";
 	}

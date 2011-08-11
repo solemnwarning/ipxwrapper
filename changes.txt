@@ -9,6 +9,9 @@ Version ???:
 	primary flag set.
 	
 	Bugfix: Added missing exports to wsock32.dll and mswsock.dll.
+	
+	Update: Log DLL and function names in ipxwrapper.log when call logging
+	is enabled.
 
 Version 0.2.1:
 	Bugfix: Delay stub DLL LoadLibrary calls until first API call as using

@@ -23,7 +23,7 @@ static HMODULE ipxdll = NULL;
 static HMODULE sysdll = NULL;
 extern char const *dllname;
 
-FILE *call_log = NULL;
+unsigned char log_calls = 0;
 
 void log_open();
 void log_close();
@@ -54,13 +54,9 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 		
 		if(RegOpenKeyEx(HKEY_CURRENT_USER, "Software\\IPXWrapper", 0, KEY_QUERY_VALUE, &key) == ERROR_SUCCESS) {
 			DWORD size = 1;
-			unsigned char log_calls;
 			
-			if(RegQueryValueEx(key, "log_calls", NULL, NULL, (BYTE*)&log_calls, &size) == ERROR_SUCCESS && size == 1) {
-				if(log_calls && (call_log = fopen("winsock_calls.log", "a"))) {
-					setbuf(call_log, NULL);
-					fprintf(call_log, "%s loaded\n", dllname);
-				}
+			if(RegQueryValueEx(key, "log_calls", NULL, NULL, (BYTE*)&log_calls, &size) != ERROR_SUCCESS || size != 1) {
+				log_calls = 0;
 			}
 			
 			RegCloseKey(key);
@@ -74,11 +70,6 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 		if(ipxdll) {
 			FreeLibrary(ipxdll);
 			ipxdll = NULL;
-		}
-		
-		if(call_log) {
-			fclose(call_log);
-			call_log = NULL;
 		}
 		
 		log_close();
