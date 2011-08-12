@@ -12,6 +12,8 @@ Version ???:
 	
 	Update: Log DLL and function names in ipxwrapper.log when call logging
 	is enabled.
+	
+	Bugfix: Correctly terminate stub DLL names.
 
 Version 0.2.1:
 	Bugfix: Delay stub DLL LoadLibrary calls until first API call as using

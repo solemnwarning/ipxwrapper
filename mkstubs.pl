@@ -36,9 +36,9 @@ print CODE "section .rdata:\n";
 
 if(@ARGV == 3) {
 	print CODE "\tglobal\t_dllname\n";
-	print CODE "\tdllname_s:\tdb\t'".$ARGV[2]."'\n";
+	print CODE "\tdllname_s:\tdb\t'".$ARGV[2]."', 0\n";
 	print CODE "\t_dllname:\tdd\tdllname_s\n";
-	print CODE "\tcall_fmt\tdb\t'\%s:\%s'\n";
+	print CODE "\tcall_fmt\tdb\t'\%s:\%s', 0\n";
 }
 
 foreach my $func(@stubs) {
