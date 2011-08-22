@@ -1,4 +1,4 @@
-Version ???:
+Version 0.2.2:
 	Feature: Redesigned ipxconfig UI.
 	
 	Cleanup: Use wrapper function to read registry values in ipxconfig.
