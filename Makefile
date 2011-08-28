@@ -23,7 +23,7 @@ BIN_FILES := changes.txt license.txt readme.txt ipxwrapper.dll mswsock.dll wsock
 SRC_FILES := changes.txt license.txt Makefile mkstubs.pl readme.txt src/config.h src/ipxconfig.cpp \
 	src/ipxwrapper.c src/ipxwrapper.def src/ipxwrapper.h src/ipxwrapper_stubs.txt src/log.c \
 	src/mswsock.def src/mswsock_stubs.txt src/stubdll.c src/winsock.c src/winstuff.h src/wsock32.def \
-	src/wsock32_stubs.txt
+	src/wsock32_stubs.txt src/directplay.c src/dpwsockx.def src/dpwsockx_stubs.txt
 
 all: ipxwrapper.dll wsock32.dll mswsock.dll ipxconfig.exe dpwsockx.dll
 
