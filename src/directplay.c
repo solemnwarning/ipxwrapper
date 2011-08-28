@@ -30,6 +30,7 @@ struct sp_data {
 	struct sockaddr_ipx addr;
 	
 	struct sockaddr_ipx ns_addr;	/* sa_family is 0 when undefined */
+	DPID ns_id;
 	
 	HANDLE worker_thread;
 	DWORD worker_tid;
@@ -237,18 +238,19 @@ static HRESULT WINAPI IPX_SendEx(LPDPSP_SENDEXDATA data) {
 static HRESULT WINAPI IPX_Reply(LPDPSP_REPLYDATA data) {
 	CALL("SP_Reply");
 	
-	/* TODO: Only update ns_addr if idNameServer has changed? */
-	
-	struct sockaddr_ipx *addr_p;
 	struct sp_data *sp_data = get_sp_data(data->lpISP);
-	DWORD size;
 	
-	HRESULT r = IDirectPlaySP_GetSPPlayerData(data->lpISP, data->idNameServer, (void**)&addr_p, &size, DPGET_LOCAL);
-	if(r != DP_OK) {
-		log_printf("GetSPPlayerData: %d", (int)r);
-		addr_p = NULL;
-	}else if(addr_p) {
-		memcpy(&(sp_data->ns_addr), addr_p, sizeof(struct sockaddr_ipx));
+	if(sp_data->ns_id != data->idNameServer) {
+		struct sockaddr_ipx *addr_p;
+		DWORD size;
+		
+		HRESULT r = IDirectPlaySP_GetSPPlayerData(data->lpISP, data->idNameServer, (void**)&addr_p, &size, DPGET_LOCAL);
+		if(r != DP_OK) {
+			log_printf("GetSPPlayerData: %d", (int)r);
+		}else if(addr_p) {
+			memcpy(&(sp_data->ns_addr), addr_p, sizeof(struct sockaddr_ipx));
+			sp_data->ns_id = data->idNameServer;
+		}
 	}
 	
 	/* Do the actual sending */
@@ -324,6 +326,7 @@ static HRESULT WINAPI IPX_Open(LPDPSP_OPENDATA data) {
 		}
 	}else if(data->lpSPMessageHeader) {
 		memcpy(&(sp_data->ns_addr), data->lpSPMessageHeader, sizeof(struct sockaddr_ipx));
+		sp_data->ns_id = 0;
 	}
 	
 	release_sp_data(data->lpISP);
