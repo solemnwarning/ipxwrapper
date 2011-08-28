@@ -20,6 +20,7 @@
 #include <windows.h>
 #include <winsock2.h>
 #include <iphlpapi.h>
+#include <wsipx.h>
 #include <stdint.h>
 #include <stdio.h>
 
@@ -36,6 +37,7 @@
 #define IPX_BROADCAST	(int)(1<<2)
 #define IPX_SEND	(int)(1<<3)
 #define IPX_RECV	(int)(1<<4)
+#define IPX_EX_BOUND	(int)(1<<5)
 
 #define RETURN(...) \
 	unlock_mutex();\
@@ -86,6 +88,12 @@ struct ipx_socket {
 	/* The following values are undefined when IPX_BOUND is not set */
 	ipx_nic *nic;
 	uint16_t socket; /* Stored in NETWORK BYTE ORDER */
+	
+	/* Extra bind address, only used for receiving packets.
+	 * Only defined when IPX_EX_BOUND is set.
+	*/
+	ipx_nic *ex_nic;
+	uint16_t ex_socket;
 	
 	ipx_socket *next;
 };
@@ -149,6 +157,8 @@ ipx_host *find_host(const unsigned char *net, const unsigned char *node);
 void log_open();
 void log_close();
 void log_printf(const char *fmt, ...);
+
+int ipx_ex_bind(SOCKET fd, const struct sockaddr_ipx *ipxaddr);
 
 INT APIENTRY r_EnumProtocolsA(LPINT,LPVOID,LPDWORD);
 INT APIENTRY r_EnumProtocolsW(LPINT,LPVOID,LPDWORD);

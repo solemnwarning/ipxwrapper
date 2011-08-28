@@ -320,6 +320,63 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen) {
 	}
 }
 
+/* Bind extra address of a socket, does not check if address is already in use
+ * Attempts to bind socket 0 will really bind socket 0
+*/
+int ipx_ex_bind(SOCKET fd, const struct sockaddr_ipx *ipxaddr) {
+	ipx_socket *ptr = get_socket(fd);
+	
+	if(!ipxaddr) {
+		/* Call with NULL address to remove extra bind */
+		log_printf("ipx_ex_bind(%d, NULL)", fd);
+		
+		ptr->flags &= ~IPX_EX_BOUND;
+		RETURN(0);
+	}
+	
+	char net_s[12], node_s[18];
+	
+	NET_TO_STRING(net_s, ipxaddr->sa_netnum);
+	NODE_TO_STRING(node_s, ipxaddr->sa_nodenum);
+	
+	log_printf("ipx_ex_bind(%d, net=%s node=%s socket=%hu)", fd, net_s, node_s, ntohs(ipxaddr->sa_socket));
+	
+	if(!(ptr->flags & IPX_BOUND)) {
+		log_printf("ipx_ex_bind: Socket is not bound");
+		RETURN_WSA(WSAEINVAL, -1);
+	}
+	
+	unsigned char z6[] = {0,0,0,0,0,0};
+	ipx_nic *nic = nics;
+	
+	while(nic) {
+		if(
+			(memcmp(ipxaddr->sa_netnum, nic->ipx_net, 4) == 0 || memcmp(ipxaddr->sa_netnum, z6, 4) == 0) &&
+			(memcmp(ipxaddr->sa_nodenum, nic->ipx_node, 6) == 0 || memcmp(ipxaddr->sa_nodenum, z6, 6) == 0)
+		) {
+			break;
+		}
+		
+		nic = nic->next;
+	}
+	
+	if(!nic) {
+		log_printf("ipx_ex_bind: no such address");
+		RETURN_WSA(WSAEADDRNOTAVAIL, -1);
+	}
+	
+	NET_TO_STRING(net_s, nic->ipx_net);
+	NODE_TO_STRING(node_s, nic->ipx_node);
+	
+	log_printf("bind address: net=%s node=%s socket=%hu", net_s, node_s, ntohs(ipxaddr->sa_socket));
+	
+	ptr->ex_nic = nic;
+	ptr->ex_socket = ipxaddr->sa_socket;
+	ptr->flags |= IPX_EX_BOUND;
+	
+	RETURN(0);
+}
+
 int WSAAPI getsockname(SOCKET fd, struct sockaddr *addr, int *addrlen) {
 	struct sockaddr_ipx *ipxaddr = (struct sockaddr_ipx*)addr;
 	ipx_socket *ptr = get_socket(fd);

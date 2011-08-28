@@ -14,3 +14,4 @@ EXPORTS
 	EnumProtocolsW
 	WSARecvEx
 	ioctlsocket
+	ipx_ex_bind

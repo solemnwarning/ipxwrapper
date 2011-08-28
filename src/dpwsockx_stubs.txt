@@ -1,0 +1,3 @@
+r_SPInit
+DPWS_GetEnumPort
+DPWS_BuildIPMessageHeader

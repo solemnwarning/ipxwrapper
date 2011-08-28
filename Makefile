@@ -14,8 +14,8 @@
 # this program; if not, write to the Free Software Foundation, Inc., 51
 # Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
-CFLAGS := -Wall
-CXXFLAGS := -Wall
+CFLAGS := -Wall -I./include/
+CXXFLAGS := -Wall -I./include/
 
 IPXWRAPPER_DEPS := src/ipxwrapper.o src/winsock.o src/ipxwrapper_stubs.o src/log.o src/ipxwrapper.def
 
@@ -25,7 +25,7 @@ SRC_FILES := changes.txt license.txt Makefile mkstubs.pl readme.txt src/config.h
 	src/mswsock.def src/mswsock_stubs.txt src/stubdll.c src/winsock.c src/winstuff.h src/wsock32.def \
 	src/wsock32_stubs.txt
 
-all: ipxwrapper.dll wsock32.dll mswsock.dll ipxconfig.exe
+all: ipxwrapper.dll wsock32.dll mswsock.dll ipxconfig.exe dpwsockx.dll
 
 clean:
 	rm -f ipxwrapper.dll wsock32.dll mswsock.dll ipxconfig.exe
@@ -51,6 +51,9 @@ ipxwrapper.dll: $(IPXWRAPPER_DEPS)
 ipxconfig.exe: src/ipxconfig.cpp
 	$(CXX) $(CXXFLAGS) -static-libgcc -static-libstdc++ -Wl,-s -D_WIN32_IE=0x0400 -mwindows -o ipxconfig.exe src/ipxconfig.cpp -liphlpapi
 
+dpwsockx.dll: src/directplay.o src/log.o src/dpwsockx_stubs.o ipxwrapper.dll
+	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup,-s -shared -o dpwsockx.dll src/directplay.o src/log.o src/dpwsockx_stubs.o src/dpwsockx.def -L. -lipxwrapper -lwsock32
+
 src/ipxwrapper_stubs.s: src/ipxwrapper_stubs.txt
 	perl mkstubs.pl src/ipxwrapper_stubs.txt src/ipxwrapper_stubs.s
 
@@ -59,6 +62,9 @@ src/wsock32_stubs.s: src/wsock32_stubs.txt
 
 src/mswsock_stubs.s: src/mswsock_stubs.txt
 	perl mkstubs.pl src/mswsock_stubs.txt src/mswsock_stubs.s mswsock.dll
+
+src/dpwsockx_stubs.s: src/dpwsockx_stubs.txt
+	perl mkstubs.pl src/dpwsockx_stubs.txt src/dpwsockx_stubs.s dpwsockx.dll
 
 %.dll: src/stubdll.o src/%_stubs.o src/log.o src/%.def
 	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup,-s -shared -o $@ $^

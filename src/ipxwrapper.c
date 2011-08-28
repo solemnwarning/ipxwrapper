@@ -332,25 +332,37 @@ static DWORD WINAPI router_main(LPVOID notused) {
 		
 		for(sockptr = sockets; sockptr; sockptr = sockptr->next) {
 			if(
-				sockptr->flags & IPX_BOUND &&
 				sockptr->flags & IPX_RECV &&
-				packet->dest_socket == sockptr->socket &&
 				(
 					!(sockptr->flags & IPX_FILTER) ||
 					packet->ptype == sockptr->f_ptype
-				) && (
-					memcmp(packet->dest_net, sockptr->nic->ipx_net, 4) == 0 ||
+				) && ((
+					sockptr->flags & IPX_BOUND &&
+					packet->dest_socket == sockptr->socket &&
 					(
-						memcmp(packet->dest_net, f6, 4) == 0 &&
-						(!global_conf.w95_bug || sockptr->flags & IPX_BROADCAST)
+						memcmp(packet->dest_net, sockptr->nic->ipx_net, 4) == 0 ||
+						(
+							memcmp(packet->dest_net, f6, 4) == 0 &&
+							(!global_conf.w95_bug || sockptr->flags & IPX_BROADCAST)
+						)
+					) && (
+						memcmp(packet->dest_node, sockptr->nic->ipx_node, 6) == 0 ||
+						(
+							memcmp(packet->dest_node, f6, 6) == 0 &&
+							(!global_conf.w95_bug || sockptr->flags & IPX_BROADCAST)
+						)
 					)
-				) && (
-					memcmp(packet->dest_node, sockptr->nic->ipx_node, 6) == 0 ||
+				) || (
+					sockptr->flags & IPX_EX_BOUND &&
+					packet->dest_socket == sockptr->ex_socket &&
 					(
-						memcmp(packet->dest_node, f6, 6) == 0 &&
-						(!global_conf.w95_bug || sockptr->flags & IPX_BROADCAST)
+						memcmp(packet->dest_net, sockptr->ex_nic->ipx_net, 4) == 0 ||
+						memcmp(packet->dest_net, f6, 4) == 0
+					) && (
+						memcmp(packet->dest_node, sockptr->ex_nic->ipx_node, 6) == 0 ||
+						memcmp(packet->dest_node, f6, 6) == 0
 					)
-				)
+				))
 			) {
 				addrlen = sizeof(addr);
 				if(r_getsockname(sockptr->fd, (struct sockaddr*)&addr, &addrlen) == -1) {
