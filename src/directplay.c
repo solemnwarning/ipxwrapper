@@ -46,8 +46,7 @@ const GUID IPX_GUID = {
 	{0xA9, 0xCD, 0x00, 0xAA, 0x00, 0x68, 0x86, 0xE3}
 };
 
-#define DIRECTPLAY_SOCKET 9001
-
+#define DISCOVERY_SOCKET 42367
 #define API_HEADER_SIZE sizeof(struct sockaddr_ipx)
 
 /* Lock the object mutex and return the data pointer */
@@ -56,7 +55,10 @@ static struct sp_data *get_sp_data(IDirectPlaySP *sp) {
 	DWORD size;
 	
 	HRESULT r = IDirectPlaySP_GetSPData(sp, (void**)&cont, &size, DPGET_LOCAL);
-	//log_printf("GetSPData: %d", r);
+	if(r != DP_OK) {
+		log_printf("GetSPData: %d", (int)r);
+		abort();
+	}
 	
 	WaitForSingleObject(cont->mutex, INFINITE);
 	
@@ -69,7 +71,10 @@ static void release_sp_data(IDirectPlaySP *sp) {
 	DWORD size;
 	
 	HRESULT r = IDirectPlaySP_GetSPData(sp, (void**)&cont, &size, DPGET_LOCAL);
-	//log_printf("GetSPData: %d", r);
+	if(r != DP_OK) {
+		log_printf("GetSPData: %d", (int)r);
+		abort();
+	}
 	
 	ReleaseMutex(cont->mutex);
 }
@@ -139,7 +144,7 @@ static HRESULT WINAPI IPX_EnumSessions(LPDPSP_ENUMSESSIONSDATA data) {
 	memcpy(&addr, &(sp_data->addr), sizeof(addr));
 	
 	memset(addr.sa_nodenum, 0xFF, 6);
-	addr.sa_socket = htons(DIRECTPLAY_SOCKET);
+	addr.sa_socket = htons(DISCOVERY_SOCKET);
 	
 	if(sendto(sp_data->sock, data->lpMessage + API_HEADER_SIZE, data->dwMessageSize - API_HEADER_SIZE, 0, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
 		log_printf("sendto failed: %s", w32_error(WSAGetLastError()));
@@ -155,7 +160,7 @@ static HRESULT WINAPI IPX_EnumSessions(LPDPSP_ENUMSESSIONSDATA data) {
 static HRESULT WINAPI IPX_Send(LPDPSP_SENDDATA data) {
 	//log_printf("IPX_Send called");
 	
-	struct sockaddr_ipx addr_buf, *addr = NULL;
+	struct sockaddr_ipx *addr = NULL;
 	
 	struct sp_data *sp_data = get_sp_data(data->lpISP);
 	
@@ -172,14 +177,10 @@ static HRESULT WINAPI IPX_Send(LPDPSP_SENDDATA data) {
 	}
 	
 	if(!addr) {
-		log_printf("No known address for player ID %u, falling back to broadcast", data->idPlayerTo);
+		log_printf("No known address for player ID %u, dropping packet", data->idPlayerTo);
 		
-		addr = &addr_buf;
-		
-		memcpy(addr, &(sp_data->addr), sizeof(addr_buf));
-		
-		memset(addr->sa_nodenum, 0xFF, 6);
-		addr->sa_socket = htons(DIRECTPLAY_SOCKET);
+		release_sp_data(data->lpISP);
+		return DP_OK;
 	}
 	
 	if(sendto(sp_data->sock, data->lpMessage + API_HEADER_SIZE, data->dwMessageSize - API_HEADER_SIZE, 0, (struct sockaddr*)addr, sizeof(*addr)) == -1) {
@@ -256,11 +257,12 @@ static HRESULT WINAPI IPX_Reply(LPDPSP_REPLYDATA data) {
 }
 
 static HRESULT WINAPI IPX_CreatePlayer(LPDPSP_CREATEPLAYERDATA data) {
-	//log_printf("IPX_CreatePlayer called (player = %u, flags = %u, header = %p)", data->idPlayer, data->dwFlags, data->lpSPMessageHeader);
-	
 	if(data->lpSPMessageHeader) {
 		HRESULT r = IDirectPlaySP_SetSPPlayerData(data->lpISP, data->idPlayer, data->lpSPMessageHeader, sizeof(struct sockaddr_ipx), DPSET_LOCAL);
-		//log_printf("SetSPPlayerData: %d", r);
+		if(r != DP_OK) {
+			log_printf("SetSPPlayerData: %d", (int)r);
+			return DPERR_GENERIC;
+		}
 	}
 	
 	return DP_OK;
@@ -308,7 +310,7 @@ static HRESULT WINAPI IPX_Open(LPDPSP_OPENDATA data) {
 		struct sockaddr_ipx addr;
 		
 		memcpy(&addr, &(sp_data->addr), sizeof(addr));
-		addr.sa_socket = htons(DIRECTPLAY_SOCKET);
+		addr.sa_socket = htons(DISCOVERY_SOCKET);
 	
 		if(ipx_ex_bind(sp_data->sock, &addr) == -1) {
 			release_sp_data(data->lpISP);
@@ -323,6 +325,12 @@ static HRESULT WINAPI IPX_Open(LPDPSP_OPENDATA data) {
 }
 
 static HRESULT WINAPI IPX_CloseEx(LPDPSP_CLOSEDATA data) {
+	struct sp_data *sp_data = get_sp_data(data->lpISP);
+	
+	/* Disable the special bind if in use */
+	ipx_ex_bind(sp_data->sock, NULL);
+	
+	release_sp_data(data->lpISP);
 	return DP_OK;
 }
 
@@ -419,7 +427,15 @@ HRESULT WINAPI SPInit(LPSPINITDATA data) {
 	cont.mutex = mutex;
 	
 	HRESULT r = IDirectPlaySP_SetSPData(data->lpISP, &cont, sizeof(cont), DPSET_LOCAL);
-	//log_printf("SetSPData: %d", r);
+	if(r != DP_OK) {
+		log_printf("SetSPData: %d", (int)r);
+		
+		closesocket(sp_data->sock);
+		CloseHandle(mutex);
+		free(sp_data);
+		
+		return DPERR_UNAVAILABLE;
+	}
 	
 	data->lpCB->EnumSessions = &IPX_EnumSessions;
 	data->lpCB->Send = &IPX_Send;
