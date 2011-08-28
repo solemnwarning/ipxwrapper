@@ -19,6 +19,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "common.h"
+
 static HMODULE ipxdll = NULL;
 static HMODULE sysdll = NULL;
 extern char const *dllname;
@@ -30,17 +32,13 @@ void log_close();
 void log_printf(const char *fmt, ...);
 
 static void load_dlls() {
-	char sysdir[1024], path[1024];
-	
-	GetSystemDirectory(sysdir, 1024);
-	snprintf(path, 1024, "%s\\%s", sysdir, dllname);
-	
 	ipxdll = LoadLibrary("ipxwrapper.dll");
 	if(!ipxdll) {
+		log_printf("Error loading ipxwrapper.dll: %s", w32_error(GetLastError()));
 		abort();
 	}
 	
-	sysdll = LoadLibrary(path);
+	sysdll = load_sysdll(dllname);
 	if(!sysdll) {
 		abort();
 	}
@@ -50,17 +48,11 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 	if(why == DLL_PROCESS_ATTACH) {
 		log_open();
 		
-		HKEY key;
+		reg_open(KEY_QUERY_VALUE);
 		
-		if(RegOpenKeyEx(HKEY_CURRENT_USER, "Software\\IPXWrapper", 0, KEY_QUERY_VALUE, &key) == ERROR_SUCCESS) {
-			DWORD size = 1;
-			
-			if(RegQueryValueEx(key, "log_calls", NULL, NULL, (BYTE*)&log_calls, &size) != ERROR_SUCCESS || size != 1) {
-				log_calls = 0;
-			}
-			
-			RegCloseKey(key);
-		}
+		log_calls = reg_get_char("log_calls", 0);
+		
+		reg_close();
 	}else if(why == DLL_PROCESS_DETACH) {
 		if(sysdll) {
 			FreeLibrary(sysdll);

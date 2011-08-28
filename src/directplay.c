@@ -23,6 +23,7 @@
 #include <wsipx.h>
 
 #include "ipxwrapper.h"
+#include "common.h"
 
 struct sp_data {
 	SOCKET sock;
@@ -48,6 +49,12 @@ const GUID IPX_GUID = {
 
 #define DISCOVERY_SOCKET 42367
 #define API_HEADER_SIZE sizeof(struct sockaddr_ipx)
+
+#define CALL(n) if(log_calls) { log_printf("DirectPlay: %s", n); }
+
+extern char const *dllname;
+unsigned char log_calls = 0;
+static HMODULE sysdll = NULL;
 
 /* Lock the object mutex and return the data pointer */
 static struct sp_data *get_sp_data(IDirectPlaySP *sp) {
@@ -131,7 +138,7 @@ static BOOL init_worker(IDirectPlaySP *sp) {
 }
 
 static HRESULT WINAPI IPX_EnumSessions(LPDPSP_ENUMSESSIONSDATA data) {
-	//log_printf("IPX_EnumSessions called");
+	CALL("SP_EnumSessions");
 	
 	if(!init_worker(data->lpISP)) {
 		return DPERR_GENERIC;
@@ -158,7 +165,7 @@ static HRESULT WINAPI IPX_EnumSessions(LPDPSP_ENUMSESSIONSDATA data) {
 }
 
 static HRESULT WINAPI IPX_Send(LPDPSP_SENDDATA data) {
-	//log_printf("IPX_Send called");
+	CALL("SP_Send");
 	
 	struct sockaddr_ipx *addr = NULL;
 	
@@ -169,8 +176,8 @@ static HRESULT WINAPI IPX_Send(LPDPSP_SENDDATA data) {
 		
 		HRESULT r = IDirectPlaySP_GetSPPlayerData(data->lpISP, data->idPlayerTo, (void**)&addr, &size, DPGET_LOCAL);
 		if(r != DP_OK) {
+			log_printf("GetSPPlayerData: %d", (int)r);
 			addr = NULL;
-			//log_printf("GetSPPlayerData: %d", r);
 		}
 	}else if(sp_data->ns_addr.sa_family) {
 		addr = &(sp_data->ns_addr);
@@ -195,7 +202,7 @@ static HRESULT WINAPI IPX_Send(LPDPSP_SENDDATA data) {
 }
 
 static HRESULT WINAPI IPX_SendEx(LPDPSP_SENDEXDATA data) {
-	//log_printf("IPX_SendEx called");
+	CALL("SP_SendEx");
 	
 	DPSP_SENDDATA s_data;
 	
@@ -228,7 +235,7 @@ static HRESULT WINAPI IPX_SendEx(LPDPSP_SENDEXDATA data) {
 }
 
 static HRESULT WINAPI IPX_Reply(LPDPSP_REPLYDATA data) {
-	//log_printf("IPX_Reply called (idNameServer = %u)", data->idNameServer);
+	CALL("SP_Reply");
 	
 	/* TODO: Only update ns_addr if idNameServer has changed? */
 	
@@ -237,9 +244,10 @@ static HRESULT WINAPI IPX_Reply(LPDPSP_REPLYDATA data) {
 	DWORD size;
 	
 	HRESULT r = IDirectPlaySP_GetSPPlayerData(data->lpISP, data->idNameServer, (void**)&addr_p, &size, DPGET_LOCAL);
-	//log_printf("GetSPPlayerData: %d", r);
-	
-	if(r == DP_OK && addr_p) {
+	if(r != DP_OK) {
+		log_printf("GetSPPlayerData: %d", (int)r);
+		addr_p = NULL;
+	}else if(addr_p) {
 		memcpy(&(sp_data->ns_addr), addr_p, sizeof(struct sockaddr_ipx));
 	}
 	
@@ -257,6 +265,8 @@ static HRESULT WINAPI IPX_Reply(LPDPSP_REPLYDATA data) {
 }
 
 static HRESULT WINAPI IPX_CreatePlayer(LPDPSP_CREATEPLAYERDATA data) {
+	CALL("SP_CreatePlayer");
+	
 	if(data->lpSPMessageHeader) {
 		HRESULT r = IDirectPlaySP_SetSPPlayerData(data->lpISP, data->idPlayer, data->lpSPMessageHeader, sizeof(struct sockaddr_ipx), DPSET_LOCAL);
 		if(r != DP_OK) {
@@ -268,12 +278,8 @@ static HRESULT WINAPI IPX_CreatePlayer(LPDPSP_CREATEPLAYERDATA data) {
 	return DP_OK;
 }
 
-static HRESULT WINAPI IPX_DeletePlayer(LPDPSP_DELETEPLAYERDATA data) {
-	return DP_OK;
-}
-
 static HRESULT WINAPI IPX_GetCaps(LPDPSP_GETCAPSDATA data) {
-	//log_printf("IPX_GetCaps called");
+	CALL("SP_GetCaps");
 	
 	if(data->lpCaps->dwSize < sizeof(DPCAPS)) {
 		/* It's either this or DPERR_INVALIDOBJECT according to DirectX 7.0 */
@@ -298,7 +304,7 @@ static HRESULT WINAPI IPX_GetCaps(LPDPSP_GETCAPSDATA data) {
 }
 
 static HRESULT WINAPI IPX_Open(LPDPSP_OPENDATA data) {
-	//log_printf("IPX_Open called");
+	CALL("SP_Open");
 	
 	if(!init_worker(data->lpISP)) {
 		return DPERR_GENERIC;
@@ -325,6 +331,8 @@ static HRESULT WINAPI IPX_Open(LPDPSP_OPENDATA data) {
 }
 
 static HRESULT WINAPI IPX_CloseEx(LPDPSP_CLOSEDATA data) {
+	CALL("SP_CloseEx");
+	
 	struct sp_data *sp_data = get_sp_data(data->lpISP);
 	
 	/* Disable the special bind if in use */
@@ -335,6 +343,8 @@ static HRESULT WINAPI IPX_CloseEx(LPDPSP_CLOSEDATA data) {
 }
 
 static HRESULT WINAPI IPX_ShutdownEx(LPDPSP_SHUTDOWNDATA data) {
+	CALL("SP_ShutdownEx");
+	
 	struct sp_data *sp_data = get_sp_data(data->lpISP);
 	
 	if(sp_data->worker_thread && GetCurrentThreadId() != sp_data->worker_tid) {
@@ -442,7 +452,6 @@ HRESULT WINAPI SPInit(LPSPINITDATA data) {
 	data->lpCB->SendEx = &IPX_SendEx;
 	data->lpCB->Reply = &IPX_Reply;
 	data->lpCB->CreatePlayer = &IPX_CreatePlayer;
-	data->lpCB->DeletePlayer = &IPX_DeletePlayer;
 	data->lpCB->GetCaps = &IPX_GetCaps;
 	data->lpCB->Open = &IPX_Open;
 	data->lpCB->CloseEx = &IPX_CloseEx;
@@ -454,34 +463,15 @@ HRESULT WINAPI SPInit(LPSPINITDATA data) {
 	return DP_OK;
 }
 
-/* Convert a windows error number to an error message */
-char const *w32_error(DWORD errnum) {
-	static char buf[1024] = {'\0'};
-	
-	FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, NULL, errnum, 0, buf, 1023, NULL);
-	buf[strcspn(buf, "\r\n")] = '\0';
-	return buf;	
-}
-
-extern char const *dllname;
-unsigned char log_calls = 0;
-static HMODULE sysdll = NULL;
-
 BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 	if(why == DLL_PROCESS_ATTACH) {
 		log_open();
 		
-		HKEY key;
+		reg_open(KEY_QUERY_VALUE);
 		
-		if(RegOpenKeyEx(HKEY_CURRENT_USER, "Software\\IPXWrapper", 0, KEY_QUERY_VALUE, &key) == ERROR_SUCCESS) {
-			DWORD size = 1;
-			
-			if(RegQueryValueEx(key, "log_calls", NULL, NULL, (BYTE*)&log_calls, &size) != ERROR_SUCCESS || size != 1) {
-				log_calls = 0;
-			}
-			
-			RegCloseKey(key);
-		}
+		log_calls = reg_get_char("log_calls", 0);
+		
+		reg_close();
 	}else if(why == DLL_PROCESS_DETACH) {
 		if(sysdll) {
 			FreeLibrary(sysdll);
@@ -496,14 +486,7 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 
 void __stdcall *find_sym(char const *symbol) {
 	if(!sysdll) {
-		char sysdir[1024], path[1024];
-	
-		GetSystemDirectory(sysdir, 1024);
-		snprintf(path, 1024, "%s\\%s", sysdir, dllname);
-		
-		if(!(sysdll = LoadLibrary(path))) {
-			abort();
-		}
+		sysdll = load_sysdll(dllname);
 	}
 	
 	void *ptr = GetProcAddress(sysdll, symbol);

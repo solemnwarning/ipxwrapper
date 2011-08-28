@@ -17,7 +17,7 @@
 CFLAGS := -Wall -I./include/
 CXXFLAGS := -Wall -I./include/
 
-IPXWRAPPER_DEPS := src/ipxwrapper.o src/winsock.o src/ipxwrapper_stubs.o src/log.o src/ipxwrapper.def
+IPXWRAPPER_DEPS := src/ipxwrapper.o src/winsock.o src/ipxwrapper_stubs.o src/log.o src/common.o src/ipxwrapper.def
 
 BIN_FILES := changes.txt license.txt readme.txt ipxwrapper.dll mswsock.dll wsock32.dll ipxconfig.exe
 SRC_FILES := changes.txt license.txt Makefile mkstubs.pl readme.txt src/config.h src/ipxconfig.cpp \
@@ -51,8 +51,8 @@ ipxwrapper.dll: $(IPXWRAPPER_DEPS)
 ipxconfig.exe: src/ipxconfig.cpp
 	$(CXX) $(CXXFLAGS) -static-libgcc -static-libstdc++ -Wl,-s -D_WIN32_IE=0x0400 -mwindows -o ipxconfig.exe src/ipxconfig.cpp -liphlpapi
 
-dpwsockx.dll: src/directplay.o src/log.o src/dpwsockx_stubs.o ipxwrapper.dll
-	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup,-s -shared -o dpwsockx.dll src/directplay.o src/log.o src/dpwsockx_stubs.o src/dpwsockx.def -L. -lipxwrapper -lwsock32
+dpwsockx.dll: src/directplay.o src/log.o src/dpwsockx_stubs.o src/common.o ipxwrapper.dll
+	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup,-s -shared -o dpwsockx.dll src/directplay.o src/log.o src/common.o src/dpwsockx_stubs.o src/dpwsockx.def -L. -lipxwrapper -lwsock32
 
 src/ipxwrapper_stubs.s: src/ipxwrapper_stubs.txt
 	perl mkstubs.pl src/ipxwrapper_stubs.txt src/ipxwrapper_stubs.s
@@ -66,11 +66,11 @@ src/mswsock_stubs.s: src/mswsock_stubs.txt
 src/dpwsockx_stubs.s: src/dpwsockx_stubs.txt
 	perl mkstubs.pl src/dpwsockx_stubs.txt src/dpwsockx_stubs.s dpwsockx.dll
 
-%.dll: src/stubdll.o src/%_stubs.o src/log.o src/%.def
+%.dll: src/stubdll.o src/%_stubs.o src/log.o src/common.o src/%.def
 	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup,-s -shared -o $@ $^
 
 src/%_stubs.o: src/%_stubs.s
 	nasm -f win32 -o $@ $<
 
-src/%.o: src/%.c src/ipxwrapper.h src/config.h
+src/%.o: src/%.c src/ipxwrapper.h src/config.h src/common.h
 	$(CC) $(CFLAGS) -c -o $@ $<

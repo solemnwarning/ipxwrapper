@@ -27,6 +27,7 @@
 #include <time.h>
 
 #include "ipxwrapper.h"
+#include "common.h"
 
 #define DLL_UNLOAD(dll) \
 	if(dll) {\
@@ -48,9 +49,7 @@ HMODULE wsock32_dll = NULL;
 static HANDLE mutex = NULL;
 static HANDLE router_thread = NULL;
 static DWORD router_tid = 0;
-static HKEY regkey = NULL;
 
-static HMODULE load_sysdll(char const *name);
 static int init_router(void);
 static DWORD WINAPI router_main(LPVOID argp);
 static void add_host(const unsigned char *net, const unsigned char *node, uint32_t ipaddr);
@@ -68,22 +67,9 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 			return FALSE;
 		}
 		
-		int reg_err = RegOpenKeyEx(
-			HKEY_CURRENT_USER,
-			"Software\\IPXWrapper",
-			0,
-			KEY_QUERY_VALUE,
-			&regkey
-		);
+		reg_open(KEY_QUERY_VALUE);
 		
-		if(reg_err != ERROR_SUCCESS) {
-			regkey = NULL;
-			log_printf("Could not open registry: %s", w32_error(reg_err));
-		}
-		
-		DWORD gsize = sizeof(global_conf);
-		
-		if(!regkey || RegQueryValueEx(regkey, "global", NULL, NULL, (BYTE*)&global_conf, &gsize) != ERROR_SUCCESS || gsize != sizeof(global_conf)) {
+		if(reg_get_bin("global", &global_conf, sizeof(global_conf)) != sizeof(global_conf)) {
 			global_conf.udp_port = DEFAULT_PORT;
 			global_conf.w95_bug = 1;
 			global_conf.bcast_all = 0;
@@ -131,10 +117,7 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 		
 		WSACleanup();
 		
-		if(regkey) {
-			RegCloseKey(regkey);
-			regkey = NULL;
-		}
+		reg_close();
 		
 		DLL_UNLOAD(winsock2_dll);
 		DLL_UNLOAD(mswsock_dll);
@@ -224,22 +207,6 @@ IP_ADAPTER_INFO *get_nics(void) {
 	}
 	
 	return buf;
-}
-
-/* Load a system DLL */
-static HMODULE load_sysdll(char const *name) {
-	char sysdir[1024], path[1024];
-	HMODULE ret = NULL;
-	
-	GetSystemDirectory(sysdir, 1024);
-	snprintf(path, 1024, "%s\\%s", sysdir, name);
-	
-	ret = LoadLibrary(path);
-	if(!ret) {
-		log_printf("Error loading %s: %s", path, w32_error(GetLastError()));
-	}
-	
-	return ret;
 }
 
 /* Initialize and start the router thread */
@@ -382,15 +349,6 @@ static DWORD WINAPI router_main(LPVOID notused) {
 	return 0;
 }
 
-/* Convert a windows error number to an error message */
-char const *w32_error(DWORD errnum) {
-	static char buf[1024] = {'\0'};
-	
-	FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, NULL, errnum, 0, buf, 1023, NULL);
-	buf[strcspn(buf, "\r\n")] = '\0';
-	return buf;	
-}
-
 /* Add a host to the hosts list or update an existing one */
 static void add_host(const unsigned char *net, const unsigned char *node, uint32_t ipaddr) {
 	ipx_host *hptr = hosts;
@@ -465,16 +423,11 @@ static BOOL load_nics(void) {
 		struct reg_value rv;
 		int got_rv = 0;
 		
-		if(regkey) {
-			char vname[18];
-			NODE_TO_STRING(vname, ifptr->Address);
-			
-			DWORD rv_size = sizeof(rv);
-			
-			int reg_err = RegQueryValueEx(regkey, vname, NULL, NULL, (BYTE*)&rv, &rv_size);
-			if(reg_err == ERROR_SUCCESS && rv_size == sizeof(rv)) {
-				got_rv = 1;
-			}
+		char vname[18];
+		NODE_TO_STRING(vname, ifptr->Address);
+		
+		if(reg_get_bin(vname, &rv, sizeof(rv)) == sizeof(rv)) {
+			got_rv = 1;
 		}
 		
 		if(got_rv && !rv.enabled) {

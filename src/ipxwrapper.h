@@ -151,12 +151,10 @@ ipx_socket *get_socket(SOCKET fd);
 void lock_mutex(void);
 void unlock_mutex(void);
 IP_ADAPTER_INFO *get_nics(void);
-char const *w32_error(DWORD errnum);
 ipx_host *find_host(const unsigned char *net, const unsigned char *node);
 
 void log_open();
 void log_close();
-void log_printf(const char *fmt, ...);
 
 int ipx_ex_bind(SOCKET fd, const struct sockaddr_ipx *ipxaddr);
 
