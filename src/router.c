@@ -20,6 +20,7 @@
 
 #include "router.h"
 #include "common.h"
+#include "ipxwrapper.h"
 
 /* Allocate router_vars structure and initialise all members
  * Returns NULL on failure
@@ -32,11 +33,13 @@ struct router_vars *router_init(BOOL global) {
 	}
 	
 	router->running = TRUE;
+	router->interfaces = NULL;
 	router->udp_sock = -1;
 	router->listner = -1;
 	router->wsa_event = WSA_INVALID_EVENT;
 	router->crit_sec_init = FALSE;
 	router->addrs = NULL;
+	router->recvbuf = NULL;
 	
 	if(InitializeCriticalSectionAndSpinCount(&(router->crit_sec), 0x80000000)) {
 		router->crit_sec_init = TRUE;
@@ -54,6 +57,8 @@ struct router_vars *router_init(BOOL global) {
 		return NULL;
 	}
 	
+	router->interfaces = get_interfaces(-1);
+	
 	if((router->udp_sock = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
 		log_printf("Error creating UDP socket: %s", w32_error(WSAGetLastError()));
 		
@@ -68,6 +73,29 @@ struct router_vars *router_init(BOOL global) {
 	addr.sin_port = 9999;
 	
 	if(bind(router->udp_sock, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
+		log_printf("Error binding UDP socket: %s", w32_error(WSAGetLastError()));
+		
+		router_destroy(router);
+		return NULL;
+	}
+	
+	BOOL broadcast = TRUE;
+	int bufsize = 524288;	/* 512KiB */
+	
+	setsockopt(router->udp_sock, SOL_SOCKET, SO_BROADCAST, (char*)&broadcast, sizeof(BOOL));
+	setsockopt(router->udp_sock, SOL_SOCKET, SO_RCVBUF, (char*)&bufsize, sizeof(int));
+	setsockopt(router->udp_sock, SOL_SOCKET, SO_SNDBUF, (char*)&bufsize, sizeof(int));
+	
+	if(WSAEventSelect(router->udp_sock, router->wsa_event, FD_READ) == -1) {
+		log_printf("WSAEventSelect error: %s", w32_error(WSAGetLastError()));
+		
+		router_destroy(router);
+		return NULL;
+	}
+	
+	if(!(router->recvbuf = malloc(PACKET_BUF_SIZE))) {
+		log_printf("Out of memory! Cannot allocate recv buffer");
+		
 		router_destroy(router);
 		return NULL;
 	}
@@ -81,9 +109,22 @@ struct router_vars *router_init(BOOL global) {
 
 /* Release all resources allocated by a router and free it */
 void router_destroy(struct router_vars *router) {
+	struct router_addr *addr = router->addrs;
+	
+	while(addr) {
+		struct router_addr *del = addr;
+		addr = addr->next;
+		
+		free(del);
+	}
+	
+	free(router->recvbuf);
+	
 	if(router->udp_sock != -1) {
 		closesocket(router->udp_sock);
 	}
+	
+	free_interfaces(router->interfaces);
 	
 	if(router->wsa_event != WSA_INVALID_EVENT) {
 		WSACloseEvent(router->wsa_event);
@@ -109,7 +150,22 @@ DWORD router_main(void *arg) {
 			return 0;
 		}
 		
-		/* TODO: Step through sockets, deal with timeouts/etc */
+		struct sockaddr_in addr;
+		int addrlen = sizeof(addr);
+		
+		int len = recvfrom(router->udp_sock, router->recvbuf, PACKET_BUF_SIZE, 0, (struct sockaddr*)&addr, &addrlen);
+		if(len == -1) {
+			LeaveCriticalSection(&(router->crit_sec));
+			
+			if(WSAGetLastError() == WSAEWOULDBLOCK) {
+				continue;
+			}
+			
+			log_printf("Error reading from UDP socket: %s", w32_error(WSAGetLastError()));
+			return 1;
+		}
+		
+		/* TODO: Deliver packet */
 		
 		LeaveCriticalSection(&(router->crit_sec));
 	}
@@ -146,6 +202,21 @@ int router_bind(struct router_vars *router, SOCKET control, SOCKET sock, struct 
 	
 	EnterCriticalSection(&(router->crit_sec));
 	
+	struct router_addr *a = router->addrs;
+	
+	while(a) {
+		if(a->control_socket == control && a->ws_socket == sock) {
+			log_printf("bind failed: socket already bound");
+			
+			LeaveCriticalSection(&(router->crit_sec));
+			
+			WSASetLastError(WSAEINVAL);
+			return -1;
+		}
+		
+		a = a->next;
+	}
+	
 	if(addr->sa_socket == 0) {
 		/* Automatic socket allocations start at 1024, I have no idea if
 		 * this is normal IPX behaviour, but IP does it and it doesn't seem
@@ -153,7 +224,7 @@ int router_bind(struct router_vars *router, SOCKET control, SOCKET sock, struct 
 		*/
 		
 		uint16_t s = 1024;
-		struct router_addr *a = router->addrs;
+		a = router->addrs;
 		
 		while(a) {
 			if(ntohs(a->addr.sa_socket) == s) {
@@ -179,7 +250,7 @@ int router_bind(struct router_vars *router, SOCKET control, SOCKET sock, struct 
 	}else if(addr->sa_family != AF_IPX_SHARE) {
 		/* Test if any bound socket is using the requested socket number. */
 		
-		struct router_addr *a = router->addrs;
+		a = router->addrs;
 		
 		while(a) {
 			if(a->addr.sa_socket == addr->sa_socket) {
@@ -215,4 +286,45 @@ int router_bind(struct router_vars *router, SOCKET control, SOCKET sock, struct 
 	LeaveCriticalSection(&(router->crit_sec));
 	
 	return 0;
+}
+
+void router_set_port(struct router_vars *router, SOCKET control, SOCKET sock, uint16_t port) {
+	EnterCriticalSection(&(router->crit_sec));
+	
+	struct router_addr *a = router->addrs;
+	
+	while(a) {
+		if(a->control_socket == control && a->ws_socket == sock) {
+			a->local_port = port;
+			break;
+		}
+		
+		a = a->next;
+	}
+	
+	LeaveCriticalSection(&(router->crit_sec));
+}
+
+void router_close(struct router_vars *router, SOCKET control, SOCKET sock) {
+	EnterCriticalSection(&(router->crit_sec));
+	
+	struct router_addr *addr = router->addrs, *prev = NULL;
+	
+	while(addr) {
+		if(addr->control_socket == control && addr->ws_socket == sock) {
+			if(prev) {
+				prev->next = addr->next;
+			}else{
+				router->addrs = addr->next;
+			}
+			
+			free(addr);
+			break;
+		}
+		
+		prev = addr;
+		addr = addr->next;
+	}
+	
+	LeaveCriticalSection(&(router->crit_sec));
 }

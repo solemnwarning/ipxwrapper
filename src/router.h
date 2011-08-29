@@ -28,6 +28,7 @@
 */
 #define AF_IPX_SHARE 42
 
+/* Represents a bound IPX address */
 struct router_addr {
 	struct sockaddr_ipx addr;
 	
@@ -41,6 +42,8 @@ struct router_addr {
 struct router_vars {
 	BOOL running;
 	
+	struct ipx_interface *interfaces;
+	
 	SOCKET udp_sock;
 	SOCKET listner;
 	
@@ -50,9 +53,15 @@ struct router_vars {
 	BOOL crit_sec_init;
 	
 	struct router_addr *addrs;
+	
+	char *recvbuf;
 };
 
 struct router_vars *router_init(BOOL global);
 void router_destroy(struct router_vars *router);
+
+int router_bind(struct router_vars *router, SOCKET control, SOCKET sock, struct sockaddr_ipx *addr);
+void router_set_port(struct router_vars *router, SOCKET control, SOCKET sock, uint16_t port);
+void router_close(struct router_vars *router, SOCKET control, SOCKET sock);
 
 #endif /* !IPXWRAPPER_ROUTER_H */
