@@ -19,6 +19,41 @@
 #define IPXWRAPPER_COMMON_H
 
 #include <windows.h>
+#include <stdio.h>
+#include <stdint.h>
+
+#define NET_TO_STRING(s, net) \
+	sprintf( \
+		s, "%02X:%02X:%02X:%02X", \
+		(unsigned int)(unsigned char)(net[0]), \
+		(unsigned int)(unsigned char)(net[1]), \
+		(unsigned int)(unsigned char)(net[2]), \
+		(unsigned int)(unsigned char)(net[3]) \
+	)
+
+#define NODE_TO_STRING(s, node) \
+	sprintf( \
+		s, "%02X:%02X:%02X:%02X:%02X:%02X", \
+		(unsigned int)(unsigned char)(node[0]), \
+		(unsigned int)(unsigned char)(node[1]), \
+		(unsigned int)(unsigned char)(node[2]), \
+		(unsigned int)(unsigned char)(node[3]), \
+		(unsigned int)(unsigned char)(node[4]), \
+		(unsigned int)(unsigned char)(node[5]) \
+	)
+
+struct ipx_interface {
+	uint32_t ipaddr;
+	uint32_t netmask;
+	uint32_t bcast;
+	
+	unsigned char hwaddr[6];
+	
+	unsigned char ipx_net[4];
+	unsigned char ipx_node[6];
+	
+	struct ipx_interface *next;
+};
 
 extern HKEY regkey;
 
@@ -33,5 +68,8 @@ char reg_get_char(const char *val_name, char default_val);
 DWORD reg_get_bin(const char *val_name, void *buf, DWORD size);
 
 HMODULE load_sysdll(const char *name);
+
+struct ipx_interface *get_interfaces(int ifnum);
+void free_interfaces(struct ipx_interface *iface);
 
 #endif /* !IPXWRAPPER_COMMON_H */

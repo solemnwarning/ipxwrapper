@@ -30,3 +30,4 @@ rexec
 rresvport
 s_perror
 sethostname
+inet_addr

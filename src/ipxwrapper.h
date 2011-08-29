@@ -53,26 +53,6 @@
 	SetLastError(errnum);\
 	return __VA_ARGS__;
 
-#define NET_TO_STRING(s, net) \
-	sprintf( \
-		s, "%02X:%02X:%02X:%02X", \
-		(unsigned int)(unsigned char)(net[0]), \
-		(unsigned int)(unsigned char)(net[1]), \
-		(unsigned int)(unsigned char)(net[2]), \
-		(unsigned int)(unsigned char)(net[3]) \
-	)
-
-#define NODE_TO_STRING(s, node) \
-	sprintf( \
-		s, "%02X:%02X:%02X:%02X:%02X:%02X", \
-		(unsigned int)(unsigned char)(node[0]), \
-		(unsigned int)(unsigned char)(node[1]), \
-		(unsigned int)(unsigned char)(node[2]), \
-		(unsigned int)(unsigned char)(node[3]), \
-		(unsigned int)(unsigned char)(node[4]), \
-		(unsigned int)(unsigned char)(node[5]) \
-	)
-
 typedef struct ipx_socket ipx_socket;
 typedef struct ipx_packet ipx_packet;
 typedef struct ipx_nic ipx_nic;
