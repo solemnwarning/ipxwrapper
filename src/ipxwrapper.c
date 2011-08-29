@@ -53,7 +53,6 @@ static DWORD router_tid = 0;
 
 static int init_router(void);
 static DWORD WINAPI router_main(LPVOID argp);
-static void add_host(const unsigned char *net, const unsigned char *node, uint32_t ipaddr);
 
 BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 	if(why == DLL_PROCESS_ATTACH) {
@@ -323,7 +322,7 @@ static DWORD WINAPI router_main(LPVOID notused) {
 }
 
 /* Add a host to the hosts list or update an existing one */
-static void add_host(const unsigned char *net, const unsigned char *node, uint32_t ipaddr) {
+void add_host(const unsigned char *net, const unsigned char *node, uint32_t ipaddr) {
 	ipx_host *hptr = hosts;
 	
 	while(hptr) {

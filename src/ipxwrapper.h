@@ -117,6 +117,7 @@ ipx_socket *get_socket(SOCKET fd);
 void lock_mutex(void);
 void unlock_mutex(void);
 ipx_host *find_host(const unsigned char *net, const unsigned char *node);
+void add_host(const unsigned char *net, const unsigned char *node, uint32_t ipaddr);
 
 void log_open();
 void log_close();

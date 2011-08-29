@@ -21,6 +21,7 @@
 #include "router.h"
 #include "common.h"
 #include "ipxwrapper.h"
+#include "interface.h"
 
 /* Allocate router_vars structure and initialise all members
  * Returns NULL on failure
@@ -165,7 +166,59 @@ DWORD router_main(void *arg) {
 			return 1;
 		}
 		
-		/* TODO: Deliver packet */
+		ipx_packet *packet = (ipx_packet*)router->recvbuf;
+		
+		/* Check that the packet arrived from the subnet of an enabled network
+		 * interface and drop it if not.
+		*/
+		
+		if(global_conf.filter) {
+			struct ipx_interface *iface = router->interfaces;
+			
+			while(iface) {
+				if((iface->ipaddr & iface->netmask) == (addr.sin_addr.s_addr & iface->netmask)) {
+					break;
+				}
+				
+				iface = iface->next;
+			}
+			
+			if(!iface) {
+				continue;
+			}
+		}
+		
+		packet->size = ntohs(packet->size);
+		
+		if(packet->size > MAX_PACKET_SIZE || packet->size + sizeof(ipx_packet) - 1 != len) {
+			log_printf("Recieved packet with incorrect size field, discarding");
+			continue;
+		}
+		
+		add_host(packet->src_net, packet->src_node, addr.sin_addr.s_addr);
+		
+		struct router_addr *ra = router->addrs;
+		
+		while(ra) {
+			unsigned char f6[] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
+			
+			/* TODO: Packet type filter and shutdown checks */
+			
+			if(
+				(memcmp(packet->dest_net, ra->addr.sa_netnum, 4) == 0 || memcmp(packet->dest_net, f6, 4) == 0) &&
+				(memcmp(packet->dest_node, ra->addr.sa_nodenum, 6) == 0 || memcmp(packet->dest_node, f6, 6) == 0) &&
+				packet->dest_socket == ra->addr.sa_socket
+			) {
+				addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+				addr.sin_port = htons(ra->local_port);
+				
+				if(sendto(router->udp_sock, (char*)packet, len, 0, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
+					log_printf("Error relaying packet: %s", w32_error(WSAGetLastError()));
+				}
+			}
+			
+			ra = ra->next;
+		}
 		
 		LeaveCriticalSection(&(router->crit_sec));
 	}
