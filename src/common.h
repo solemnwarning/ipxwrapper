@@ -42,19 +42,6 @@
 		(unsigned int)(unsigned char)(node[5]) \
 	)
 
-struct ipx_interface {
-	uint32_t ipaddr;
-	uint32_t netmask;
-	uint32_t bcast;
-	
-	unsigned char hwaddr[6];
-	
-	unsigned char ipx_net[4];
-	unsigned char ipx_node[6];
-	
-	struct ipx_interface *next;
-};
-
 extern HKEY regkey;
 
 void log_printf(const char *fmt, ...);
@@ -68,9 +55,5 @@ char reg_get_char(const char *val_name, char default_val);
 DWORD reg_get_bin(const char *val_name, void *buf, DWORD size);
 
 HMODULE load_sysdll(const char *name);
-
-/* interface.c functions */
-struct ipx_interface *get_interfaces(int ifnum);
-void free_interfaces(struct ipx_interface *iface);
 
 #endif /* !IPXWRAPPER_COMMON_H */

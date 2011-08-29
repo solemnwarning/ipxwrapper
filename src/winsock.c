@@ -25,6 +25,7 @@
 
 #include "ipxwrapper.h"
 #include "common.h"
+#include "interface.h"
 
 INT APIENTRY EnumProtocolsA(LPINT protocols, LPVOID buf, LPDWORD bsptr) {
 	int bufsize = *bsptr, rval, i, want_ipx = 0;

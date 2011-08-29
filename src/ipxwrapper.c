@@ -28,6 +28,7 @@
 
 #include "ipxwrapper.h"
 #include "common.h"
+#include "interface.h"
 
 #define DLL_UNLOAD(dll) \
 	if(dll) {\

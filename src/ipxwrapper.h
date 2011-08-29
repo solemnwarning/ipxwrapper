@@ -55,7 +55,6 @@
 
 typedef struct ipx_socket ipx_socket;
 typedef struct ipx_packet ipx_packet;
-typedef struct ipx_nic ipx_nic;
 typedef struct ipx_host ipx_host;
 
 struct ipx_socket {
