@@ -23,6 +23,8 @@
 #include "ipxwrapper.h"
 #include "interface.h"
 
+static struct router_addr *router_get(struct router_vars *router, SOCKET control, SOCKET sock);
+
 /* Allocate router_vars structure and initialise all members
  * Returns NULL on failure
 */
@@ -202,15 +204,15 @@ DWORD router_main(void *arg) {
 		while(ra) {
 			unsigned char f6[] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
 			
-			/* TODO: Packet type filter and shutdown checks */
-			
 			if(
+				ra->local_port &&
+				(ra->filter_ptype < 0 || ra->filter_ptype == packet->ptype) &&
 				(memcmp(packet->dest_net, ra->addr.sa_netnum, 4) == 0 || memcmp(packet->dest_net, f6, 4) == 0) &&
 				(memcmp(packet->dest_node, ra->addr.sa_nodenum, 6) == 0 || memcmp(packet->dest_node, f6, 6) == 0) &&
 				packet->dest_socket == ra->addr.sa_socket
 			) {
 				addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-				addr.sin_port = htons(ra->local_port);
+				addr.sin_port = ra->local_port;
 				
 				if(sendto(router->udp_sock, (char*)packet, len, 0, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
 					log_printf("Error relaying packet: %s", w32_error(WSAGetLastError()));
@@ -255,19 +257,13 @@ int router_bind(struct router_vars *router, SOCKET control, SOCKET sock, struct 
 	
 	EnterCriticalSection(&(router->crit_sec));
 	
-	struct router_addr *a = router->addrs;
-	
-	while(a) {
-		if(a->control_socket == control && a->ws_socket == sock) {
-			log_printf("bind failed: socket already bound");
-			
-			LeaveCriticalSection(&(router->crit_sec));
-			
-			WSASetLastError(WSAEINVAL);
-			return -1;
-		}
+	if(router_get(router, control, sock)) {
+		log_printf("bind failed: socket already bound");
 		
-		a = a->next;
+		LeaveCriticalSection(&(router->crit_sec));
+		
+		WSASetLastError(WSAEINVAL);
+		return -1;
 	}
 	
 	if(addr->sa_socket == 0) {
@@ -277,7 +273,7 @@ int router_bind(struct router_vars *router, SOCKET control, SOCKET sock, struct 
 		*/
 		
 		uint16_t s = 1024;
-		a = router->addrs;
+		struct router_addr *a = router->addrs;
 		
 		while(a) {
 			if(ntohs(a->addr.sa_socket) == s) {
@@ -303,7 +299,7 @@ int router_bind(struct router_vars *router, SOCKET control, SOCKET sock, struct 
 	}else if(addr->sa_family != AF_IPX_SHARE) {
 		/* Test if any bound socket is using the requested socket number. */
 		
-		a = router->addrs;
+		struct router_addr *a = router->addrs;
 		
 		while(a) {
 			if(a->addr.sa_socket == addr->sa_socket) {
@@ -332,6 +328,7 @@ int router_bind(struct router_vars *router, SOCKET control, SOCKET sock, struct 
 	new_addr->local_port = 0;
 	new_addr->ws_socket = sock;
 	new_addr->control_socket = control;
+	new_addr->filter_ptype = -1;
 	new_addr->next = NULL;
 	
 	router->addrs = new_addr;
@@ -341,18 +338,15 @@ int router_bind(struct router_vars *router, SOCKET control, SOCKET sock, struct 
 	return 0;
 }
 
+/* Set loopback UDP port of emulation socket in NETWORK BYTE ORDER
+ * Disable recv by setting to zero
+*/
 void router_set_port(struct router_vars *router, SOCKET control, SOCKET sock, uint16_t port) {
 	EnterCriticalSection(&(router->crit_sec));
 	
-	struct router_addr *a = router->addrs;
-	
-	while(a) {
-		if(a->control_socket == control && a->ws_socket == sock) {
-			a->local_port = port;
-			break;
-		}
-		
-		a = a->next;
+	struct router_addr *addr = router_get(router, control, sock);
+	if(addr) {
+		addr->local_port = port;
 	}
 	
 	LeaveCriticalSection(&(router->crit_sec));
@@ -377,6 +371,35 @@ void router_close(struct router_vars *router, SOCKET control, SOCKET sock) {
 		
 		prev = addr;
 		addr = addr->next;
+	}
+	
+	LeaveCriticalSection(&(router->crit_sec));
+}
+
+/* Return the address a given socket is bound to, NULL if unbound */
+static struct router_addr *router_get(struct router_vars *router, SOCKET control, SOCKET sock) {
+	EnterCriticalSection(&(router->crit_sec));
+	
+	struct router_addr *addr = router->addrs;
+	
+	while(addr && (addr->control_socket != control || addr->ws_socket != sock)) {
+		addr = addr->next;
+	}
+	
+	LeaveCriticalSection(&(router->crit_sec));
+	
+	return addr;
+}
+
+/* Set packet type filter for a socket
+ * Disable filter by setting to negative value
+*/
+void router_set_filter(struct router_vars *router, SOCKET control, SOCKET sock, int ptype) {
+	EnterCriticalSection(&(router->crit_sec));
+	
+	struct router_addr *addr = router_get(router, control, sock);
+	if(addr) {
+		addr->filter_ptype = ptype;
 	}
 	
 	LeaveCriticalSection(&(router->crit_sec));

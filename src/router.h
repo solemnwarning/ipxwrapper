@@ -32,9 +32,10 @@
 struct router_addr {
 	struct sockaddr_ipx addr;
 	
-	uint16_t local_port;	/* Local UDP port */
+	uint16_t local_port;	/* Local UDP port (NETWORK BYTE ORDER) */
 	SOCKET ws_socket;	/* Application socket */
 	SOCKET control_socket;	/* Control socket */
+	int filter_ptype;	/* Packet type filter, negative to disable */
 	
 	struct router_addr *next;
 };
@@ -63,5 +64,6 @@ void router_destroy(struct router_vars *router);
 int router_bind(struct router_vars *router, SOCKET control, SOCKET sock, struct sockaddr_ipx *addr);
 void router_set_port(struct router_vars *router, SOCKET control, SOCKET sock, uint16_t port);
 void router_close(struct router_vars *router, SOCKET control, SOCKET sock);
+void router_set_filter(struct router_vars *router, SOCKET control, SOCKET sock, int ptype);
 
 #endif /* !IPXWRAPPER_ROUTER_H */
