@@ -227,7 +227,7 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen) {
 		*/
 		
 		unsigned char z6[] = {0,0,0,0,0,0};
-		ipx_nic *nic = nics;
+		struct ipx_interface *nic = nics;
 		
 		while(nic) {
 			if(
@@ -348,7 +348,7 @@ int ipx_ex_bind(SOCKET fd, const struct sockaddr_ipx *ipxaddr) {
 	}
 	
 	unsigned char z6[] = {0,0,0,0,0,0};
-	ipx_nic *nic = nics;
+	struct ipx_interface *nic = nics;
 	
 	while(nic) {
 		if(
@@ -560,7 +560,7 @@ int WSAAPI getsockopt(SOCKET fd, int level, int optname, char FAR *optval, int F
 				
 				IPX_ADDRESS_DATA *ipxdata = (IPX_ADDRESS_DATA*)optval;
 				
-				ipx_nic *nic = nics;
+				struct ipx_interface *nic = nics;
 				int i = 0;
 				
 				while(nic && i < ipxdata->adapternum) {
@@ -595,7 +595,7 @@ int WSAAPI getsockopt(SOCKET fd, int level, int optname, char FAR *optval, int F
 				
 				*intval = 0;
 				
-				ipx_nic *nic = nics;
+				struct ipx_interface *nic = nics;
 				while(nic) {
 					(*intval)++;
 					nic = nic->next;

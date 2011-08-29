@@ -69,6 +69,7 @@ DWORD reg_get_bin(const char *val_name, void *buf, DWORD size);
 
 HMODULE load_sysdll(const char *name);
 
+/* interface.c functions */
 struct ipx_interface *get_interfaces(int ifnum);
 void free_interfaces(struct ipx_interface *iface);
 

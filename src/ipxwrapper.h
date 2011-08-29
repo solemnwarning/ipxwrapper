@@ -66,13 +66,13 @@ struct ipx_socket {
 	uint8_t f_ptype;	/* Undefined when IPX_FILTER isn't set */
 	
 	/* The following values are undefined when IPX_BOUND is not set */
-	ipx_nic *nic;
+	struct ipx_interface *nic;
 	uint16_t socket; /* Stored in NETWORK BYTE ORDER */
 	
 	/* Extra bind address, only used for receiving packets.
 	 * Only defined when IPX_EX_BOUND is set.
 	*/
-	ipx_nic *ex_nic;
+	struct ipx_interface *ex_nic;
 	uint16_t ex_socket;
 	
 	ipx_socket *next;
@@ -93,19 +93,6 @@ struct ipx_packet {
 	char data[1];
 } __attribute__((__packed__));
 
-struct ipx_nic {
-	uint32_t ipaddr;
-	uint32_t netmask;
-	uint32_t bcast;
-	
-	unsigned char hwaddr[6];
-	
-	unsigned char ipx_net[4];
-	unsigned char ipx_node[6];
-	
-	ipx_nic *next;
-};
-
 struct ipx_host {
 	unsigned char ipx_net[4];
 	unsigned char ipx_node[6];
@@ -117,7 +104,7 @@ struct ipx_host {
 };
 
 extern ipx_socket *sockets;
-extern ipx_nic *nics;
+extern struct ipx_interface *nics;
 extern ipx_host *hosts;
 extern SOCKET net_fd;
 extern struct reg_global global_conf;
@@ -130,7 +117,6 @@ void __stdcall *find_sym(char const *sym);
 ipx_socket *get_socket(SOCKET fd);
 void lock_mutex(void);
 void unlock_mutex(void);
-IP_ADAPTER_INFO *get_nics(void);
 ipx_host *find_host(const unsigned char *net, const unsigned char *node);
 
 void log_open();
