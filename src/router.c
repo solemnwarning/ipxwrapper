@@ -204,7 +204,14 @@ DWORD router_main(void *arg) {
 			continue;
 		}
 		
-		add_host(packet->src_net, packet->src_node, addr.sin_addr.s_addr);
+		/* Replace destination network field of packet with source IP address
+		 * so that the client can cache it.
+		*/
+		
+		char dest_net[4];
+		
+		memcpy(dest_net, packet->dest_net, 4);
+		memcpy(packet->dest_net, &(addr.sin_addr.s_addr), 4);
 		
 		struct router_addr *ra = router->addrs;
 		
@@ -212,7 +219,7 @@ DWORD router_main(void *arg) {
 			if(
 				ra->local_port &&
 				(ra->filter_ptype < 0 || ra->filter_ptype == packet->ptype) &&
-				(memcmp(packet->dest_net, ra->addr.sa_netnum, 4) == 0 || memcmp(packet->dest_net, f6, 4) == 0) &&
+				(memcmp(dest_net, ra->addr.sa_netnum, 4) == 0 || memcmp(dest_net, f6, 4) == 0) &&
 				(memcmp(packet->dest_node, ra->addr.sa_nodenum, 6) == 0 || memcmp(packet->dest_node, f6, 6) == 0) &&
 				packet->dest_socket == ra->addr.sa_socket
 			) {

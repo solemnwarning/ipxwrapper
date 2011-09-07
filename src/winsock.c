@@ -322,6 +322,17 @@ static int recv_packet(ipx_socket *sockptr, char *buf, int bufsize, int flags, s
 		return -1;
 	}
 	
+	if(rval < sizeof(ipx_packet) || rval != packet->size + sizeof(ipx_packet) - 1) {
+		log_printf("Invalid packet received on loopback port!");
+		
+		free(packet);
+		WSASetLastError(WSAEWOULDBLOCK);
+		return -1;
+	}
+	
+	/* Router thread replaces destination network number with source IP address */
+	add_host(packet->src_net, packet->src_node, *((uint32_t*)packet->dest_net));
+	
 	if(addr) {
 		addr->sa_family = AF_IPX;
 		memcpy(addr->sa_netnum, packet->src_net, 4);
