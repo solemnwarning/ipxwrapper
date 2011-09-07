@@ -27,7 +27,7 @@
 #include "interface.h"
 #include "router.h"
 
-typedef struct _PROTOCOL_INFOA {
+typedef struct _PROTOCOL_INFO {
 	DWORD dwServiceFlags ;
 	INT iAddressFamily ;
 	INT iMaxSockAddr ;
@@ -35,16 +35,15 @@ typedef struct _PROTOCOL_INFOA {
 	INT iSocketType ;
 	INT iProtocol ;
 	DWORD dwMessageSize ;
-	LPSTR   lpProtocol ;
-} PROTOCOL_INFOA;
+	void *lpProtocol ;
+} PROTOCOL_INFO;
 
-INT APIENTRY EnumProtocolsA(LPINT protocols, LPVOID buf, LPDWORD bsptr) {
+static int do_EnumProtocols(LPINT protocols, LPVOID buf, LPDWORD bsptr, BOOL unicode) {
 	int bufsize = *bsptr, rval, i, want_ipx = 0;
 	
-	PROTOCOL_INFOA *pinfo = buf;
+	PROTOCOL_INFO *pinfo = buf;
 	
-	rval = r_EnumProtocolsA(protocols, buf, bsptr);
-	if(rval == -1) {
+	if((rval = unicode ? r_EnumProtocolsW(protocols, buf, bsptr) : r_EnumProtocolsA(protocols, buf, bsptr)) == -1) {
 		return -1;
 	}
 	
@@ -67,7 +66,7 @@ INT APIENTRY EnumProtocolsA(LPINT protocols, LPVOID buf, LPDWORD bsptr) {
 		}
 		
 		if(i == rval) {
-			*bsptr += sizeof(PROTOCOL_INFOA);
+			*bsptr += sizeof(PROTOCOL_INFO);
 			rval++;
 		}
 		
@@ -83,72 +82,18 @@ INT APIENTRY EnumProtocolsA(LPINT protocols, LPVOID buf, LPDWORD bsptr) {
 		pinfo[i].iSocketType = SOCK_DGRAM;
 		pinfo[i].iProtocol = NSPROTO_IPX;
 		pinfo[i].dwMessageSize = 576;
-		pinfo[i].lpProtocol = "IPX";
+		pinfo[i].lpProtocol = unicode ? (char*)L"IPX" : "IPX";
 	}
 	
 	return rval;
 }
 
-typedef struct _PROTOCOL_INFOW {
-	DWORD dwServiceFlags ;
-	INT iAddressFamily ;
-	INT iMaxSockAddr ;
-	INT iMinSockAddr ;
-	INT iSocketType ;
-	INT iProtocol ;
-	DWORD dwMessageSize ;
-	LPWSTR  lpProtocol ;
-} PROTOCOL_INFOW;
+INT APIENTRY EnumProtocolsA(LPINT protocols, LPVOID buf, LPDWORD bsptr) {
+	return do_EnumProtocols(protocols, buf, bsptr, FALSE);
+}
 
 INT APIENTRY EnumProtocolsW(LPINT protocols, LPVOID buf, LPDWORD bsptr) {
-	int bufsize = *bsptr, rval, i, want_ipx = 0;
-	
-	PROTOCOL_INFOW *pinfo = buf;
-	
-	rval = r_EnumProtocolsW(protocols, buf, bsptr);
-	if(rval == -1) {
-		return -1;
-	}
-	
-	if(!protocols) {
-		want_ipx = 1;
-	}else{
-		for(i = 0; protocols[i]; i++) {
-			if(protocols[i] == NSPROTO_IPX) {
-				want_ipx = 1;
-				break;
-			}
-		}
-	}
-	
-	if(want_ipx) {
-		for(i = 0; i < rval; i++) {
-			if(pinfo[i].iProtocol == NSPROTO_IPX) {
-				break;
-			}
-		}
-		
-		if(i == rval) {
-			*bsptr += sizeof(PROTOCOL_INFOW);
-			rval++;
-		}
-		
-		if(*bsptr > bufsize) {
-			SetLastError(ERROR_INSUFFICIENT_BUFFER);
-			return -1;
-		}
-		
-		pinfo[i].dwServiceFlags = 5641;
-		pinfo[i].iAddressFamily = AF_IPX;
-		pinfo[i].iMaxSockAddr = 16;
-		pinfo[i].iMinSockAddr = 14;
-		pinfo[i].iSocketType = SOCK_DGRAM;
-		pinfo[i].iProtocol = NSPROTO_IPX;
-		pinfo[i].dwMessageSize = 576;
-		pinfo[i].lpProtocol = L"IPX";
-	}
-	
-	return rval;
+	return do_EnumProtocols(protocols, buf, bsptr, TRUE);
 }
 
 SOCKET WSAAPI socket(int af, int type, int protocol) {
