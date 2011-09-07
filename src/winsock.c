@@ -20,18 +20,28 @@
 #include <wsipx.h>
 #include <mswsock.h>
 #include <nspapi.h>
-
-#include "winstuff.h"
+#include <wsnwlink.h>
 
 #include "ipxwrapper.h"
 #include "common.h"
 #include "interface.h"
 #include "router.h"
 
+typedef struct _PROTOCOL_INFOA {
+	DWORD dwServiceFlags ;
+	INT iAddressFamily ;
+	INT iMaxSockAddr ;
+	INT iMinSockAddr ;
+	INT iSocketType ;
+	INT iProtocol ;
+	DWORD dwMessageSize ;
+	LPSTR   lpProtocol ;
+} PROTOCOL_INFOA;
+
 INT APIENTRY EnumProtocolsA(LPINT protocols, LPVOID buf, LPDWORD bsptr) {
 	int bufsize = *bsptr, rval, i, want_ipx = 0;
 	
-	PROTOCOL_INFO *pinfo = buf;
+	PROTOCOL_INFOA *pinfo = buf;
 	
 	rval = r_EnumProtocolsA(protocols, buf, bsptr);
 	if(rval == -1) {
@@ -57,7 +67,7 @@ INT APIENTRY EnumProtocolsA(LPINT protocols, LPVOID buf, LPDWORD bsptr) {
 		}
 		
 		if(i == rval) {
-			*bsptr += sizeof(PROTOCOL_INFO);
+			*bsptr += sizeof(PROTOCOL_INFOA);
 			rval++;
 		}
 		
@@ -79,10 +89,21 @@ INT APIENTRY EnumProtocolsA(LPINT protocols, LPVOID buf, LPDWORD bsptr) {
 	return rval;
 }
 
+typedef struct _PROTOCOL_INFOW {
+	DWORD dwServiceFlags ;
+	INT iAddressFamily ;
+	INT iMaxSockAddr ;
+	INT iMinSockAddr ;
+	INT iSocketType ;
+	INT iProtocol ;
+	DWORD dwMessageSize ;
+	LPWSTR  lpProtocol ;
+} PROTOCOL_INFOW;
+
 INT APIENTRY EnumProtocolsW(LPINT protocols, LPVOID buf, LPDWORD bsptr) {
 	int bufsize = *bsptr, rval, i, want_ipx = 0;
 	
-	PROTOCOL_INFO *pinfo = buf;
+	PROTOCOL_INFOW *pinfo = buf;
 	
 	rval = r_EnumProtocolsW(protocols, buf, bsptr);
 	if(rval == -1) {
@@ -108,7 +129,7 @@ INT APIENTRY EnumProtocolsW(LPINT protocols, LPVOID buf, LPDWORD bsptr) {
 		}
 		
 		if(i == rval) {
-			*bsptr += sizeof(PROTOCOL_INFO);
+			*bsptr += sizeof(PROTOCOL_INFOW);
 			rval++;
 		}
 		
@@ -124,7 +145,7 @@ INT APIENTRY EnumProtocolsW(LPINT protocols, LPVOID buf, LPDWORD bsptr) {
 		pinfo[i].iSocketType = SOCK_DGRAM;
 		pinfo[i].iProtocol = NSPROTO_IPX;
 		pinfo[i].dwMessageSize = 576;
-		pinfo[i].lpProtocol = (char*)L"IPX";
+		pinfo[i].lpProtocol = L"IPX";
 	}
 	
 	return rval;

@@ -23,9 +23,10 @@ IPXWRAPPER_DEPS := src/ipxwrapper.o src/winsock.o src/ipxwrapper_stubs.o src/log
 BIN_FILES := changes.txt license.txt readme.txt ipxwrapper.dll mswsock.dll wsock32.dll ipxconfig.exe
 SRC_FILES := changes.txt license.txt Makefile mkstubs.pl readme.txt src/config.h src/ipxconfig.cpp \
 	src/ipxwrapper.c src/ipxwrapper.def src/ipxwrapper.h src/ipxwrapper_stubs.txt src/log.c \
-	src/mswsock.def src/mswsock_stubs.txt src/stubdll.c src/winsock.c src/winstuff.h src/wsock32.def \
+	src/mswsock.def src/mswsock_stubs.txt src/stubdll.c src/winsock.c src/wsock32.def \
 	src/wsock32_stubs.txt src/directplay.c src/dpwsockx.def src/dpwsockx_stubs.txt src/common.c \
-	src/common.h src/router.c src/router.h include/dplay.h include/dplaysp.h include/dplobby.h
+	src/common.h src/router.c src/router.h include/dplay.h include/dplaysp.h include/dplobby.h \
+	include/wsnwlink.h
 
 all: ipxwrapper.dll wsock32.dll mswsock.dll ipxconfig.exe dpwsockx.dll
 
