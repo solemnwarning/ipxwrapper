@@ -17,6 +17,8 @@
 
 /* TODO: ASYNC I/O!! */
 
+#define INITGUID
+
 #include <windows.h>
 #include <dplaysp.h>
 #include <winsock2.h>
@@ -39,13 +41,6 @@ struct sp_data {
 struct sp_data_cont {
 	struct sp_data *data;
 	HANDLE mutex;
-};
-
-const GUID IPX_GUID = {
-	0x685BC400,
-	0x9D2C,
-	0x11CF,
-	{0xA9, 0xCD, 0x00, 0xAA, 0x00, 0x68, 0x86, 0xE3}
 };
 
 #define DISCOVERY_SOCKET 42367
@@ -364,7 +359,7 @@ static HRESULT WINAPI IPX_ShutdownEx(LPDPSP_SHUTDOWNDATA data) {
 HRESULT WINAPI r_SPInit(LPSPINITDATA);
 
 HRESULT WINAPI SPInit(LPSPINITDATA data) {
-	if(!IsEqualGUID(data->lpGuid, &IPX_GUID)) {
+	if(!IsEqualGUID(data->lpGuid, &DPSPGUID_IPX)) {
 		return r_SPInit(data);
 	}
 	
