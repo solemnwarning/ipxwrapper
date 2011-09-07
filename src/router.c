@@ -72,8 +72,8 @@ struct router_vars *router_init(BOOL global) {
 	struct sockaddr_in addr;
 	
 	addr.sin_family = AF_INET;
-	addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-	addr.sin_port = 9999;
+	addr.sin_addr.s_addr = INADDR_ANY;
+	addr.sin_port = htons(global_conf.udp_port);
 	
 	if(bind(router->udp_sock, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
 		log_printf("Error binding UDP socket: %s", w32_error(WSAGetLastError()));
@@ -143,30 +143,36 @@ void router_destroy(struct router_vars *router) {
 DWORD router_main(void *arg) {
 	struct router_vars *router = arg;
 	
+	const unsigned char f6[] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
+	
 	while(1) {
 		WaitForSingleObject(router->wsa_event, INFINITE);
 		
 		EnterCriticalSection(&(router->crit_sec));
+		
+		WSAResetEvent(router->wsa_event);
 		
 		if(!router->running) {
 			LeaveCriticalSection(&(router->crit_sec));
 			return 0;
 		}
 		
+		LeaveCriticalSection(&(router->crit_sec));
+		
 		struct sockaddr_in addr;
 		int addrlen = sizeof(addr);
 		
-		int len = recvfrom(router->udp_sock, router->recvbuf, PACKET_BUF_SIZE, 0, (struct sockaddr*)&addr, &addrlen);
+		int len = r_recvfrom(router->udp_sock, router->recvbuf, PACKET_BUF_SIZE, 0, (struct sockaddr*)&addr, &addrlen);
 		if(len == -1) {
-			LeaveCriticalSection(&(router->crit_sec));
-			
-			if(WSAGetLastError() == WSAEWOULDBLOCK) {
+			if(WSAGetLastError() == WSAEWOULDBLOCK || WSAGetLastError() == WSAECONNRESET) {
 				continue;
 			}
 			
 			log_printf("Error reading from UDP socket: %s", w32_error(WSAGetLastError()));
 			return 1;
 		}
+		
+		EnterCriticalSection(&(router->crit_sec));
 		
 		ipx_packet *packet = (ipx_packet*)router->recvbuf;
 		
@@ -186,6 +192,7 @@ DWORD router_main(void *arg) {
 			}
 			
 			if(!iface) {
+				LeaveCriticalSection(&(router->crit_sec));
 				continue;
 			}
 		}
@@ -193,7 +200,7 @@ DWORD router_main(void *arg) {
 		packet->size = ntohs(packet->size);
 		
 		if(packet->size > MAX_PACKET_SIZE || packet->size + sizeof(ipx_packet) - 1 != len) {
-			log_printf("Recieved packet with incorrect size field, discarding");
+			LeaveCriticalSection(&(router->crit_sec));
 			continue;
 		}
 		
@@ -202,8 +209,6 @@ DWORD router_main(void *arg) {
 		struct router_addr *ra = router->addrs;
 		
 		while(ra) {
-			unsigned char f6[] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
-			
 			if(
 				ra->local_port &&
 				(ra->filter_ptype < 0 || ra->filter_ptype == packet->ptype) &&
@@ -214,7 +219,7 @@ DWORD router_main(void *arg) {
 				addr.sin_addr.s_addr = inet_addr("127.0.0.1");
 				addr.sin_port = ra->local_port;
 				
-				if(sendto(router->udp_sock, (char*)packet, len, 0, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
+				if(r_sendto(router->udp_sock, (char*)packet, len, 0, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
 					log_printf("Error relaying packet: %s", w32_error(WSAGetLastError()));
 				}
 			}
@@ -228,7 +233,20 @@ DWORD router_main(void *arg) {
 	return 0;
 }
 
-int router_bind(struct router_vars *router, SOCKET control, SOCKET sock, struct sockaddr_ipx *addr) {
+int router_bind(struct router_vars *router, SOCKET control, SOCKET sock, struct sockaddr_ipx *addr, uint32_t *nic_bcast) {
+	/* Network number 00:00:00:00 is specified as the "current" network, this code
+	 * treats it as a wildcard when used for the network OR node numbers.
+	 *
+	 * According to MSDN 6, IPX socket numbers are unique to systems rather than
+	 * interfaces and as such, the same socket number cannot be bound to more than
+	 * one interface, my code lacks any "catch all" address like INADDR_ANY as I have
+	 * not found any mentions of an equivalent address for IPX. This means that a
+	 * given socket number may only be used on one interface.
+	 *
+	 * If you know the above information about IPX socket numbers to be incorrect,
+	 * PLEASE email me with corrections!
+	*/
+	
 	struct ipx_interface *ifaces = get_interfaces(-1), *iface;
 	unsigned char z6[] = {0,0,0,0,0,0};
 	
@@ -252,6 +270,8 @@ int router_bind(struct router_vars *router, SOCKET control, SOCKET sock, struct 
 	
 	memcpy(addr->sa_netnum, iface->ipx_net, 4);
 	memcpy(addr->sa_nodenum, iface->ipx_node, 6);
+	
+	*nic_bcast = iface->bcast;
 	
 	free_interfaces(ifaces);
 	
@@ -352,7 +372,7 @@ void router_set_port(struct router_vars *router, SOCKET control, SOCKET sock, ui
 	LeaveCriticalSection(&(router->crit_sec));
 }
 
-void router_close(struct router_vars *router, SOCKET control, SOCKET sock) {
+void router_unbind(struct router_vars *router, SOCKET control, SOCKET sock) {
 	EnterCriticalSection(&(router->crit_sec));
 	
 	struct router_addr *addr = router->addrs, *prev = NULL;

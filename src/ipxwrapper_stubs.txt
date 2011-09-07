@@ -8,6 +8,10 @@ ntohl
 htons
 ntohs
 select
+WSACreateEvent
+WSAEventSelect
+WSACloseEvent
+WSAResetEvent
 r_EnumProtocolsA
 r_EnumProtocolsW
 r_WSARecvEx

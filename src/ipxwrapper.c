@@ -29,6 +29,7 @@
 #include "ipxwrapper.h"
 #include "common.h"
 #include "interface.h"
+#include "router.h"
 
 #define DLL_UNLOAD(dll) \
 	if(dll) {\
@@ -41,7 +42,6 @@ struct ipx_interface *nics = NULL;
 ipx_host *hosts = NULL;
 SOCKET net_fd = -1;
 struct reg_global global_conf;
-static void *router_buf = NULL;
 
 HMODULE winsock2_dll = NULL;
 HMODULE mswsock_dll = NULL;
@@ -49,10 +49,9 @@ HMODULE wsock32_dll = NULL;
 
 static HANDLE mutex = NULL;
 static HANDLE router_thread = NULL;
-static DWORD router_tid = 0;
+struct router_vars *router = NULL;
 
-static int init_router(void);
-static DWORD WINAPI router_main(LPVOID argp);
+static BOOL start_router(void);
 
 BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 	if(why == DLL_PROCESS_ATTACH) {
@@ -90,21 +89,23 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 			return FALSE;
 		}
 		
-		if(!init_router()) {
+		if(!start_router()) {
 			return FALSE;
 		}
 	}else if(why == DLL_PROCESS_DETACH) {
-		if(router_thread && GetCurrentThreadId() != router_tid) {
-			TerminateThread(router_thread, 0);
+		if(router_thread) {
+			EnterCriticalSection(&(router->crit_sec));
+			
+			router->running = FALSE;
+			SetEvent(router->wsa_event);
+			
+			LeaveCriticalSection(&(router->crit_sec));
+			
+			WaitForSingleObject(router_thread, INFINITE);
 			router_thread = NULL;
-		}
-		
-		free(router_buf);
-		router_buf = NULL;
-		
-		if(net_fd >= 0) {
-			closesocket(net_fd);
-			net_fd = -1;
+			
+			router_destroy(router);
+			router = NULL;
 		}
 		
 		if(mutex) {
@@ -182,143 +183,24 @@ void unlock_mutex(void) {
 }
 
 /* Initialize and start the router thread */
-static int init_router(void) {
-	net_fd = r_socket(AF_INET, SOCK_DGRAM, 0);
-	if(net_fd == -1) {
-		log_printf("Failed to create network socket: %s", w32_error(WSAGetLastError()));
-		return 0;
+static BOOL start_router(void) {
+	if(!(router = router_init(FALSE))) {
+		return FALSE;
 	}
 	
-	struct sockaddr_in bind_addr;
-	bind_addr.sin_family = AF_INET;
-	bind_addr.sin_addr.s_addr = INADDR_ANY;
-	bind_addr.sin_port = htons(global_conf.udp_port);
-	
-	if(r_bind(net_fd, (struct sockaddr*)&bind_addr, sizeof(bind_addr)) == -1) {
-		log_printf("Failed to bind network socket: %s", w32_error(WSAGetLastError()));
-		return 0;
-	}
-	
-	BOOL broadcast = TRUE;
-	int bufsize = 524288;	/* 512KiB */
-	
-	r_setsockopt(net_fd, SOL_SOCKET, SO_BROADCAST, (char*)&broadcast, sizeof(BOOL));
-	r_setsockopt(net_fd, SOL_SOCKET, SO_RCVBUF, (char*)&bufsize, sizeof(int));
-	r_setsockopt(net_fd, SOL_SOCKET, SO_SNDBUF, (char*)&bufsize, sizeof(int));
-	
-	router_buf = malloc(PACKET_BUF_SIZE);
-	if(!router_buf) {
-		log_printf("Not enough memory for router buffer (64KiB)");
-		return 0;
-	}
-	
-	router_thread = CreateThread(NULL, 0, &router_main, NULL, 0, &router_tid);
+	router_thread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)&router_main, router, 0, NULL);
 	if(!router_thread) {
-		log_printf("Failed to create router thread");
-		return 0;
+		log_printf("Failed to create router thread: %s", w32_error(GetLastError()));
+		
+		router_destroy(router);
+		router = NULL;
+		
+		return FALSE;
 	}
 	
-	return 1;
-}
-
-/* Router thread main function
- *
- * The router thread recieves packets from the listening port and forwards them
- * to the UDP sockets which emulate IPX.
-*/
-static DWORD WINAPI router_main(LPVOID notused) {
-	ipx_packet *packet = router_buf;
-	int addrlen, rval, sval;
-	unsigned char f6[] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
-	struct sockaddr_in addr;
-	ipx_socket *sockptr;
+	net_fd = router->udp_sock;
 	
-	while(1) {
-		addrlen = sizeof(addr);
-		rval = r_recvfrom(net_fd, (char*)packet, PACKET_BUF_SIZE, 0, (struct sockaddr*)&addr, &addrlen);
-		if(rval <= 0) {
-			log_printf("Error recieving packet: %s", w32_error(WSAGetLastError()));
-			continue;
-		}
-		
-		if(global_conf.filter) {
-			struct ipx_interface *nic = nics;
-			
-			while(nic) {
-				if((nic->ipaddr & nic->netmask) == (addr.sin_addr.s_addr & nic->netmask)) {
-					break;
-				}
-				
-				nic = nic->next;
-			}
-			
-			if(!nic) {
-				/* Packet not recieved from subnet of an enabled interface */
-				continue;
-			}
-		}
-		
-		packet->size = ntohs(packet->size);
-		
-		if(packet->size > MAX_PACKET_SIZE || packet->size+sizeof(ipx_packet)-1 != rval) {
-			log_printf("Recieved packet with incorrect size field, discarding");
-			continue;
-		}
-		
-		lock_mutex();
-		
-		add_host(packet->src_net, packet->src_node, addr.sin_addr.s_addr);
-		
-		for(sockptr = sockets; sockptr; sockptr = sockptr->next) {
-			if(
-				sockptr->flags & IPX_RECV &&
-				(
-					!(sockptr->flags & IPX_FILTER) ||
-					packet->ptype == sockptr->f_ptype
-				) && ((
-					sockptr->flags & IPX_BOUND &&
-					packet->dest_socket == sockptr->socket &&
-					(
-						memcmp(packet->dest_net, sockptr->nic->ipx_net, 4) == 0 ||
-						(
-							memcmp(packet->dest_net, f6, 4) == 0 &&
-							(!global_conf.w95_bug || sockptr->flags & IPX_BROADCAST)
-						)
-					) && (
-						memcmp(packet->dest_node, sockptr->nic->ipx_node, 6) == 0 ||
-						(
-							memcmp(packet->dest_node, f6, 6) == 0 &&
-							(!global_conf.w95_bug || sockptr->flags & IPX_BROADCAST)
-						)
-					)
-				) || (
-					sockptr->flags & IPX_EX_BOUND &&
-					packet->dest_socket == sockptr->ex_socket &&
-					(
-						memcmp(packet->dest_net, sockptr->ex_nic->ipx_net, 4) == 0 ||
-						memcmp(packet->dest_net, f6, 4) == 0
-					) && (
-						memcmp(packet->dest_node, sockptr->ex_nic->ipx_node, 6) == 0 ||
-						memcmp(packet->dest_node, f6, 6) == 0
-					)
-				))
-			) {
-				addrlen = sizeof(addr);
-				if(r_getsockname(sockptr->fd, (struct sockaddr*)&addr, &addrlen) == -1) {
-					continue;
-				}
-				
-				sval = r_sendto(sockptr->fd, (char*)packet, rval, 0, (struct sockaddr*)&addr, addrlen);
-				if(sval == -1) {
-					log_printf("Error relaying packet: %s", w32_error(WSAGetLastError()));
-				}
-			}
-		}
-		
-		unlock_mutex();
-	}
-	
-	return 0;
+	return TRUE;
 }
 
 /* Add a host to the hosts list or update an existing one */

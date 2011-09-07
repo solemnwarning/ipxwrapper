@@ -25,6 +25,7 @@
 #include <stdio.h>
 
 #include "config.h"
+#include "router.h"
 
 /* Maximum UDP data size is 65467, we use a smaller value to ensure we have
  * plenty of space to play with for headers, etc
@@ -65,8 +66,8 @@ struct ipx_socket {
 	uint8_t f_ptype;	/* Undefined when IPX_FILTER isn't set */
 	
 	/* The following values are undefined when IPX_BOUND is not set */
-	struct ipx_interface *nic;
-	uint16_t socket; /* Stored in NETWORK BYTE ORDER */
+	struct sockaddr_ipx addr;
+	uint32_t nic_bcast;
 	
 	/* Extra bind address, only used for receiving packets.
 	 * Only defined when IPX_EX_BOUND is set.
@@ -107,6 +108,7 @@ extern struct ipx_interface *nics;
 extern ipx_host *hosts;
 extern SOCKET net_fd;
 extern struct reg_global global_conf;
+extern struct router_vars *router;
 
 extern HMODULE winsock2_dll;
 extern HMODULE mswsock_dll;

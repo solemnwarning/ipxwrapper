@@ -26,6 +26,7 @@
 #include "ipxwrapper.h"
 #include "common.h"
 #include "interface.h"
+#include "router.h"
 
 INT APIENTRY EnumProtocolsA(LPINT protocols, LPVOID buf, LPDWORD bsptr) {
 	int bufsize = *bsptr, rval, i, want_ipx = 0;
@@ -180,6 +181,8 @@ int WSAAPI closesocket(SOCKET fd) {
 	
 	log_printf("IPX socket closed (fd = %d)", fd);
 	
+	router_unbind(router, 0, fd);
+	
 	if(ptr == sockets) {
 		sockets = ptr->next;
 		free(ptr);
@@ -201,122 +204,61 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen) {
 	ipx_socket *ptr = get_socket(fd);
 	
 	if(ptr) {
-		struct sockaddr_ipx *ipxaddr = (struct sockaddr_ipx*)addr;
+		struct sockaddr_ipx ipxaddr;
 		char net_s[12], node_s[18];
 		
-		NET_TO_STRING(net_s, ipxaddr->sa_netnum);
-		NODE_TO_STRING(node_s, ipxaddr->sa_nodenum);
+		if(addrlen < sizeof(ipxaddr)) {
+			RETURN_WSA(WSAEFAULT, -1);
+		}
 		
-		log_printf("bind(%d, net=%s node=%s socket=%hu)", fd, net_s, node_s, ntohs(ipxaddr->sa_socket));
+		memcpy(&ipxaddr, addr, sizeof(ipxaddr));
+		
+		NET_TO_STRING(net_s, ipxaddr.sa_netnum);
+		NODE_TO_STRING(node_s, ipxaddr.sa_nodenum);
+		
+		log_printf("bind(%d, net=%s node=%s socket=%hu)", fd, net_s, node_s, ntohs(ipxaddr.sa_socket));
 		
 		if(ptr->flags & IPX_BOUND) {
 			log_printf("bind failed: socket already bound");
 			RETURN_WSA(WSAEINVAL, -1);
 		}
 		
-		/* Network number 00:00:00:00 is specified as the "current" network, this code
-		 * treats it as a wildcard when used for the network OR node numbers.
-		 *
-		 * According to MSDN 6, IPX socket numbers are unique to systems rather than
-		 * interfaces and as such, the same socket number cannot be bound to more than
-		 * one interface, my code lacks any "catch all" address like INADDR_ANY as I have
-		 * not found any mentions of an equivalent address for IPX. This means that a
-		 * given socket number may only be used on one interface.
-		 *
-		 * If you know the above information about IPX socket numbers to be incorrect,
-		 * PLEASE email me with corrections!
-		*/
-		
-		unsigned char z6[] = {0,0,0,0,0,0};
-		struct ipx_interface *nic = nics;
-		
-		while(nic) {
-			if(
-				(memcmp(ipxaddr->sa_netnum, nic->ipx_net, 4) == 0 || memcmp(ipxaddr->sa_netnum, z6, 4) == 0) &&
-				(memcmp(ipxaddr->sa_nodenum, nic->ipx_node, 6) == 0 || memcmp(ipxaddr->sa_nodenum, z6, 6) == 0)
-			) {
-				break;
-			}
-			
-			nic = nic->next;
+		if(router_bind(router, 0, fd, &ipxaddr, &(ptr->nic_bcast)) == -1) {
+			RETURN(-1);
 		}
 		
-		if(!nic) {
-			log_printf("bind failed: no such address");
-			RETURN_WSA(WSAEADDRNOTAVAIL, -1);
-		}
+		NET_TO_STRING(net_s, ipxaddr.sa_netnum);
+		NODE_TO_STRING(node_s, ipxaddr.sa_nodenum);
 		
-		ptr->nic = nic;
-		
-		if(ipxaddr->sa_socket == 0) {
-			/* Automatic socket allocations start at 1024, I have no idea if
-			 * this is normal IPX behaviour, but IP does it and it doesn't seem
-			 * to interfere with any IPX software I've tested.
-			*/
-			
-			uint16_t s = 1024;
-			ipx_socket *socket = sockets;
-			
-			while(socket) {
-				if(ntohs(socket->socket) == s && socket->flags & IPX_BOUND) {
-					if(s == 65535) {
-						log_printf("bind failed: out of sockets?!");
-						RETURN_WSA(WSAEADDRNOTAVAIL, -1);
-					}
-					
-					s++;
-					socket = sockets;
-					
-					continue;
-				}
-				
-				socket = socket->next;
-			}
-			
-			ptr->socket = htons(s);
-		}else{
-			/* Test if any bound socket is using the requested socket number. */
-			
-			ipx_socket *socket = sockets;
-			
-			while(socket) {
-				if(socket->socket == ipxaddr->sa_socket && socket->flags & IPX_BOUND) {
-					log_printf("bind failed: requested socket in use");
-					RETURN_WSA(WSAEADDRINUSE, -1);
-				}
-				
-				socket = socket->next;
-			}
-			
-			ptr->socket = ipxaddr->sa_socket;
-		}
-		
-		NET_TO_STRING(net_s, nic->ipx_net);
-		NODE_TO_STRING(node_s, nic->ipx_node);
-		
-		log_printf("bind address: net=%s node=%s socket=%hu", net_s, node_s, ntohs(ptr->socket));
-		
-		/* TODO: Bind fake socket in socket() call rather than here?
-		 *
-		 * I think I put the bind() call for it here so that the fd given to the
-		 * program would be in the expected un-bound state, although I'm not sure
-		 * if there are any winsock calls it could ONLY make on such a socket.
-		*/
+		log_printf("bind address: net=%s node=%s socket=%hu", net_s, node_s, ntohs(ipxaddr.sa_socket));
 		
 		struct sockaddr_in bind_addr;
 		bind_addr.sin_family = AF_INET;
-		bind_addr.sin_port = 0;
 		bind_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+		bind_addr.sin_port = 0;
 		
-		int rval = r_bind(fd, (struct sockaddr*)&bind_addr, sizeof(bind_addr));
-		
-		if(rval == 0) {
-			ptr->flags |= IPX_BOUND;
-		}else{
-			log_printf("Binding fake socket failed: %s", w32_error(WSAGetLastError()));
+		if(r_bind(fd, (struct sockaddr*)&bind_addr, sizeof(bind_addr)) == -1) {
+			log_printf("Binding local UDP socket failed: %s", w32_error(WSAGetLastError()));
+			
+			router_unbind(router, 0, fd);
+			RETURN(-1);
 		}
 		
-		RETURN(rval);
+		int al = sizeof(bind_addr);
+		
+		if(r_getsockname(fd, (struct sockaddr*)&bind_addr, &al) == -1) {
+			log_printf("getsockname failed: %s", w32_error(WSAGetLastError()));
+			
+			router_unbind(router, 0, fd);
+			RETURN(-1);
+		}
+		
+		memcpy(&(ptr->addr), &ipxaddr, sizeof(ipxaddr));
+		ptr->flags |= IPX_BOUND;
+		
+		router_set_port(router, 0, fd, bind_addr.sin_port);
+		
+		RETURN(0);
 	}else{
 		RETURN(r_bind(fd, addr, addrlen));
 	}
@@ -326,61 +268,10 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen) {
  * Attempts to bind socket 0 will really bind socket 0
 */
 int ipx_ex_bind(SOCKET fd, const struct sockaddr_ipx *ipxaddr) {
-	ipx_socket *ptr = get_socket(fd);
-	
-	if(!ipxaddr) {
-		/* Call with NULL address to remove extra bind */
-		log_printf("ipx_ex_bind(%d, NULL)", fd);
-		
-		ptr->flags &= ~IPX_EX_BOUND;
-		RETURN(0);
-	}
-	
-	char net_s[12], node_s[18];
-	
-	NET_TO_STRING(net_s, ipxaddr->sa_netnum);
-	NODE_TO_STRING(node_s, ipxaddr->sa_nodenum);
-	
-	log_printf("ipx_ex_bind(%d, net=%s node=%s socket=%hu)", fd, net_s, node_s, ntohs(ipxaddr->sa_socket));
-	
-	if(!(ptr->flags & IPX_BOUND)) {
-		log_printf("ipx_ex_bind: Socket is not bound");
-		RETURN_WSA(WSAEINVAL, -1);
-	}
-	
-	unsigned char z6[] = {0,0,0,0,0,0};
-	struct ipx_interface *nic = nics;
-	
-	while(nic) {
-		if(
-			(memcmp(ipxaddr->sa_netnum, nic->ipx_net, 4) == 0 || memcmp(ipxaddr->sa_netnum, z6, 4) == 0) &&
-			(memcmp(ipxaddr->sa_nodenum, nic->ipx_node, 6) == 0 || memcmp(ipxaddr->sa_nodenum, z6, 6) == 0)
-		) {
-			break;
-		}
-		
-		nic = nic->next;
-	}
-	
-	if(!nic) {
-		log_printf("ipx_ex_bind: no such address");
-		RETURN_WSA(WSAEADDRNOTAVAIL, -1);
-	}
-	
-	NET_TO_STRING(net_s, nic->ipx_net);
-	NODE_TO_STRING(node_s, nic->ipx_node);
-	
-	log_printf("bind address: net=%s node=%s socket=%hu", net_s, node_s, ntohs(ipxaddr->sa_socket));
-	
-	ptr->ex_nic = nic;
-	ptr->ex_socket = ipxaddr->sa_socket;
-	ptr->flags |= IPX_EX_BOUND;
-	
-	RETURN(0);
+	return 0;
 }
 
 int WSAAPI getsockname(SOCKET fd, struct sockaddr *addr, int *addrlen) {
-	struct sockaddr_ipx *ipxaddr = (struct sockaddr_ipx*)addr;
 	ipx_socket *ptr = get_socket(fd);
 	
 	if(ptr) {
@@ -390,11 +281,7 @@ int WSAAPI getsockname(SOCKET fd, struct sockaddr *addr, int *addrlen) {
 				RETURN_WSA(WSAEFAULT, -1);
 			}
 			
-			ipxaddr->sa_family = AF_IPX;
-			memcpy(ipxaddr->sa_netnum, ptr->nic->ipx_net, 4);
-			memcpy(ipxaddr->sa_nodenum, ptr->nic->ipx_node, 6);
-			ipxaddr->sa_socket = ptr->socket;
-			
+			memcpy(addr, &(ptr->addr), sizeof(ptr->addr));
 			*addrlen = sizeof(struct sockaddr_ipx);
 			
 			RETURN(0);
@@ -629,11 +516,16 @@ int WSAAPI setsockopt(SOCKET fd, int level, int optname, const char FAR *optval,
 				sockptr->f_ptype = *intval;
 				sockptr->flags |= IPX_FILTER;
 				
+				router_set_filter(router, 0, fd, *intval);
+				
 				RETURN(0);
 			}
 			
 			if(optname == IPX_STOPFILTERPTYPE) {
 				sockptr->flags &= ~IPX_FILTER;
+				
+				router_set_filter(router, 0, fd, -1);
+				
 				RETURN(0);
 			}
 			
@@ -705,12 +597,12 @@ int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct s
 		unsigned char z6[] = {0,0,0,0,0,0};
 		
 		if(memcmp(packet->dest_net, z6, 4) == 0) {
-			memcpy(packet->dest_net, sockptr->nic->ipx_net, 4);
+			memcpy(packet->dest_net, sockptr->addr.sa_netnum, 4);
 		}
 		
-		memcpy(packet->src_net, sockptr->nic->ipx_net, 4);
-		memcpy(packet->src_node, sockptr->nic->ipx_node, 6);
-		packet->src_socket = sockptr->socket;
+		memcpy(packet->src_net, sockptr->addr.sa_netnum, 4);
+		memcpy(packet->src_node, sockptr->addr.sa_nodenum, 6);
+		packet->src_socket = sockptr->addr.sa_socket;
 		
 		packet->size = htons(len);
 		memcpy(packet->data, buf, len);
@@ -720,7 +612,7 @@ int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct s
 		struct sockaddr_in saddr;
 		saddr.sin_family = AF_INET;
 		saddr.sin_port = htons(global_conf.udp_port);
-		saddr.sin_addr.s_addr = (host ? host->ipaddr : (global_conf.bcast_all ? INADDR_BROADCAST : sockptr->nic->bcast));
+		saddr.sin_addr.s_addr = (host ? host->ipaddr : (global_conf.bcast_all ? INADDR_BROADCAST : sockptr->nic_bcast));
 		
 		int sval = r_sendto(net_fd, (char*)packet, psize, 0, (struct sockaddr*)&saddr, sizeof(saddr));
 		if(sval == -1) {
@@ -744,6 +636,7 @@ int PASCAL shutdown(SOCKET fd, int cmd) {
 		
 		if(cmd == SD_RECEIVE || cmd == SD_BOTH) {
 			sockptr->flags &= ~IPX_RECV;
+			router_set_port(router, 0, fd, 0);
 		}
 		
 		RETURN(0);

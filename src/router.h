@@ -61,9 +61,11 @@ struct router_vars {
 struct router_vars *router_init(BOOL global);
 void router_destroy(struct router_vars *router);
 
-int router_bind(struct router_vars *router, SOCKET control, SOCKET sock, struct sockaddr_ipx *addr);
+DWORD router_main(void *arg);
+
+int router_bind(struct router_vars *router, SOCKET control, SOCKET sock, struct sockaddr_ipx *addr, uint32_t *nic_bcast);
 void router_set_port(struct router_vars *router, SOCKET control, SOCKET sock, uint16_t port);
-void router_close(struct router_vars *router, SOCKET control, SOCKET sock);
+void router_unbind(struct router_vars *router, SOCKET control, SOCKET sock);
 void router_set_filter(struct router_vars *router, SOCKET control, SOCKET sock, int ptype);
 
 #endif /* !IPXWRAPPER_ROUTER_H */
