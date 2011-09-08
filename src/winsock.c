@@ -231,13 +231,6 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen) {
 	}
 }
 
-/* Bind extra address of a socket, does not check if address is already in use
- * Attempts to bind socket 0 will really bind socket 0
-*/
-int ipx_ex_bind(SOCKET fd, const struct sockaddr_ipx *ipxaddr) {
-	return 0;
-}
-
 int WSAAPI getsockname(SOCKET fd, struct sockaddr *addr, int *addrlen) {
 	ipx_socket *ptr = get_socket(fd);
 	

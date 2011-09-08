@@ -31,6 +31,7 @@ struct sp_data {
 	SOCKET sock;
 	struct sockaddr_ipx addr;
 	
+	SOCKET ns_sock;			/* For RECEIVING discovery messages only, -1 when not hosting */
 	struct sockaddr_ipx ns_addr;	/* sa_family is 0 when undefined */
 	DPID ns_id;
 	
@@ -310,14 +311,31 @@ static HRESULT WINAPI IPX_Open(LPDPSP_OPENDATA data) {
 	struct sp_data *sp_data = get_sp_data(data->lpISP);
 	
 	if(data->bCreate) {
-		struct sockaddr_ipx addr;
+		if(sp_data->ns_sock == -1) {
+			if((sp_data->ns_sock = socket(AF_IPX, SOCK_DGRAM, NSPROTO_IPX)) == -1) {
+				release_sp_data(data->lpISP);
+				
+				log_printf("Cannot create ns_sock: %s", w32_error(WSAGetLastError()));
+				return DPERR_CANNOTCREATESERVER;
+			}
+			
+			BOOL reuse = TRUE;
+			setsockopt(sp_data->ns_sock, SOL_SOCKET, SO_REUSEADDR, (char*)&reuse, sizeof(BOOL));
+			
+			struct sockaddr_ipx addr;
+			
+			memcpy(&addr, &(sp_data->addr), sizeof(addr));
+			addr.sa_socket = htons(DISCOVERY_SOCKET);
 		
-		memcpy(&addr, &(sp_data->addr), sizeof(addr));
-		addr.sa_socket = htons(DISCOVERY_SOCKET);
-	
-		if(ipx_ex_bind(sp_data->sock, &addr) == -1) {
-			release_sp_data(data->lpISP);
-			return DPERR_CANNOTCREATESERVER;
+			if(bind(sp_data->ns_sock, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
+				closesocket(sp_data->ns_sock);
+				sp_data->ns_sock = -1;
+				
+				release_sp_data(data->lpISP);
+				
+				log_printf("Cannot bind ns_sock: %s", w32_error(WSAGetLastError()));
+				return DPERR_CANNOTCREATESERVER;
+			}
 		}
 	}else if(data->lpSPMessageHeader) {
 		memcpy(&(sp_data->ns_addr), data->lpSPMessageHeader, sizeof(struct sockaddr_ipx));
@@ -333,8 +351,10 @@ static HRESULT WINAPI IPX_CloseEx(LPDPSP_CLOSEDATA data) {
 	
 	struct sp_data *sp_data = get_sp_data(data->lpISP);
 	
-	/* Disable the special bind if in use */
-	ipx_ex_bind(sp_data->sock, NULL);
+	if(sp_data->ns_sock != -1) {
+		closesocket(sp_data->ns_sock);
+		sp_data->ns_sock = -1;
+	}
 	
 	release_sp_data(data->lpISP);
 	return DP_OK;
@@ -424,6 +444,7 @@ HRESULT WINAPI SPInit(LPSPINITDATA data) {
 		return DPERR_UNAVAILABLE;
 	}
 	
+	sp_data->ns_sock = -1;
 	sp_data->ns_addr.sa_family = 0;
 	sp_data->worker_thread = NULL;
 	

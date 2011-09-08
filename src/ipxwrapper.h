@@ -38,7 +38,6 @@
 #define IPX_BROADCAST	(int)(1<<2)
 #define IPX_SEND	(int)(1<<3)
 #define IPX_RECV	(int)(1<<4)
-#define IPX_EX_BOUND	(int)(1<<5)
 #define IPX_REUSE	(int)(1<<6)
 
 #define RETURN(...) \
@@ -119,8 +118,6 @@ void add_host(const unsigned char *net, const unsigned char *node, uint32_t ipad
 
 void log_open();
 void log_close();
-
-int ipx_ex_bind(SOCKET fd, const struct sockaddr_ipx *ipxaddr);
 
 INT APIENTRY r_EnumProtocolsA(LPINT,LPVOID,LPDWORD);
 INT APIENTRY r_EnumProtocolsW(LPINT,LPVOID,LPDWORD);
