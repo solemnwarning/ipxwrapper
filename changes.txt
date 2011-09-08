@@ -1,3 +1,16 @@
+Version ???:
+	Feature: DirectPlay support added via custom service provider.
+	
+	Update: Isolated router code from the rest of IPXWrapper.
+	
+	Cleanup: Moved certain library functions out of ipxwrapper.c and tidied up.
+	
+	Cleanup: Removed winstuff.h, added wsnwlink.h from Wine.
+	
+	Cleanup: Merged EnumProtocolsA and EnumProtocolsW into a single function.
+	
+	Cleanup: Locking code partially cleaned up.
+
 Version 0.2.2:
 	Feature: Redesigned ipxconfig UI.
 	
