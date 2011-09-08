@@ -162,7 +162,7 @@ DWORD router_main(void *arg) {
 		struct sockaddr_in addr;
 		int addrlen = sizeof(addr);
 		
-		int len = r_recvfrom(router->udp_sock, router->recvbuf, PACKET_BUF_SIZE, 0, (struct sockaddr*)&addr, &addrlen);
+		int len = recvfrom(router->udp_sock, router->recvbuf, PACKET_BUF_SIZE, 0, (struct sockaddr*)&addr, &addrlen);
 		if(len == -1) {
 			if(WSAGetLastError() == WSAEWOULDBLOCK || WSAGetLastError() == WSAECONNRESET) {
 				continue;
@@ -226,7 +226,7 @@ DWORD router_main(void *arg) {
 				addr.sin_addr.s_addr = inet_addr("127.0.0.1");
 				addr.sin_port = ra->local_port;
 				
-				if(r_sendto(router->udp_sock, (char*)packet, len, 0, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
+				if(sendto(router->udp_sock, (char*)packet, len, 0, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
 					log_printf("Error relaying packet: %s", w32_error(WSAGetLastError()));
 				}
 			}
