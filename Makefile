@@ -31,7 +31,7 @@ SRC_FILES := changes.txt license.txt Makefile mkstubs.pl readme.txt src/config.h
 all: ipxwrapper.dll wsock32.dll mswsock.dll ipxconfig.exe dpwsockx.dll
 
 clean:
-	rm -f ipxwrapper.dll wsock32.dll mswsock.dll ipxconfig.exe
+	rm -f ipxwrapper.dll wsock32.dll mswsock.dll ipxconfig.exe dpwsockx.dll
 	rm -f src/*.o src/*_stubs.s
 
 dist: all

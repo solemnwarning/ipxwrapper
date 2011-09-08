@@ -114,7 +114,12 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 			
 			LeaveCriticalSection(&(router->crit_sec));
 			
-			WaitForSingleObject(router_thread, INFINITE);
+			if(WaitForSingleObject(router_thread, 3000) == WAIT_TIMEOUT) {
+				log_printf("Router thread didn't exit in 3 seconds, killing");
+				TerminateThread(router_thread, 0);
+			}
+			
+			CloseHandle(router_thread);
 			router_thread = NULL;
 			
 			router_destroy(router);

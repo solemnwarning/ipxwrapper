@@ -413,6 +413,7 @@ static HRESULT WINAPI IPX_ShutdownEx(LPDPSP_SHUTDOWNDATA data) {
 			TerminateThread(sp_data->worker_thread, 0);
 		}
 		
+		CloseHandle(sp_data->worker_thread);
 		sp_data->worker_thread = NULL;
 	}
 	
