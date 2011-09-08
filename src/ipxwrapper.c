@@ -47,13 +47,29 @@ HMODULE winsock2_dll = NULL;
 HMODULE mswsock_dll = NULL;
 HMODULE wsock32_dll = NULL;
 
-static HANDLE mutex = NULL;
 static HANDLE router_thread = NULL;
 struct router_vars *router = NULL;
 
+static CRITICAL_SECTION sockets_cs;
+static CRITICAL_SECTION hosts_cs;
+
 static BOOL start_router(void);
 
+#define INIT_CS(cs) if(!init_cs(cs, &initialised_cs)) { return FALSE; }
+
+static BOOL init_cs(CRITICAL_SECTION *cs, int *counter) {
+	if(!InitializeCriticalSectionAndSpinCount(&(router->crit_sec), 0x80000000)) {
+		log_printf("Failed to initialise critical section: %s", w32_error(GetLastError()));
+		return FALSE;
+	}
+	
+	(*counter)++;
+	return TRUE;
+}
+
 BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
+	static int initialised_cs = 0;
+	
 	if(why == DLL_PROCESS_ATTACH) {
 		log_open();
 		
@@ -76,11 +92,8 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 		
 		nics = get_interfaces(-1);
 		
-		mutex = CreateMutex(NULL, FALSE, NULL);
-		if(!mutex) {
-			log_printf("Failed to create mutex");
-			return FALSE;
-		}
+		INIT_CS(&sockets_cs);
+		INIT_CS(&hosts_cs);
 		
 		WSADATA wsdata;
 		int err = WSAStartup(MAKEWORD(1,1), &wsdata);
@@ -108,14 +121,17 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 			router = NULL;
 		}
 		
-		if(mutex) {
-			CloseHandle(mutex);
-			mutex = NULL;
+		WSACleanup();
+		
+		switch(initialised_cs) {
+			case 2: DeleteCriticalSection(&hosts_cs);
+			case 1: DeleteCriticalSection(&sockets_cs);
+			default: break;
 		}
 		
-		free_interfaces(nics);
+		initialised_cs = 0;
 		
-		WSACleanup();
+		free_interfaces(nics);
 		
 		reg_close();
 		
@@ -153,7 +169,7 @@ void __stdcall *find_sym(char const *symbol) {
  * TODO: Change this behaviour. It is almost as bad as the BKL.
 */
 ipx_socket *get_socket(SOCKET fd) {
-	lock_mutex();
+	lock_sockets();
 	
 	ipx_socket *ptr = sockets;
 	
@@ -166,20 +182,20 @@ ipx_socket *get_socket(SOCKET fd) {
 	}
 	
 	if(!ptr) {
-		unlock_mutex();
+		unlock_sockets();
 	}
 	
 	return ptr;
 }
 
 /* Lock the mutex */
-void lock_mutex(void) {
-	WaitForSingleObject(mutex, INFINITE);
+void lock_sockets(void) {
+	EnterCriticalSection(&sockets_cs);
 }
 
 /* Unlock the mutex */
-void unlock_mutex(void) {
-	while(ReleaseMutex(mutex)) {}
+void unlock_sockets(void) {
+	LeaveCriticalSection(&sockets_cs);
 }
 
 /* Initialize and start the router thread */
@@ -205,6 +221,8 @@ static BOOL start_router(void) {
 
 /* Add a host to the hosts list or update an existing one */
 void add_host(const unsigned char *net, const unsigned char *node, uint32_t ipaddr) {
+	EnterCriticalSection(&hosts_cs);
+	
 	ipx_host *hptr = hosts;
 	
 	while(hptr) {
@@ -212,6 +230,7 @@ void add_host(const unsigned char *net, const unsigned char *node, uint32_t ipad
 			hptr->ipaddr = ipaddr;
 			hptr->last_packet = time(NULL);
 			
+			LeaveCriticalSection(&hosts_cs);
 			return;
 		}
 		
@@ -220,6 +239,8 @@ void add_host(const unsigned char *net, const unsigned char *node, uint32_t ipad
 	
 	hptr = malloc(sizeof(ipx_host));
 	if(!hptr) {
+		LeaveCriticalSection(&hosts_cs);
+		
 		log_printf("No memory for hosts list entry");
 		return;
 	}
@@ -232,10 +253,14 @@ void add_host(const unsigned char *net, const unsigned char *node, uint32_t ipad
 	
 	hptr->next = hosts;
 	hosts = hptr;
+	
+	LeaveCriticalSection(&hosts_cs);
 }
 
 /* Search the hosts list */
 ipx_host *find_host(const unsigned char *net, const unsigned char *node) {
+	EnterCriticalSection(&hosts_cs);
+	
 	ipx_host *hptr = hosts, *pptr = NULL;
 	
 	while(hptr) {
@@ -251,15 +276,16 @@ ipx_host *find_host(const unsigned char *net, const unsigned char *node) {
 					free(hptr);
 				}
 				
-				return NULL;
-			}else{
-				return hptr;
+				hptr = NULL;
 			}
+			
+			break;
 		}
 		
 		pptr = hptr;
 		hptr = hptr->next;
 	}
 	
-	return NULL;
+	LeaveCriticalSection(&hosts_cs);
+	return hptr;
 }

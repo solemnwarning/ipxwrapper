@@ -41,17 +41,12 @@
 #define IPX_EX_BOUND	(int)(1<<5)
 
 #define RETURN(...) \
-	unlock_mutex();\
+	unlock_sockets();\
 	return __VA_ARGS__;
 
 #define RETURN_WSA(errnum, ...) \
-	unlock_mutex();\
+	unlock_sockets();\
 	WSASetLastError(errnum);\
-	return __VA_ARGS__;
-
-#define RETURN_ERR(errnum, ...) \
-	unlock_mutex();\
-	SetLastError(errnum);\
 	return __VA_ARGS__;
 
 typedef struct ipx_socket ipx_socket;
@@ -116,8 +111,8 @@ extern HMODULE wsock32_dll;
 
 void __stdcall *find_sym(char const *sym);
 ipx_socket *get_socket(SOCKET fd);
-void lock_mutex(void);
-void unlock_mutex(void);
+void lock_sockets(void);
+void unlock_sockets(void);
 ipx_host *find_host(const unsigned char *net, const unsigned char *node);
 void add_host(const unsigned char *net, const unsigned char *node, uint32_t ipaddr);
 

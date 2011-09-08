@@ -102,7 +102,8 @@ SOCKET WSAAPI socket(int af, int type, int protocol) {
 	if(af == AF_IPX) {
 		ipx_socket *nsock = malloc(sizeof(ipx_socket));
 		if(!nsock) {
-			RETURN_WSA(ERROR_OUTOFMEMORY, -1);
+			WSASetLastError(ERROR_OUTOFMEMORY);
+			return -1;
 		}
 		
 		nsock->fd = r_socket(AF_INET, SOCK_DGRAM, 0);
@@ -110,13 +111,13 @@ SOCKET WSAAPI socket(int af, int type, int protocol) {
 			log_printf("Creating fake socket failed: %s", w32_error(WSAGetLastError()));
 			
 			free(nsock);
-			RETURN(-1);
+			return -1;
 		}
 		
 		nsock->flags = IPX_SEND | IPX_RECV;
 		nsock->s_ptype = (protocol ? NSPROTO_IPX - protocol : 0);
 		
-		lock_mutex();
+		lock_sockets();
 		
 		nsock->next = sockets;
 		sockets = nsock;
@@ -226,7 +227,7 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen) {
 		
 		RETURN(0);
 	}else{
-		RETURN(r_bind(fd, addr, addrlen));
+		return r_bind(fd, addr, addrlen);
 	}
 }
 
@@ -255,7 +256,7 @@ int WSAAPI getsockname(SOCKET fd, struct sockaddr *addr, int *addrlen) {
 			RETURN_WSA(WSAEINVAL, -1);
 		}
 	}else{
-		RETURN(r_getsockname(fd, addr, addrlen));
+		return r_getsockname(fd, addr, addrlen);
 	}
 }
 
@@ -269,7 +270,7 @@ static int recv_packet(ipx_socket *sockptr, char *buf, int bufsize, int flags, s
 	SOCKET fd = sockptr->fd;
 	int is_bound = sockptr->flags & IPX_BOUND;
 	
-	unlock_mutex();
+	unlock_sockets();
 	
 	if(!is_bound) {
 		WSASetLastError(WSAEINVAL);
@@ -318,7 +319,7 @@ int WSAAPI recvfrom(SOCKET fd, char *buf, int len, int flags, struct sockaddr *a
 	
 	if(sockptr) {
 		if(addr && addrlen && *addrlen < sizeof(struct sockaddr_ipx)) {
-			unlock_mutex();
+			unlock_sockets();
 			
 			WSASetLastError(WSAEFAULT);
 			return -1;
@@ -471,9 +472,11 @@ int WSAAPI getsockopt(SOCKET fd, int level, int optname, char FAR *optval, int F
 			
 			RETURN_WSA(WSAENOPROTOOPT, -1);
 		}
+		
+		unlock_sockets();
 	}
 	
-	RETURN(r_getsockopt(fd, level, optname, optval, optlen));
+	return r_getsockopt(fd, level, optname, optval, optlen);
 }
 
 int WSAAPI setsockopt(SOCKET fd, int level, int optname, const char FAR *optval, int optlen) {
@@ -520,9 +523,11 @@ int WSAAPI setsockopt(SOCKET fd, int level, int optname, const char FAR *optval,
 				RETURN(0);
 			}
 		}
+		
+		unlock_sockets();
 	}
 	
-	RETURN(r_setsockopt(fd, level, optname, optval, optlen));
+	return r_setsockopt(fd, level, optname, optval, optlen);
 }
 
 int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct sockaddr *addr, int addrlen) {
@@ -599,7 +604,7 @@ int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct s
 		free(packet);
 		RETURN(len);
 	}else{
-		RETURN(r_sendto(fd, buf, len, flags, addr, addrlen));
+		return r_sendto(fd, buf, len, flags, addr, addrlen);
 	}
 }
 
@@ -618,7 +623,7 @@ int PASCAL shutdown(SOCKET fd, int cmd) {
 		
 		RETURN(0);
 	}else{
-		RETURN(r_shutdown(fd, cmd));
+		return r_shutdown(fd, cmd);
 	}
 }
 
@@ -648,7 +653,11 @@ int PASCAL ioctlsocket(SOCKET fd, long cmd, u_long *argp) {
 		
 		*(unsigned long*)argp = packet.size;
 		RETURN(0);
-	}else{
-		RETURN(r_ioctlsocket(fd, cmd, argp));
 	}
+	
+	if(sockptr) {
+		unlock_sockets();
+	}
+	
+	return r_ioctlsocket(fd, cmd, argp);
 }
