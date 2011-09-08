@@ -190,7 +190,7 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen) {
 			RETURN_WSA(WSAEINVAL, -1);
 		}
 		
-		if(router_bind(router, 0, fd, &ipxaddr, &(ptr->nic_bcast)) == -1) {
+		if(router_bind(router, 0, fd, &ipxaddr, &(ptr->nic_bcast), ptr->flags & IPX_REUSE ? TRUE : FALSE) == -1) {
 			RETURN(-1);
 		}
 		
@@ -395,6 +395,7 @@ int PASCAL WSARecvEx(SOCKET fd, char *buf, int len, int *flags) {
 
 int WSAAPI getsockopt(SOCKET fd, int level, int optname, char FAR *optval, int FAR *optlen) {
 	int* intval = (int*)optval;
+	BOOL *bval = (BOOL*)optval;
 	
 	ipx_socket *ptr = get_socket(fd);
 	
@@ -473,6 +474,22 @@ int WSAAPI getsockopt(SOCKET fd, int level, int optname, char FAR *optval, int F
 			RETURN_WSA(WSAENOPROTOOPT, -1);
 		}
 		
+		if(level == SOL_SOCKET) {
+			if(optname == SO_BROADCAST) {
+				CHECK_OPTLEN(sizeof(BOOL));
+				
+				*bval = ptr->flags & IPX_BROADCAST ? TRUE : FALSE;
+				RETURN(0);
+			}
+			
+			if(optname == SO_REUSEADDR) {
+				CHECK_OPTLEN(sizeof(BOOL));
+				
+				*bval = ptr->flags & IPX_REUSE ? TRUE : FALSE;
+				RETURN(0);
+			}
+		}
+		
 		unlock_sockets();
 	}
 	
@@ -514,10 +531,23 @@ int WSAAPI setsockopt(SOCKET fd, int level, int optname, const char FAR *optval,
 		
 		if(level == SOL_SOCKET) {
 			if(optname == SO_BROADCAST) {
-				if(*bval == TRUE) {
+				if(*bval) {
 					sockptr->flags |= IPX_BROADCAST;
 				}else{
 					sockptr->flags &= ~IPX_BROADCAST;
+				}
+				
+				RETURN(0);
+			}else if(optname == SO_REUSEADDR) {
+				if(!router_set_reuse(router, 0, fd, *bval)) {
+					WSASetLastError(WSAEINVAL);
+					RETURN(-1);
+				}
+				
+				if(*bval) {
+					sockptr->flags |= IPX_REUSE;
+				}else{
+					sockptr->flags &= ~IPX_REUSE;
 				}
 				
 				RETURN(0);

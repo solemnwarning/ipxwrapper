@@ -240,7 +240,7 @@ DWORD router_main(void *arg) {
 	return 0;
 }
 
-int router_bind(struct router_vars *router, SOCKET control, SOCKET sock, struct sockaddr_ipx *addr, uint32_t *nic_bcast) {
+int router_bind(struct router_vars *router, SOCKET control, SOCKET sock, struct sockaddr_ipx *addr, uint32_t *nic_bcast, BOOL reuse) {
 	/* Network number 00:00:00:00 is specified as the "current" network, this code
 	 * treats it as a wildcard when used for the network OR node numbers.
 	 *
@@ -323,13 +323,13 @@ int router_bind(struct router_vars *router, SOCKET control, SOCKET sock, struct 
 		}
 		
 		addr->sa_socket = htons(s);
-	}else if(addr->sa_family != AF_IPX_SHARE) {
+	}else{
 		/* Test if any bound socket is using the requested socket number. */
 		
 		struct router_addr *a = router->addrs;
 		
 		while(a) {
-			if(a->addr.sa_socket == addr->sa_socket) {
+			if(a->addr.sa_socket == addr->sa_socket && (!a->reuse || !reuse)) {
 				log_printf("bind failed: requested socket in use");
 				
 				LeaveCriticalSection(&(router->crit_sec));
@@ -356,6 +356,7 @@ int router_bind(struct router_vars *router, SOCKET control, SOCKET sock, struct 
 	new_addr->ws_socket = sock;
 	new_addr->control_socket = control;
 	new_addr->filter_ptype = -1;
+	new_addr->reuse = reuse;
 	new_addr->next = NULL;
 	
 	router->addrs = new_addr;
@@ -430,4 +431,28 @@ void router_set_filter(struct router_vars *router, SOCKET control, SOCKET sock, 
 	}
 	
 	LeaveCriticalSection(&(router->crit_sec));
+}
+
+int router_set_reuse(struct router_vars *router, SOCKET control, SOCKET sock, BOOL reuse) {
+	EnterCriticalSection(&(router->crit_sec));
+	
+	struct router_addr *addr = router_get(router, control, sock);
+	if(addr) {
+		struct router_addr *test = router->addrs;
+		
+		while(test) {
+			if(addr != test && memcmp(&(addr->addr), &(test->addr), sizeof(struct sockaddr_ipx)) == 0 && !reuse) {
+				/* Refuse to disable SO_REUSEADDR when another binding for the same address exists */
+				LeaveCriticalSection(&(router->crit_sec));
+				return 0;
+			}
+			
+			test = test->next;
+		}
+		
+		addr->reuse = reuse;
+	}
+	
+	LeaveCriticalSection(&(router->crit_sec));
+	return 1;
 }
