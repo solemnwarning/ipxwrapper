@@ -35,8 +35,9 @@ struct sp_data {
 	struct sockaddr_ipx ns_addr;	/* sa_family is 0 when undefined */
 	DPID ns_id;
 	
+	BOOL running;
 	HANDLE worker_thread;
-	DWORD worker_tid;
+	WSAEVENT event;
 };
 
 struct sp_data_cont {
@@ -83,12 +84,31 @@ static void release_sp_data(IDirectPlaySP *sp) {
 	ReleaseMutex(cont->mutex);
 }
 
-static DWORD WINAPI worker_main(LPVOID arg) {
-	struct sp_data *sp_data = get_sp_data((IDirectPlaySP*)arg);
+static BOOL recv_packet(int sockfd, char *buf, IDirectPlaySP *sp) {
+	struct sockaddr_ipx addr;
+	int addrlen = sizeof(addr);
 	
-	int sockfd = sp_data->sock;
+	int r = recvfrom(sockfd, buf, PACKET_BUF_SIZE, 0, (struct sockaddr*)&addr, &addrlen);
+	if(r == -1) {
+		if(WSAGetLastError() == WSAEWOULDBLOCK || WSAGetLastError() == WSAECONNRESET) {
+			return TRUE;
+		}
+		
+		log_printf("Read error (IPX): %s", w32_error(WSAGetLastError()));
+		return FALSE;
+	}
 	
-	release_sp_data((IDirectPlaySP*)arg);
+	HRESULT h = IDirectPlaySP_HandleMessage(sp, buf, r, &addr);
+	if(h != DP_OK) {
+		log_printf("HandleMessage error: %d", (int)h);
+	}
+	
+	return TRUE;
+}
+
+static DWORD WINAPI worker_main(LPVOID sp) {
+	struct sp_data *sp_data = get_sp_data((IDirectPlaySP*)sp);
+	release_sp_data((IDirectPlaySP*)sp);
 	
 	char *buf = malloc(PACKET_BUF_SIZE);
 	if(!buf) {
@@ -96,19 +116,26 @@ static DWORD WINAPI worker_main(LPVOID arg) {
 	}
 	
 	while(1) {
-		struct sockaddr_ipx addr;
-		int addrlen = sizeof(addr);
+		WaitForSingleObject(sp_data->event, INFINITE);
 		
-		int r = recvfrom(sockfd, buf, PACKET_BUF_SIZE, 0, (struct sockaddr*)&addr, &addrlen);
-		if(r == -1) {
-			log_printf("recv failed");
+		get_sp_data((IDirectPlaySP*)sp);
+		
+		WSAResetEvent(sp_data->event);
+		
+		if(!sp_data->running) {
+			release_sp_data((IDirectPlaySP*)sp);
 			return 0;
 		}
 		
-		HRESULT h = IDirectPlaySP_HandleMessage((IDirectPlaySP*)arg, buf, r, &addr);
-		if(h != DP_OK) {
-			log_printf("HandleMessage error: %d", (int)h);
+		if(!recv_packet(sp_data->sock, buf, sp)) {
+			return 1;
 		}
+		
+		if(sp_data->ns_sock != -1 && recv_packet(sp_data->ns_sock, buf, sp)) {
+			return 1;
+		}
+		
+		release_sp_data((IDirectPlaySP*)sp);
 	}
 	
 	return 0;
@@ -122,7 +149,7 @@ static BOOL init_worker(IDirectPlaySP *sp) {
 		return TRUE;
 	}
 	
-	sp_data->worker_thread = CreateThread(NULL, 0, &worker_main, sp, 0, &(sp_data->worker_tid));
+	sp_data->worker_thread = CreateThread(NULL, 0, &worker_main, sp, 0, NULL);
 	if(!sp_data->worker_thread) {
 		log_printf("Failed to create worker thread");
 		
@@ -319,8 +346,9 @@ static HRESULT WINAPI IPX_Open(LPDPSP_OPENDATA data) {
 				return DPERR_CANNOTCREATESERVER;
 			}
 			
-			BOOL reuse = TRUE;
-			setsockopt(sp_data->ns_sock, SOL_SOCKET, SO_REUSEADDR, (char*)&reuse, sizeof(BOOL));
+			BOOL t_bool = TRUE;
+			setsockopt(sp_data->ns_sock, SOL_SOCKET, SO_REUSEADDR, (char*)&t_bool, sizeof(BOOL));
+			setsockopt(sp_data->ns_sock, SOL_SOCKET, SO_BROADCAST, (char*)&t_bool, sizeof(BOOL));
 			
 			struct sockaddr_ipx addr;
 			
@@ -334,6 +362,16 @@ static HRESULT WINAPI IPX_Open(LPDPSP_OPENDATA data) {
 				release_sp_data(data->lpISP);
 				
 				log_printf("Cannot bind ns_sock: %s", w32_error(WSAGetLastError()));
+				return DPERR_CANNOTCREATESERVER;
+			}
+			
+			if(WSAEventSelect(sp_data->sock, sp_data->event, FD_READ) == -1) {
+				closesocket(sp_data->ns_sock);
+				sp_data->ns_sock = -1;
+				
+				release_sp_data(data->lpISP);
+				
+				log_printf("WSAEventSelect failed: %s", w32_error(WSAGetLastError()));
 				return DPERR_CANNOTCREATESERVER;
 			}
 		}
@@ -365,14 +403,25 @@ static HRESULT WINAPI IPX_ShutdownEx(LPDPSP_SHUTDOWNDATA data) {
 	
 	struct sp_data *sp_data = get_sp_data(data->lpISP);
 	
-	if(sp_data->worker_thread && GetCurrentThreadId() != sp_data->worker_tid) {
-		TerminateThread(sp_data->worker_thread, 0);
+	if(sp_data->worker_thread) {
+		sp_data->running = FALSE;
+		
+		release_sp_data(data->lpISP);
+		
+		if(WaitForSingleObject(sp_data->worker_thread, 3000) == WAIT_TIMEOUT) {
+			log_printf("DirectPlay worker didn't exit in 3 seconds, killing");
+			TerminateThread(sp_data->worker_thread, 0);
+		}
+		
 		sp_data->worker_thread = NULL;
 	}
 	
 	closesocket(sp_data->sock);
 	
-	release_sp_data(data->lpISP);
+	if(sp_data->ns_sock != -1) {
+		closesocket(sp_data->ns_sock);
+	}
+	
 	return DP_OK;
 }
 
@@ -412,7 +461,15 @@ HRESULT WINAPI SPInit(LPSPINITDATA data) {
 		return DPERR_UNAVAILABLE;
 	}
 	
+	if((sp_data->event = WSACreateEvent()) == WSA_INVALID_EVENT) {
+		CloseHandle(mutex);
+		free(sp_data);
+		
+		return DPERR_UNAVAILABLE;
+	}
+	
 	if((sp_data->sock = socket(AF_IPX, SOCK_DGRAM, NSPROTO_IPX)) == -1) {
+		WSACloseEvent(sp_data->event);
 		CloseHandle(mutex);
 		free(sp_data);
 		
@@ -426,6 +483,7 @@ HRESULT WINAPI SPInit(LPSPINITDATA data) {
 	
 	if(bind(sp_data->sock, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
 		closesocket(sp_data->sock);
+		WSACloseEvent(sp_data->event);
 		CloseHandle(mutex);
 		free(sp_data);
 		
@@ -438,6 +496,7 @@ HRESULT WINAPI SPInit(LPSPINITDATA data) {
 		log_printf("getsockname failed: %s", w32_error(WSAGetLastError()));
 		
 		closesocket(sp_data->sock);
+		WSACloseEvent(sp_data->event);
 		CloseHandle(mutex);
 		free(sp_data);
 		
@@ -446,10 +505,22 @@ HRESULT WINAPI SPInit(LPSPINITDATA data) {
 	
 	sp_data->ns_sock = -1;
 	sp_data->ns_addr.sa_family = 0;
+	sp_data->running = TRUE;
 	sp_data->worker_thread = NULL;
 	
 	BOOL bcast = TRUE;
 	setsockopt(sp_data->sock, SOL_SOCKET, SO_BROADCAST, (char*)&bcast, sizeof(BOOL));
+	
+	if(WSAEventSelect(sp_data->sock, sp_data->event, FD_READ) == -1) {
+		log_printf("WSAEventSelect failed: %s", w32_error(WSAGetLastError()));
+		
+		closesocket(sp_data->sock);
+		WSACloseEvent(sp_data->event);
+		CloseHandle(mutex);
+		free(sp_data);
+		
+		return DPERR_UNAVAILABLE;
+	}
 	
 	struct sp_data_cont cont;
 	cont.data = sp_data;
@@ -460,6 +531,7 @@ HRESULT WINAPI SPInit(LPSPINITDATA data) {
 		log_printf("SetSPData: %d", (int)r);
 		
 		closesocket(sp_data->sock);
+		WSACloseEvent(sp_data->event);
 		CloseHandle(mutex);
 		free(sp_data);
 		
