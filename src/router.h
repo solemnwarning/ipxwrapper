@@ -88,15 +88,29 @@ struct router_vars {
 	char *recvbuf;
 };
 
+struct rclient {
+	CRITICAL_SECTION cs;
+	BOOL cs_init;
+	
+	SOCKET sock;
+	
+	struct router_vars *router;
+	HANDLE thread;
+};
+
 struct router_vars *router_init(BOOL global);
 void router_destroy(struct router_vars *router);
 
 DWORD router_main(void *arg);
 
-int router_bind(struct router_vars *router, SOCKET control, SOCKET sock, struct sockaddr_ipx *addr, uint32_t *nic_bcast, BOOL reuse);
-void router_set_port(struct router_vars *router, SOCKET control, SOCKET sock, uint16_t port);
-void router_unbind(struct router_vars *router, SOCKET control, SOCKET sock);
-void router_set_filter(struct router_vars *router, SOCKET control, SOCKET sock, int ptype);
-int router_set_reuse(struct router_vars *router, SOCKET control, SOCKET sock, BOOL reuse);
+BOOL rclient_init(struct rclient *rclient);
+BOOL rclient_start(struct rclient *rclient);
+void rclient_stop(struct rclient *rclient);
+
+BOOL rclient_bind(struct rclient *rclient, SOCKET sock, struct sockaddr_ipx *addr, uint32_t *nic_bcast, BOOL reuse);
+BOOL rclient_unbind(struct rclient *rclient, SOCKET sock);
+BOOL rclient_set_port(struct rclient *rclient, SOCKET sock, uint16_t port);
+BOOL rclient_set_filter(struct rclient *rclient, SOCKET sock, int ptype);
+BOOL rclient_set_reuse(struct rclient *rclient, SOCKET sock, BOOL reuse);
 
 #endif /* !IPXWRAPPER_ROUTER_H */

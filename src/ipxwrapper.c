@@ -47,13 +47,10 @@ HMODULE winsock2_dll = NULL;
 HMODULE mswsock_dll = NULL;
 HMODULE wsock32_dll = NULL;
 
-static HANDLE router_thread = NULL;
-struct router_vars *router = NULL;
+struct rclient g_rclient;
 
 static CRITICAL_SECTION sockets_cs;
 static CRITICAL_SECTION hosts_cs;
-
-static BOOL start_router(void);
 
 #define INIT_CS(cs) if(!init_cs(cs, &initialised_cs)) { return FALSE; }
 
@@ -72,6 +69,10 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 	
 	if(why == DLL_PROCESS_ATTACH) {
 		log_open();
+		
+		if(!rclient_init(&g_rclient)) {
+			return FALSE;
+		}
 		
 		winsock2_dll = load_sysdll("ws2_32.dll");
 		mswsock_dll = load_sysdll("mswsock.dll");
@@ -102,29 +103,11 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 			return FALSE;
 		}
 		
-		if(!start_router()) {
+		if(!rclient_start(&g_rclient)) {
 			return FALSE;
 		}
 	}else if(why == DLL_PROCESS_DETACH) {
-		if(router_thread) {
-			EnterCriticalSection(&(router->crit_sec));
-			
-			router->running = FALSE;
-			SetEvent(router->wsa_event);
-			
-			LeaveCriticalSection(&(router->crit_sec));
-			
-			if(WaitForSingleObject(router_thread, 3000) == WAIT_TIMEOUT) {
-				log_printf("Router thread didn't exit in 3 seconds, killing");
-				TerminateThread(router_thread, 0);
-			}
-			
-			CloseHandle(router_thread);
-			router_thread = NULL;
-			
-			router_destroy(router);
-			router = NULL;
-		}
+		rclient_stop(&g_rclient);
 		
 		WSACleanup();
 		
@@ -201,27 +184,6 @@ void lock_sockets(void) {
 /* Unlock the mutex */
 void unlock_sockets(void) {
 	LeaveCriticalSection(&sockets_cs);
-}
-
-/* Initialize and start the router thread */
-static BOOL start_router(void) {
-	if(!(router = router_init(FALSE))) {
-		return FALSE;
-	}
-	
-	router_thread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)&router_main, router, 0, NULL);
-	if(!router_thread) {
-		log_printf("Failed to create router thread: %s", w32_error(GetLastError()));
-		
-		router_destroy(router);
-		router = NULL;
-		
-		return FALSE;
-	}
-	
-	net_fd = router->udp_sock;
-	
-	return TRUE;
 }
 
 /* Add a host to the hosts list or update an existing one */

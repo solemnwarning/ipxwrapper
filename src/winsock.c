@@ -148,7 +148,7 @@ int WSAAPI closesocket(SOCKET fd) {
 	
 	log_printf("IPX socket closed (fd = %d)", fd);
 	
-	router_unbind(router, 0, fd);
+	rclient_unbind(&g_rclient, fd);
 	
 	if(ptr == sockets) {
 		sockets = ptr->next;
@@ -190,7 +190,7 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen) {
 			RETURN_WSA(WSAEINVAL, -1);
 		}
 		
-		if(router_bind(router, 0, fd, &ipxaddr, &(ptr->nic_bcast), ptr->flags & IPX_REUSE ? TRUE : FALSE) == -1) {
+		if(!rclient_bind(&g_rclient, fd, &ipxaddr, &(ptr->nic_bcast), ptr->flags & IPX_REUSE ? TRUE : FALSE)) {
 			RETURN(-1);
 		}
 		
@@ -207,7 +207,7 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen) {
 		if(r_bind(fd, (struct sockaddr*)&bind_addr, sizeof(bind_addr)) == -1) {
 			log_printf("Binding local UDP socket failed: %s", w32_error(WSAGetLastError()));
 			
-			router_unbind(router, 0, fd);
+			rclient_unbind(&g_rclient, fd);
 			RETURN(-1);
 		}
 		
@@ -216,14 +216,14 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen) {
 		if(r_getsockname(fd, (struct sockaddr*)&bind_addr, &al) == -1) {
 			log_printf("getsockname failed: %s", w32_error(WSAGetLastError()));
 			
-			router_unbind(router, 0, fd);
+			rclient_unbind(&g_rclient, fd);
 			RETURN(-1);
 		}
 		
 		memcpy(&(ptr->addr), &ipxaddr, sizeof(ipxaddr));
 		ptr->flags |= IPX_BOUND;
 		
-		router_set_port(router, 0, fd, bind_addr.sin_port);
+		rclient_set_port(&g_rclient, fd, bind_addr.sin_port);
 		
 		RETURN(0);
 	}else{
@@ -503,18 +503,22 @@ int WSAAPI setsockopt(SOCKET fd, int level, int optname, const char FAR *optval,
 			}
 			
 			if(optname == IPX_FILTERPTYPE) {
+				if(!rclient_set_filter(&g_rclient, fd, *intval)) {
+					RETURN(-1);
+				}
+				
 				sockptr->f_ptype = *intval;
 				sockptr->flags |= IPX_FILTER;
-				
-				router_set_filter(router, 0, fd, *intval);
 				
 				RETURN(0);
 			}
 			
 			if(optname == IPX_STOPFILTERPTYPE) {
-				sockptr->flags &= ~IPX_FILTER;
+				if(!rclient_set_filter(&g_rclient, fd, -1)) {
+					RETURN(-1);
+				}
 				
-				router_set_filter(router, 0, fd, -1);
+				sockptr->flags &= ~IPX_FILTER;
 				
 				RETURN(0);
 			}
@@ -532,8 +536,7 @@ int WSAAPI setsockopt(SOCKET fd, int level, int optname, const char FAR *optval,
 				
 				RETURN(0);
 			}else if(optname == SO_REUSEADDR) {
-				if(!router_set_reuse(router, 0, fd, *bval)) {
-					WSASetLastError(WSAEINVAL);
+				if(!rclient_set_reuse(&g_rclient, fd, *bval)) {
 					RETURN(-1);
 				}
 				
@@ -635,13 +638,16 @@ int PASCAL shutdown(SOCKET fd, int cmd) {
 	ipx_socket *sockptr = get_socket(fd);
 	
 	if(sockptr) {
-		if(cmd == SD_SEND || cmd == SD_BOTH) {
-			sockptr->flags &= ~IPX_SEND;
+		if(cmd == SD_RECEIVE || cmd == SD_BOTH) {
+			if(!rclient_set_port(&g_rclient, fd, 0)) {
+				RETURN(-1);
+			}
+			
+			sockptr->flags &= ~IPX_RECV;
 		}
 		
-		if(cmd == SD_RECEIVE || cmd == SD_BOTH) {
-			sockptr->flags &= ~IPX_RECV;
-			router_set_port(router, 0, fd, 0);
+		if(cmd == SD_SEND || cmd == SD_BOTH) {
+			sockptr->flags &= ~IPX_SEND;
 		}
 		
 		RETURN(0);

@@ -27,6 +27,8 @@ static struct router_addr *router_get(struct router_vars *router, SOCKET control
 static void router_handle_call(struct router_vars *router, int coff);
 static void router_drop_client(struct router_vars *router, int coff);
 
+static BOOL rclient_do(struct rclient *rclient, struct router_call *call, struct router_ret *ret);
+
 /* Allocate router_vars structure and initialise all members
  * Returns NULL on failure
 */
@@ -330,7 +332,7 @@ DWORD router_main(void *arg) {
 	return 0;
 }
 
-int router_bind(struct router_vars *router, SOCKET control, SOCKET sock, struct sockaddr_ipx *addr, uint32_t *nic_bcast, BOOL reuse) {
+static int router_bind(struct router_vars *router, SOCKET control, SOCKET sock, struct sockaddr_ipx *addr, uint32_t *nic_bcast, BOOL reuse) {
 	/* Network number 00:00:00:00 is specified as the "current" network, this code
 	 * treats it as a wildcard when used for the network OR node numbers.
 	 *
@@ -459,7 +461,7 @@ int router_bind(struct router_vars *router, SOCKET control, SOCKET sock, struct 
 /* Set loopback UDP port of emulation socket in NETWORK BYTE ORDER
  * Disable recv by setting to zero
 */
-void router_set_port(struct router_vars *router, SOCKET control, SOCKET sock, uint16_t port) {
+static void router_set_port(struct router_vars *router, SOCKET control, SOCKET sock, uint16_t port) {
 	EnterCriticalSection(&(router->crit_sec));
 	
 	struct router_addr *addr = router_get(router, control, sock);
@@ -470,7 +472,7 @@ void router_set_port(struct router_vars *router, SOCKET control, SOCKET sock, ui
 	LeaveCriticalSection(&(router->crit_sec));
 }
 
-void router_unbind(struct router_vars *router, SOCKET control, SOCKET sock) {
+static void router_unbind(struct router_vars *router, SOCKET control, SOCKET sock) {
 	EnterCriticalSection(&(router->crit_sec));
 	
 	struct router_addr *addr = router->addrs, *prev = NULL;
@@ -512,7 +514,7 @@ static struct router_addr *router_get(struct router_vars *router, SOCKET control
 /* Set packet type filter for a socket
  * Disable filter by setting to negative value
 */
-void router_set_filter(struct router_vars *router, SOCKET control, SOCKET sock, int ptype) {
+static void router_set_filter(struct router_vars *router, SOCKET control, SOCKET sock, int ptype) {
 	EnterCriticalSection(&(router->crit_sec));
 	
 	struct router_addr *addr = router_get(router, control, sock);
@@ -523,7 +525,7 @@ void router_set_filter(struct router_vars *router, SOCKET control, SOCKET sock, 
 	LeaveCriticalSection(&(router->crit_sec));
 }
 
-int router_set_reuse(struct router_vars *router, SOCKET control, SOCKET sock, BOOL reuse) {
+static int router_set_reuse(struct router_vars *router, SOCKET control, SOCKET sock, BOOL reuse) {
 	EnterCriticalSection(&(router->crit_sec));
 	
 	struct router_addr *addr = router_get(router, control, sock);
@@ -631,4 +633,279 @@ static void router_drop_client(struct router_vars *router, int coff) {
 	
 	closesocket(router->clients[coff].sock);
 	router->clients[coff] = router->clients[--router->client_count];
+}
+
+BOOL rclient_init(struct rclient *rclient) {
+	rclient->cs_init = FALSE;
+	rclient->sock = -1;
+	rclient->router = NULL;
+	rclient->thread = NULL;
+	
+	if(InitializeCriticalSectionAndSpinCount(&(rclient->cs), 0x80000000)) {
+		rclient->cs_init = TRUE;
+	}else{
+		log_printf("Failed to initialise critical section: %s", w32_error(GetLastError()));
+		return FALSE;
+	}
+	
+	return TRUE;
+}
+
+/* Connect to the remote router process, spawns local (private) router thread if
+ * it the remote one isn't running.
+ *
+ * Calling when a router is already running is a no-op.
+*/
+BOOL rclient_start(struct rclient *rclient) {
+	if(rclient->sock != -1 || rclient->router) {
+		return TRUE;
+	}
+	
+	if((rclient->sock = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
+		log_printf("Cannot create TCP socket: %s", w32_error(WSAGetLastError()));
+		return FALSE;
+	}
+	
+	struct sockaddr_in addr;
+	addr.sin_family = AF_INET;
+	addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+	addr.sin_port = htons(global_conf.udp_port);
+	
+	if(connect(rclient->sock, (struct sockaddr*)&addr, sizeof(addr)) == 0) {
+		return TRUE;
+	}
+	
+	log_printf("Cannot connect to router process: %s", w32_error(WSAGetLastError()));
+	
+	closesocket(rclient->sock);
+	rclient->sock = -1;
+	
+	log_printf("Creating private router thread...");
+	
+	if(!(rclient->router = router_init(FALSE))) {
+		return FALSE;
+	}
+	
+	rclient->thread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)&router_main, rclient->router, 0, NULL);
+	if(!rclient->thread) {
+		log_printf("Failed to create router thread: %s", w32_error(GetLastError()));
+		
+		router_destroy(rclient->router);
+		rclient->router = NULL;
+		
+		return FALSE;
+	}
+	
+	return TRUE;
+}
+
+/* Disconnect from the router process or stop the private router thread.
+ *
+ * Do not attempt to call rclient_start() again without calling rclient_init()
+ * as the critical section object is deleted.
+*/
+void rclient_stop(struct rclient *rclient) {
+	if(rclient->sock != -1) {
+		closesocket(rclient->sock);
+		rclient->sock = -1;
+	}
+	
+	if(rclient->router) {
+		EnterCriticalSection(&(rclient->router->crit_sec));
+		
+		rclient->router->running = FALSE;
+		SetEvent(rclient->router->wsa_event);
+		
+		LeaveCriticalSection(&(rclient->router->crit_sec));
+		
+		if(WaitForSingleObject(rclient->thread, 3000) == WAIT_TIMEOUT) {
+			log_printf("Router thread didn't exit in 3 seconds, terminating");
+			TerminateThread(rclient->thread, 0);
+		}
+		
+		CloseHandle(rclient->thread);
+		rclient->thread = NULL;
+		
+		router_destroy(rclient->router);
+		rclient->router = NULL;
+	}
+	
+	if(rclient->cs_init) {
+		DeleteCriticalSection(&(rclient->cs));
+		rclient->cs_init = FALSE;
+	}
+}
+
+static BOOL rclient_do(struct rclient *rclient, struct router_call *call, struct router_ret *ret) {
+	EnterCriticalSection(&(rclient->cs));
+	
+	int done, r;
+	
+	for(done = 0; done < sizeof(*call);) {
+		if((r = send(rclient->sock, ((char*)call) + done, sizeof(*call) - done, 0)) == -1) {
+			log_printf("rclient_do: send error: %s", w32_error(WSAGetLastError()));
+			
+			LeaveCriticalSection(&(rclient->cs));
+			return FALSE;
+		}
+		
+		done += r;
+	}
+	
+	for(done = 0; done < sizeof(*ret);) {
+		if((r = recv(rclient->sock, ((char*)ret) + done, sizeof(*ret) - done, 0)) == -1) {
+			log_printf("rclient_do: recv error: %s", w32_error(WSAGetLastError()));
+			
+			LeaveCriticalSection(&(rclient->cs));
+			return FALSE;
+		}else if(r == 0) {
+			log_printf("rclient_do: Lost connection");
+			WSASetLastError(WSAECONNRESET);
+			
+			LeaveCriticalSection(&(rclient->cs));
+			return FALSE;
+		}
+		
+		done += r;
+	}
+		
+	LeaveCriticalSection(&(rclient->cs));
+	return TRUE;
+}
+
+BOOL rclient_bind(struct rclient *rclient, SOCKET sock, struct sockaddr_ipx *addr, uint32_t *nic_bcast, BOOL reuse) {
+	if(rclient->sock != -1) {
+		struct router_call call;
+		struct router_ret ret;
+		
+		call.call = rc_bind;
+		call.sock = sock;
+		call.arg_addr = *addr;
+		call.arg_int = reuse;
+		
+		if(!rclient_do(rclient, &call, &ret)) {
+			return FALSE;
+		}
+		
+		if(ret.err_code == ERROR_SUCCESS) {
+			*addr = ret.ret_addr;
+			*nic_bcast = ret.ret_u32;
+			
+			return TRUE;
+		}else{
+			WSASetLastError(ret.err_code);
+			return FALSE;
+		}
+	}else if(rclient->router) {
+		return router_bind(rclient->router, 0, sock, addr, nic_bcast, reuse) == 0 ? TRUE: FALSE;
+	}
+	
+	log_printf("rclient_bind: No router?!");
+	
+	WSASetLastError(WSAENETDOWN);
+	return FALSE;
+}
+
+BOOL rclient_unbind(struct rclient *rclient, SOCKET sock) {
+	if(rclient->sock != -1) {
+		struct router_call call;
+		struct router_ret ret;
+		
+		call.call = rc_unbind;
+		call.sock = sock;
+		
+		if(!rclient_do(rclient, &call, &ret)) {
+			return FALSE;
+		}
+		
+		return TRUE;
+	}else if(rclient->router) {
+		router_unbind(rclient->router, 0, sock);
+		return TRUE;
+	}
+	
+	log_printf("rclient_unbind: No router?!");
+	
+	WSASetLastError(WSAENETDOWN);
+	return FALSE;
+}
+
+BOOL rclient_set_port(struct rclient *rclient, SOCKET sock, uint16_t port) {
+	if(rclient->sock != -1) {
+		struct router_call call;
+		struct router_ret ret;
+		
+		call.call = rc_port;
+		call.sock = sock;
+		call.arg_int = port;
+		
+		if(!rclient_do(rclient, &call, &ret)) {
+			return FALSE;
+		}
+		
+		return TRUE;
+	}else if(rclient->router) {
+		router_set_port(rclient->router, 0, sock, port);
+		return TRUE;
+	}
+	
+	log_printf("rclient_set_port: No router?!");
+	
+	WSASetLastError(WSAENETDOWN);
+	return FALSE;
+}
+
+BOOL rclient_set_filter(struct rclient *rclient, SOCKET sock, int ptype) {
+	if(rclient->sock != -1) {
+		struct router_call call;
+		struct router_ret ret;
+		
+		call.call = rc_filter;
+		call.sock = sock;
+		call.arg_int = ptype;
+		
+		if(!rclient_do(rclient, &call, &ret)) {
+			return FALSE;
+		}
+		
+		return TRUE;
+	}else if(rclient->router) {
+		router_set_filter(rclient->router, 0, sock, ptype);
+		return TRUE;
+	}
+	
+	log_printf("rclient_set_filter: No router?!");
+	
+	WSASetLastError(WSAENETDOWN);
+	return FALSE;
+}
+
+BOOL rclient_set_reuse(struct rclient *rclient, SOCKET sock, BOOL reuse) {
+	if(rclient->sock != -1) {
+		struct router_call call;
+		struct router_ret ret;
+		
+		call.call = rc_reuse;
+		call.sock = sock;
+		call.arg_int = reuse;
+		
+		if(!rclient_do(rclient, &call, &ret)) {
+			return FALSE;
+		}
+		
+		if(ret.err_code == ERROR_SUCCESS) {
+			return TRUE;
+		}else{
+			WSASetLastError(WSAEINVAL);
+			return FALSE;
+		}
+	}else if(rclient->router) {
+		router_set_reuse(rclient->router, 0, sock, reuse);
+		return TRUE;
+	}
+	
+	log_printf("rclient_set_reuse: No router?!");
+	
+	WSASetLastError(WSAENETDOWN);
+	return FALSE;
 }

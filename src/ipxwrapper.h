@@ -103,7 +103,7 @@ extern struct ipx_interface *nics;
 extern ipx_host *hosts;
 extern SOCKET net_fd;
 extern struct reg_global global_conf;
-extern struct router_vars *router;
+extern struct rclient g_rclient;
 
 extern HMODULE winsock2_dll;
 extern HMODULE mswsock_dll;
