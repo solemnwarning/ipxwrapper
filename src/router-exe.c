@@ -25,6 +25,9 @@
 struct reg_global global_conf;
 
 int main(int argc, char **argv) {
+	setvbuf(stdout, NULL, _IONBF, 0);
+	setvbuf(stderr, NULL, _IONBF, 0);
+	
 	reg_open(KEY_QUERY_VALUE);
 		
 	if(reg_get_bin("global", &global_conf, sizeof(global_conf)) != sizeof(global_conf)) {
@@ -37,7 +40,7 @@ int main(int argc, char **argv) {
 	reg_close();
 	
 	WSADATA wsdata;
-	int err = WSAStartup(MAKEWORD(1,1), &wsdata);
+	int err = WSAStartup(MAKEWORD(2,0), &wsdata);
 	
 	if(err) {
 		log_printf("Failed to initialize winsock: %s", w32_error(err));
@@ -45,7 +48,7 @@ int main(int argc, char **argv) {
 		struct router_vars *router = router_init(TRUE);
 		
 		if(router) {
-			FreeConsole();
+			//FreeConsole();
 			router_main(router);
 			router_destroy(router);
 		}
@@ -63,7 +66,7 @@ void log_printf(const char *fmt, ...) {
 	
 	va_start(argv, fmt);
 	
-	AllocConsole();
+	//AllocConsole();
 	
 	vfprintf(stderr, fmt, argv);
 	fputc('\n', stderr);
