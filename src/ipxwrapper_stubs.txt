@@ -8,6 +8,8 @@ ntohl
 htons
 ntohs
 select
+listen
+accept
 WSACreateEvent
 WSAEventSelect
 WSACloseEvent

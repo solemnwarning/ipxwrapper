@@ -23,6 +23,30 @@
 #include <wsipx.h>
 #include <stdint.h>
 
+#define MAX_ROUTER_CLIENTS 128
+
+struct router_call {
+	enum {
+		rc_bind,
+		rc_unbind,
+		rc_port,
+		rc_filter,
+		rc_reuse
+	} call;
+	
+	SOCKET sock;
+	
+	struct sockaddr_ipx arg_addr;
+	int arg_int;
+};
+
+struct router_ret {
+	int err_code;	/* ERROR_SUCCESS on success */
+	
+	struct sockaddr_ipx ret_addr;
+	int ret_int;
+};
+
 /* Represents a bound IPX address */
 struct router_addr {
 	struct sockaddr_ipx addr;
@@ -36,13 +60,23 @@ struct router_addr {
 	struct router_addr *next;
 };
 
+struct router_client {
+	SOCKET sock;
+	
+	struct router_call recvbuf;
+	int recvbuf_len;
+};
+
 struct router_vars {
 	BOOL running;
 	
 	struct ipx_interface *interfaces;
 	
 	SOCKET udp_sock;
-	SOCKET listner;
+	SOCKET listener;
+	
+	struct router_client clients[MAX_ROUTER_CLIENTS];
+	int client_count;
 	
 	WSAEVENT wsa_event;
 	

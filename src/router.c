@@ -38,7 +38,8 @@ struct router_vars *router_init(BOOL global) {
 	router->running = TRUE;
 	router->interfaces = NULL;
 	router->udp_sock = -1;
-	router->listner = -1;
+	router->listener = -1;
+	router->client_count = 0;
 	router->wsa_event = WSA_INVALID_EVENT;
 	router->crit_sec_init = FALSE;
 	router->addrs = NULL;
@@ -104,7 +105,37 @@ struct router_vars *router_init(BOOL global) {
 	}
 	
 	if(global) {
-		/* TODO: Global (service) router support */
+		if((router->listener = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
+			log_printf("Failed to create TCP socket: %s", w32_error(WSAGetLastError()));
+			
+			router_destroy(router);
+			return NULL;
+		}
+		
+		/* TODO: Use different port number for control socket? */
+		
+		addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+		
+		if(bind(router->listener, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
+			log_printf("Failed to bind TCP socket: %s", w32_error(WSAGetLastError()));
+			
+			router_destroy(router);
+			return NULL;
+		}
+		
+		if(listen(router->listener, 8) == -1) {
+			log_printf("Failed to listen for connections: %s", w32_error(WSAGetLastError()));
+			
+			router_destroy(router);
+			return NULL;
+		}
+		
+		if(WSAEventSelect(router->listener, router->wsa_event, FD_ACCEPT) == -1) {
+			log_printf("WSAEventSelect error: %s", w32_error(WSAGetLastError()));
+			
+			router_destroy(router);
+			return NULL;
+		}
 	}
 	
 	return router;
@@ -113,12 +144,21 @@ struct router_vars *router_init(BOOL global) {
 /* Release all resources allocated by a router and free it */
 void router_destroy(struct router_vars *router) {
 	struct router_addr *addr = router->addrs;
+	int i;
 	
 	while(addr) {
 		struct router_addr *del = addr;
 		addr = addr->next;
 		
 		free(del);
+	}
+	
+	for(i = 0; i < router->client_count; i++) {
+		closesocket(router->clients[i].sock);
+	}
+	
+	if(router->listener != -1) {
+		closesocket(router->listener);
 	}
 	
 	free(router->recvbuf);
@@ -158,6 +198,58 @@ DWORD router_main(void *arg) {
 		}
 		
 		LeaveCriticalSection(&(router->crit_sec));
+		
+		if(router->listener != -1) {
+			int newfd = accept(router->listener, NULL, NULL);
+			if(newfd != -1) {
+				if(router->client_count == MAX_ROUTER_CLIENTS) {
+					log_printf("Too many clients, dropping new connection!");
+					goto DROP_NEWFD;
+				}
+				
+				if(WSAEventSelect(newfd, router->wsa_event, FD_READ | FD_CLOSE) == -1) {
+					log_printf("WSAEventSelect error: %s", w32_error(WSAGetLastError()));
+					goto DROP_NEWFD;
+				}
+				
+				router->clients[router->client_count].sock = newfd;
+				router->clients[router->client_count++].recvbuf_len = 0;
+				
+				if(0) {
+					DROP_NEWFD:
+					closesocket(newfd);
+				}
+			}else if(WSAGetLastError() != WSAEWOULDBLOCK) {
+				log_printf("Failed to accept client connection: %s", w32_error(WSAGetLastError()));
+			}
+		}
+		
+		int i;
+		for(i = 0; i < router->client_count; i++) {
+			char *bstart = ((char*)&(router->clients[i].recvbuf)) + router->clients[i].recvbuf_len;
+			int len = sizeof(struct router_call) - router->clients[i].recvbuf_len;
+			
+			if((len = recv(router->clients[i].sock, bstart, len, 0) == -1) || len == 0) {
+				if(WSAGetLastError() == WSAEWOULDBLOCK || WSAGetLastError() == WSAECONNRESET) {
+					continue;
+				}
+				
+				if(len == -1) {
+					log_printf("Error reading from client socket: %s", w32_error(WSAGetLastError()));
+				}
+				
+				closesocket(router->clients[i].sock);
+				memcpy(&(router->clients[i]), &(router->clients[--router->client_count]), sizeof(struct router_client));
+				
+				continue;
+			}
+			
+			if((router->clients[i].recvbuf_len += len) == sizeof(struct router_call)) {
+				/* TODO: Handle call */
+				
+				router->clients[i].recvbuf_len = 0;
+			}
+		}
 		
 		struct sockaddr_in addr;
 		int addrlen = sizeof(addr);
