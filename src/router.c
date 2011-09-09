@@ -24,6 +24,8 @@
 #include "interface.h"
 
 static struct router_addr *router_get(struct router_vars *router, SOCKET control, SOCKET sock);
+static void router_handle_call(struct router_vars *router, int coff);
+static void router_drop_client(struct router_vars *router, int coff);
 
 /* Allocate router_vars structure and initialise all members
  * Returns NULL on failure
@@ -230,7 +232,7 @@ DWORD router_main(void *arg) {
 			int len = sizeof(struct router_call) - router->clients[i].recvbuf_len;
 			
 			if((len = recv(router->clients[i].sock, bstart, len, 0) == -1) || len == 0) {
-				if(WSAGetLastError() == WSAEWOULDBLOCK || WSAGetLastError() == WSAECONNRESET) {
+				if(WSAGetLastError() == WSAEWOULDBLOCK) {
 					continue;
 				}
 				
@@ -238,16 +240,12 @@ DWORD router_main(void *arg) {
 					log_printf("Error reading from client socket: %s", w32_error(WSAGetLastError()));
 				}
 				
-				closesocket(router->clients[i].sock);
-				memcpy(&(router->clients[i]), &(router->clients[--router->client_count]), sizeof(struct router_client));
-				
+				router_drop_client(router, i);
 				continue;
 			}
 			
 			if((router->clients[i].recvbuf_len += len) == sizeof(struct router_call)) {
-				/* TODO: Handle call */
-				
-				router->clients[i].recvbuf_len = 0;
+				router_handle_call(router, i);
 			}
 		}
 		
@@ -547,4 +545,90 @@ int router_set_reuse(struct router_vars *router, SOCKET control, SOCKET sock, BO
 	
 	LeaveCriticalSection(&(router->crit_sec));
 	return 1;
+}
+
+static void router_handle_call(struct router_vars *router, int coff) {
+	struct router_call call = router->clients[coff].recvbuf;
+	struct router_ret ret;
+	
+	ret.err_code = ERROR_SUCCESS;
+	
+	switch(call.call) {
+		case rc_bind: {
+			ret.ret_addr = call.arg_addr;
+			
+			if(router_bind(router, router->clients[coff].sock, call.sock, &(ret.ret_addr), &(ret.ret_u32), call.arg_int) == -1) {
+				ret.err_code = WSAGetLastError();
+			}
+			
+			break;
+		}
+		
+		case rc_unbind: {
+			router_unbind(router, router->clients[coff].sock, call.sock);
+			break;
+		}
+		
+		case rc_port: {
+			router_set_port(router, router->clients[coff].sock, call.sock, call.arg_int);
+			break;
+		}
+		
+		case rc_filter: {
+			router_set_filter(router, router->clients[coff].sock, call.sock, call.arg_int);
+			break;
+		}
+		
+		case rc_reuse: {
+			if(!router_set_reuse(router, router->clients[coff].sock, call.sock, call.arg_int)) {
+				ret.err_code = WSAEINVAL;
+			}
+			
+			break;
+		}
+		
+		default: {
+			log_printf("Recieved unknown call, dropping client");
+			
+			router_drop_client(router, coff);
+			return;
+		}
+	}
+	
+	int sent = 0, sr;
+	
+	while(sent < sizeof(ret)) {
+		char *sbuf = ((char*)&ret) + sent;
+		
+		if((sr = send(router->clients[coff].sock, sbuf, sizeof(ret) - sent, 0)) == -1) {
+			log_printf("Send error: %s, dropping client", w32_error(WSAGetLastError()));
+			
+			router_drop_client(router, coff);
+			return;
+		}
+		
+		sent += sr;
+	}
+	
+	router->clients[coff].recvbuf_len = 0;
+}
+
+static void router_drop_client(struct router_vars *router, int coff) {
+	EnterCriticalSection(&(router->crit_sec));
+	
+	struct router_addr *addr = router->addrs, *dp = NULL;
+	
+	while(addr) {
+		dp = addr->control_socket == router->clients[coff].sock ? addr : NULL;
+		addr = addr->next;
+		
+		if(dp) {
+			router_unbind(router, dp->control_socket, dp->ws_socket);
+		}
+	}
+	
+	LeaveCriticalSection(&(router->crit_sec));
+	
+	closesocket(router->clients[coff].sock);
+	router->clients[coff] = router->clients[--router->client_count];
 }

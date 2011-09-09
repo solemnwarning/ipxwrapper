@@ -10,6 +10,7 @@ ntohs
 select
 listen
 accept
+send
 WSACreateEvent
 WSAEventSelect
 WSACloseEvent

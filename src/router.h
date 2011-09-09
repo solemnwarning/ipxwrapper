@@ -44,7 +44,7 @@ struct router_ret {
 	int err_code;	/* ERROR_SUCCESS on success */
 	
 	struct sockaddr_ipx ret_addr;
-	int ret_int;
+	uint32_t ret_u32;
 };
 
 /* Represents a bound IPX address */
