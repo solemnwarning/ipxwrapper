@@ -58,7 +58,7 @@ static BOOL start_router(void);
 #define INIT_CS(cs) if(!init_cs(cs, &initialised_cs)) { return FALSE; }
 
 static BOOL init_cs(CRITICAL_SECTION *cs, int *counter) {
-	if(!InitializeCriticalSectionAndSpinCount(&(router->crit_sec), 0x80000000)) {
+	if(!InitializeCriticalSectionAndSpinCount(cs, 0x80000000)) {
 		log_printf("Failed to initialise critical section: %s", w32_error(GetLastError()));
 		return FALSE;
 	}
