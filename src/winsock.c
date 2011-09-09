@@ -622,7 +622,7 @@ int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct s
 		saddr.sin_port = htons(global_conf.udp_port);
 		saddr.sin_addr.s_addr = (host ? host->ipaddr : (global_conf.bcast_all ? INADDR_BROADCAST : sockptr->nic_bcast));
 		
-		int sval = r_sendto(net_fd, (char*)packet, psize, 0, (struct sockaddr*)&saddr, sizeof(saddr));
+		int sval = r_sendto(send_fd, (char*)packet, psize, 0, (struct sockaddr*)&saddr, sizeof(saddr));
 		if(sval == -1) {
 			len = -1;
 		}

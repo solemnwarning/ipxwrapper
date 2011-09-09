@@ -40,7 +40,7 @@
 ipx_socket *sockets = NULL;
 struct ipx_interface *nics = NULL;
 ipx_host *hosts = NULL;
-SOCKET net_fd = -1;
+SOCKET send_fd = -1;
 struct reg_global global_conf;
 
 HMODULE winsock2_dll = NULL;
@@ -106,7 +106,34 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 		if(!rclient_start(&g_rclient)) {
 			return FALSE;
 		}
+		
+		if(g_rclient.router) {
+			send_fd = g_rclient.router->udp_sock;
+		}else{
+			/* Create UDP socket for sending packets if not using a private router */
+			
+			if((send_fd = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
+				log_printf("Failed to create UDP socket: %s", w32_error(WSAGetLastError()));
+				return FALSE;
+			}
+			
+			struct sockaddr_in addr;
+			addr.sin_family = AF_INET;
+			addr.sin_addr.s_addr = INADDR_ANY;
+			addr.sin_port = 0;
+			
+			if(bind(send_fd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
+				log_printf("Failed to bind UDP socket (send_fd): %s", w32_error(WSAGetLastError()));
+				return FALSE;
+			}
+		}
 	}else if(why == DLL_PROCESS_DETACH) {
+		if(send_fd != -1 && !g_rclient.router) {
+			closesocket(send_fd);
+		}
+		
+		send_fd = -1;
+		
 		rclient_stop(&g_rclient);
 		
 		WSACleanup();

@@ -101,7 +101,7 @@ struct ipx_host {
 extern ipx_socket *sockets;
 extern struct ipx_interface *nics;
 extern ipx_host *hosts;
-extern SOCKET net_fd;
+extern SOCKET send_fd;
 extern struct reg_global global_conf;
 extern struct rclient g_rclient;
 
