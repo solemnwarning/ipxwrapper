@@ -233,15 +233,15 @@ DWORD router_main(void *arg) {
 			char *bstart = ((char*)&(router->clients[i].recvbuf)) + router->clients[i].recvbuf_len;
 			int len = sizeof(struct router_call) - router->clients[i].recvbuf_len;
 			
-			if((len = recv(router->clients[i].sock, bstart, len, 0)) == -1 || len == 0) {
-				if(len == -1) {
-					if(WSAGetLastError() == WSAEWOULDBLOCK) {
-						continue;
-					}
-					
-					log_printf("Error reading from client socket: %s", w32_error(WSAGetLastError()));
+			if((len = recv(router->clients[i].sock, bstart, len, 0)) == -1) {
+				if(WSAGetLastError() == WSAEWOULDBLOCK) {
+					continue;
 				}
 				
+				log_printf("Error reading from client socket: %s", w32_error(WSAGetLastError()));
+			}
+			
+			if(len == -1 || len == 0) {
 				router_drop_client(router, i--);
 				continue;
 			}
