@@ -79,7 +79,7 @@ src/dpwsockx_stubs.s: src/dpwsockx_stubs.txt
 	perl mkstubs.pl src/dpwsockx_stubs.txt src/dpwsockx_stubs.s dpwsockx.dll
 
 %.dll: src/stubdll.o src/%_stubs.o src/log.o src/common.o src/%.def
-	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup,-s -shared -o $@ $^
+	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -shared -o $@ $^
 
 src/%_stubs.o: src/%_stubs.s
 	nasm -f win32 -o $@ $<
