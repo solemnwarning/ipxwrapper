@@ -236,9 +236,12 @@ DWORD router_main(void *arg) {
 			if((len = recv(router->clients[i].sock, bstart, len, 0)) == -1) {
 				if(WSAGetLastError() == WSAEWOULDBLOCK) {
 					continue;
+				}else if(WSAGetLastError() == WSAECONNRESET) {
+					/* Treat connection reset as regular close */
+					len = 0;
+				}else{
+					log_printf("Error reading from client socket: %s", w32_error(WSAGetLastError()));
 				}
-				
-				log_printf("Error reading from client socket: %s", w32_error(WSAGetLastError()));
 			}
 			
 			if(len == -1 || len == 0) {
