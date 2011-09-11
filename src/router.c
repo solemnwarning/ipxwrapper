@@ -716,7 +716,7 @@ void rclient_stop(struct rclient *rclient) {
 		EnterCriticalSection(&(rclient->router->crit_sec));
 		
 		rclient->router->running = FALSE;
-		SetEvent(rclient->router->wsa_event);
+		WSASetEvent(rclient->router->wsa_event);
 		
 		LeaveCriticalSection(&(rclient->router->crit_sec));
 		

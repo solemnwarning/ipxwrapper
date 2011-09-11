@@ -128,11 +128,15 @@ static DWORD WINAPI worker_main(LPVOID sp) {
 		}
 		
 		if(!recv_packet(sp_data->sock, buf, sp)) {
+			release_sp_data((IDirectPlaySP*)sp);
 			return 1;
 		}
 		
-		if(sp_data->ns_sock != -1 && recv_packet(sp_data->ns_sock, buf, sp)) {
-			return 1;
+		if(sp_data->ns_sock != -1 && !recv_packet(sp_data->ns_sock, buf, sp)) {
+			log_printf("Closing ns_sock due to error");
+			
+			closesocket(sp_data->ns_sock);
+			sp_data->ns_sock = -1;
 		}
 		
 		release_sp_data((IDirectPlaySP*)sp);
@@ -354,7 +358,7 @@ static HRESULT WINAPI IPX_Open(LPDPSP_OPENDATA data) {
 			
 			memcpy(&addr, &(sp_data->addr), sizeof(addr));
 			addr.sa_socket = htons(DISCOVERY_SOCKET);
-		
+			
 			if(bind(sp_data->ns_sock, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
 				closesocket(sp_data->ns_sock);
 				sp_data->ns_sock = -1;
@@ -365,7 +369,7 @@ static HRESULT WINAPI IPX_Open(LPDPSP_OPENDATA data) {
 				return DPERR_CANNOTCREATESERVER;
 			}
 			
-			if(WSAEventSelect(sp_data->sock, sp_data->event, FD_READ) == -1) {
+			if(WSAEventSelect(sp_data->ns_sock, sp_data->event, FD_READ) == -1) {
 				closesocket(sp_data->ns_sock);
 				sp_data->ns_sock = -1;
 				
@@ -403,11 +407,12 @@ static HRESULT WINAPI IPX_ShutdownEx(LPDPSP_SHUTDOWNDATA data) {
 	
 	struct sp_data *sp_data = get_sp_data(data->lpISP);
 	
+	sp_data->running = FALSE;
+	WSASetEvent(sp_data->event);
+	
+	release_sp_data(data->lpISP);
+	
 	if(sp_data->worker_thread) {
-		sp_data->running = FALSE;
-		
-		release_sp_data(data->lpISP);
-		
 		if(WaitForSingleObject(sp_data->worker_thread, 3000) == WAIT_TIMEOUT) {
 			log_printf("DirectPlay worker didn't exit in 3 seconds, killing");
 			TerminateThread(sp_data->worker_thread, 0);

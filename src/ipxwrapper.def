@@ -19,3 +19,4 @@ EXPORTS
 	WSACloseEvent
 	WSAEventSelect
 	WSAResetEvent
+	WSASetEvent

@@ -16,6 +16,7 @@ WSACreateEvent
 WSAEventSelect
 WSACloseEvent
 WSAResetEvent
+WSASetEvent
 r_EnumProtocolsA
 r_EnumProtocolsW
 r_WSARecvEx
