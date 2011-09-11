@@ -456,7 +456,7 @@ static int router_bind(struct router_vars *router, SOCKET control, SOCKET sock, 
 	new_addr->control_socket = control;
 	new_addr->filter_ptype = -1;
 	new_addr->reuse = reuse;
-	new_addr->next = NULL;
+	new_addr->next = router->addrs;
 	
 	router->addrs = new_addr;
 	
