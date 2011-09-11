@@ -123,19 +123,22 @@ static DWORD WINAPI worker_main(LPVOID sp) {
 			return 0;
 		}
 		
+		release_sp_data((IDirectPlaySP*)sp);
+		
 		if(!recv_packet(sp_data->sock, buf, sp)) {
-			release_sp_data((IDirectPlaySP*)sp);
 			return 1;
 		}
 		
 		if(sp_data->ns_sock != -1 && !recv_packet(sp_data->ns_sock, buf, sp)) {
 			log_printf("Closing ns_sock due to error");
 			
+			get_sp_data((IDirectPlaySP*)sp);
+			
 			closesocket(sp_data->ns_sock);
 			sp_data->ns_sock = -1;
+			
+			release_sp_data((IDirectPlaySP*)sp);
 		}
-		
-		release_sp_data((IDirectPlaySP*)sp);
 	}
 	
 	return 0;
