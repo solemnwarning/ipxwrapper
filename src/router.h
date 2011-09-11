@@ -57,6 +57,10 @@ struct router_addr {
 	int filter_ptype;	/* Packet type filter, negative to disable */
 	BOOL reuse;		/* SO_REUSEADDR */
 	
+	/* Address of IP interface */
+	uint32_t ipaddr;
+	uint32_t netmask;
+	
 	struct router_addr *next;
 };
 
@@ -69,8 +73,6 @@ struct router_client {
 
 struct router_vars {
 	BOOL running;
-	
-	struct ipx_interface *interfaces;
 	
 	SOCKET udp_sock;
 	SOCKET listener;

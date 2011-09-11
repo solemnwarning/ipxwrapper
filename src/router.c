@@ -40,7 +40,6 @@ struct router_vars *router_init(BOOL global) {
 	}
 	
 	router->running = TRUE;
-	router->interfaces = NULL;
 	router->udp_sock = -1;
 	router->listener = -1;
 	router->client_count = 0;
@@ -64,8 +63,6 @@ struct router_vars *router_init(BOOL global) {
 		router_destroy(router);
 		return NULL;
 	}
-	
-	router->interfaces = get_interfaces(-1);
 	
 	if((router->udp_sock = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
 		log_printf("Error creating UDP socket: %s", w32_error(WSAGetLastError()));
@@ -171,8 +168,6 @@ void router_destroy(struct router_vars *router) {
 		closesocket(router->udp_sock);
 	}
 	
-	free_interfaces(router->interfaces);
-	
 	if(router->wsa_event != WSA_INVALID_EVENT) {
 		WSACloseEvent(router->wsa_event);
 	}
@@ -275,27 +270,6 @@ DWORD router_main(void *arg) {
 		
 		ipx_packet *packet = (ipx_packet*)router->recvbuf;
 		
-		/* Check that the packet arrived from the subnet of an enabled network
-		 * interface and drop it if not.
-		*/
-		
-		if(global_conf.filter) {
-			struct ipx_interface *iface = router->interfaces;
-			
-			while(iface) {
-				if((iface->ipaddr & iface->netmask) == (addr.sin_addr.s_addr & iface->netmask)) {
-					break;
-				}
-				
-				iface = iface->next;
-			}
-			
-			if(!iface) {
-				LeaveCriticalSection(&(router->crit_sec));
-				continue;
-			}
-		}
-		
 		packet->size = ntohs(packet->size);
 		
 		if(packet->size > MAX_PACKET_SIZE || packet->size + sizeof(ipx_packet) - 1 != len) {
@@ -320,7 +294,10 @@ DWORD router_main(void *arg) {
 				(ra->filter_ptype < 0 || ra->filter_ptype == packet->ptype) &&
 				(memcmp(dest_net, ra->addr.sa_netnum, 4) == 0 || memcmp(dest_net, f6, 4) == 0) &&
 				(memcmp(packet->dest_node, ra->addr.sa_nodenum, 6) == 0 || memcmp(packet->dest_node, f6, 6) == 0) &&
-				packet->dest_socket == ra->addr.sa_socket
+				packet->dest_socket == ra->addr.sa_socket &&
+				
+				/* Check source IP is within correct subnet */
+				((ra->ipaddr & ra->netmask) == (addr.sin_addr.s_addr & ra->netmask) || !global_conf.filter)
 			) {
 				addr.sin_addr.s_addr = inet_addr("127.0.0.1");
 				addr.sin_port = ra->local_port;
@@ -378,6 +355,9 @@ static int router_bind(struct router_vars *router, SOCKET control, SOCKET sock, 
 	memcpy(addr->sa_nodenum, iface->ipx_node, 6);
 	
 	*nic_bcast = iface->bcast;
+	
+	uint32_t iface_ipaddr = iface->ipaddr;
+	uint32_t iface_netmask = iface->netmask;
 	
 	free_interfaces(ifaces);
 	
@@ -456,6 +436,8 @@ static int router_bind(struct router_vars *router, SOCKET control, SOCKET sock, 
 	new_addr->control_socket = control;
 	new_addr->filter_ptype = -1;
 	new_addr->reuse = reuse;
+	new_addr->ipaddr = iface_ipaddr;
+	new_addr->netmask = iface_netmask;
 	new_addr->next = router->addrs;
 	
 	router->addrs = new_addr;
