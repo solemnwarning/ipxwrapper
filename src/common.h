@@ -44,6 +44,8 @@
 
 extern HKEY regkey;
 
+extern unsigned char log_calls;
+
 void log_printf(const char *fmt, ...);
 
 const char *w32_error(DWORD errnum);
@@ -54,6 +56,9 @@ void reg_close(void);
 char reg_get_char(const char *val_name, char default_val);
 DWORD reg_get_bin(const char *val_name, void *buf, DWORD size);
 
-HMODULE load_sysdll(const char *name);
+void load_dll(unsigned int dllnum);
+void unload_dlls(void);
+void __stdcall *find_sym(unsigned int dllnum, const char *symbol);
+void __stdcall log_call(unsigned int dllnum, const char *symbol);
 
 #endif /* !IPXWRAPPER_COMMON_H */

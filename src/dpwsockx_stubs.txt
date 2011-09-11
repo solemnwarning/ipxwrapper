@@ -1,3 +1,9 @@
 r_SPInit
 DPWS_GetEnumPort
 DPWS_BuildIPMessageHeader
+
+WSACreateEvent:4
+WSACloseEvent:4
+WSAEventSelect:4
+WSAResetEvent:4
+WSASetEvent:4

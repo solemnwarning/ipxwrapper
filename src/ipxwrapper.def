@@ -14,9 +14,3 @@ EXPORTS
 	EnumProtocolsW
 	WSARecvEx
 	ioctlsocket
-	
-	WSACreateEvent
-	WSACloseEvent
-	WSAEventSelect
-	WSAResetEvent
-	WSASetEvent

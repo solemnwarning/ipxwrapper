@@ -1,8 +1,8 @@
 ServiceMain
 SvchostPushServiceGlobals
 AcceptEx
-EnumProtocolsA
-EnumProtocolsW
+EnumProtocolsA:0
+EnumProtocolsW:0
 GetAcceptExSockaddrs
 GetAddressByNameA
 GetAddressByNameW
@@ -20,7 +20,7 @@ SetServiceW
 StartWsdpService
 StopWsdpService
 TransmitFile
-WSARecvEx
+WSARecvEx:0
 WSPStartup
 dn_expand
 getnetbyname

@@ -43,10 +43,6 @@ ipx_host *hosts = NULL;
 SOCKET send_fd = -1;
 struct reg_global global_conf;
 
-HMODULE winsock2_dll = NULL;
-HMODULE mswsock_dll = NULL;
-HMODULE wsock32_dll = NULL;
-
 struct rclient g_rclient;
 
 static CRITICAL_SECTION sockets_cs;
@@ -71,14 +67,6 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 		log_open();
 		
 		if(!rclient_init(&g_rclient)) {
-			return FALSE;
-		}
-		
-		winsock2_dll = load_sysdll("ws2_32.dll");
-		mswsock_dll = load_sysdll("mswsock.dll");
-		wsock32_dll = load_sysdll("wsock32.dll");
-		
-		if(!winsock2_dll || !mswsock_dll || !wsock32_dll) {
 			return FALSE;
 		}
 		
@@ -150,32 +138,12 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 		
 		reg_close();
 		
-		DLL_UNLOAD(winsock2_dll);
-		DLL_UNLOAD(mswsock_dll);
-		DLL_UNLOAD(wsock32_dll);
+		unload_dlls();
 		
 		log_close();
 	}
 	
 	return TRUE;
-}
-
-void __stdcall *find_sym(char const *symbol) {
-	void *addr = GetProcAddress(winsock2_dll, symbol);
-	
-	if(!addr) {
-		addr = GetProcAddress(mswsock_dll, symbol);
-	}
-	if(!addr) {
-		addr = GetProcAddress(wsock32_dll, symbol);
-	}
-	
-	if(!addr) {
-		log_printf("Unknown symbol: %s", symbol);
-		abort();
-	}
-	
-	return addr;
 }
 
 /* Lock the mutex and search the sockets list for an ipx_socket structure with

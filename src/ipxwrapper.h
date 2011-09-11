@@ -109,7 +109,6 @@ extern HMODULE winsock2_dll;
 extern HMODULE mswsock_dll;
 extern HMODULE wsock32_dll;
 
-void __stdcall *find_sym(char const *sym);
 ipx_socket *get_socket(SOCKET fd);
 void lock_sockets(void);
 void unlock_sockets(void);

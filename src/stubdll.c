@@ -21,28 +21,9 @@
 
 #include "common.h"
 
-static HMODULE ipxdll = NULL;
-static HMODULE sysdll = NULL;
-extern char const *dllname;
-
-unsigned char log_calls = 0;
-
 void log_open();
 void log_close();
 void log_printf(const char *fmt, ...);
-
-static void load_dlls() {
-	ipxdll = LoadLibrary("ipxwrapper.dll");
-	if(!ipxdll) {
-		log_printf("Error loading ipxwrapper.dll: %s", w32_error(GetLastError()));
-		abort();
-	}
-	
-	sysdll = load_sysdll(dllname);
-	if(!sysdll) {
-		abort();
-	}
-}
 
 BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 	if(why == DLL_PROCESS_ATTACH) {
@@ -54,37 +35,9 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 		
 		reg_close();
 	}else if(why == DLL_PROCESS_DETACH) {
-		if(sysdll) {
-			FreeLibrary(sysdll);
-			sysdll = NULL;
-		}
-		
-		if(ipxdll) {
-			FreeLibrary(ipxdll);
-			ipxdll = NULL;
-		}
-		
+		unload_dlls();
 		log_close();
 	}
 	
 	return TRUE;
-}
-
-void __stdcall *find_sym(char const *symbol) {
-	if(!ipxdll) {
-		load_dlls();
-	}
-	
-	void *ptr = GetProcAddress(ipxdll, symbol);
-	
-	if(!ptr) {
-		ptr = GetProcAddress(sysdll, symbol);
-	}
-	
-	if(!ptr) {
-		log_printf("Missing symbol in %s: %s", dllname, symbol);
-		abort();
-	}
-	
-	return ptr;
 }

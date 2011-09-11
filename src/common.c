@@ -23,6 +23,19 @@
 
 HKEY regkey = NULL;
 
+unsigned char log_calls = 0;
+
+static const char *dll_names[] = {
+	"ipxwrapper.dll",
+	"wsock32.dll",
+	"mswsock.dll",
+	"dpwsockx.dll",
+	"ws2_32.dll",
+	NULL
+};
+
+static HANDLE dll_handles[] = {NULL, NULL, NULL, NULL, NULL};
+
 /* Convert a windows error number to an error message */
 const char *w32_error(DWORD errnum) {
 	static char buf[1024] = {'\0'};
@@ -85,24 +98,55 @@ DWORD reg_get_bin(const char *val_name, void *buf, DWORD size) {
 	return size;
 }
 
-/* Load a system DLL */
-HMODULE load_sysdll(const char *name) {
-	char path[1024];
+void load_dll(unsigned int dllnum) {
+	char path[512];
 	
-	GetSystemDirectory(path, sizeof(path));
-	
-	if(strlen(path) + strlen(name) + 2 > sizeof(path)) {
-		log_printf("Path buffer too small, cannot load %s", name);
-		return NULL;
+	if(dllnum) {
+		GetSystemDirectory(path, sizeof(path));
+		
+		if(strlen(path) + strlen(dll_names[dllnum]) + 2 > sizeof(path)) {
+			log_printf("Path buffer too small, cannot load %s", dll_names[dllnum]);
+			abort();
+		}
+		
+		strcat(path, "\\");
+		strcat(path, dll_names[dllnum]);
 	}
 	
-	strcat(path, "\\");
-	strcat(path, name);
-	
-	HMODULE dll = LoadLibrary(path);
-	if(!dll) {
+	dll_handles[dllnum] = LoadLibrary(dllnum ? path : dll_names[dllnum]);
+	if(!dll_handles[dllnum]) {
 		log_printf("Error loading %s: %s", path, w32_error(GetLastError()));
+		abort();
+	}
+}
+
+void unload_dlls(void) {
+	int i;
+	
+	for(i = 0; dll_names[i]; i++) {
+		if(dll_handles[i]) {
+			FreeLibrary(dll_handles[i]);
+			dll_handles[i] = NULL;
+		}
+	}
+}
+
+void __stdcall *find_sym(unsigned int dllnum, const char *symbol) {
+	if(!dll_handles[dllnum]) {
+		load_dll(dllnum);
 	}
 	
-	return dll;
+	void *ptr = GetProcAddress(dll_handles[dllnum], symbol);
+	if(!ptr) {
+		log_printf("Missing symbol in %s: %s", dll_names[dllnum], symbol);
+		abort();
+	}
+	
+	return ptr;
+}
+
+void __stdcall log_call(unsigned int dllnum, const char *symbol) {
+	if(log_calls) {
+		log_printf("%s:%s", dll_names[dllnum], symbol);
+	}
 }

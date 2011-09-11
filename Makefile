@@ -60,23 +60,23 @@ ipxwrapper.dll: $(IPXWRAPPER_DEPS)
 ipxconfig.exe: src/ipxconfig.cpp
 	$(CXX) $(CXXFLAGS) -static-libgcc -static-libstdc++ -D_WIN32_IE=0x0400 -mwindows -o ipxconfig.exe src/ipxconfig.cpp -liphlpapi
 
-dpwsockx.dll: src/directplay.o src/log.o src/dpwsockx_stubs.o src/common.o ipxwrapper.dll
-	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -shared -o dpwsockx.dll src/directplay.o src/log.o src/common.o src/dpwsockx_stubs.o src/dpwsockx.def -L. -lipxwrapper -lwsock32
+dpwsockx.dll: src/directplay.o src/log.o src/dpwsockx_stubs.o src/common.o
+	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -shared -o dpwsockx.dll src/directplay.o src/log.o src/common.o src/dpwsockx_stubs.o src/dpwsockx.def -lwsock32
 
 ipxrouter.exe: src/router-exe.o src/router.o src/interface.o src/common.o
 	$(CC) $(CFLAGS) -static-libgcc -o ipxrouter.exe $^ -lws2_32 -liphlpapi
 
 src/ipxwrapper_stubs.s: src/ipxwrapper_stubs.txt
-	perl mkstubs.pl src/ipxwrapper_stubs.txt src/ipxwrapper_stubs.s
+	perl mkstubs.pl src/ipxwrapper_stubs.txt src/ipxwrapper_stubs.s 0
 
 src/wsock32_stubs.s: src/wsock32_stubs.txt
-	perl mkstubs.pl src/wsock32_stubs.txt src/wsock32_stubs.s wsock32.dll
+	perl mkstubs.pl src/wsock32_stubs.txt src/wsock32_stubs.s 1
 
 src/mswsock_stubs.s: src/mswsock_stubs.txt
-	perl mkstubs.pl src/mswsock_stubs.txt src/mswsock_stubs.s mswsock.dll
+	perl mkstubs.pl src/mswsock_stubs.txt src/mswsock_stubs.s 2
 
 src/dpwsockx_stubs.s: src/dpwsockx_stubs.txt
-	perl mkstubs.pl src/dpwsockx_stubs.txt src/dpwsockx_stubs.s dpwsockx.dll
+	perl mkstubs.pl src/dpwsockx_stubs.txt src/dpwsockx_stubs.s 3
 
 %.dll: src/stubdll.o src/%_stubs.o src/log.o src/common.o src/%.def
 	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -shared -o $@ $^

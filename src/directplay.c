@@ -50,10 +50,6 @@ struct sp_data_cont {
 
 #define CALL(n) if(log_calls) { log_printf("DirectPlay: %s", n); }
 
-extern char const *dllname;
-unsigned char log_calls = 0;
-static HMODULE sysdll = NULL;
-
 /* Lock the object mutex and return the data pointer */
 static struct sp_data *get_sp_data(IDirectPlaySP *sp) {
 	struct sp_data_cont *cont;
@@ -570,28 +566,9 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 		
 		reg_close();
 	}else if(why == DLL_PROCESS_DETACH) {
-		if(sysdll) {
-			FreeLibrary(sysdll);
-			sysdll = NULL;
-		}
-		
+		unload_dlls();
 		log_close();
 	}
 	
 	return TRUE;
-}
-
-void __stdcall *find_sym(char const *symbol) {
-	if(!sysdll) {
-		sysdll = load_sysdll(dllname);
-	}
-	
-	void *ptr = GetProcAddress(sysdll, symbol);
-	
-	if(!ptr) {
-		log_printf("Missing symbol in %s: %s", dllname, symbol);
-		abort();
-	}
-	
-	return ptr;
 }
