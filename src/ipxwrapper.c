@@ -38,7 +38,6 @@
 	}
 
 ipx_socket *sockets = NULL;
-struct ipx_interface *nics = NULL;
 ipx_host *hosts = NULL;
 SOCKET send_fd = -1;
 struct reg_global global_conf;
@@ -78,8 +77,6 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 			global_conf.bcast_all = 0;
 			global_conf.filter = 1;
 		}
-		
-		nics = get_interfaces(-1);
 		
 		INIT_CS(&sockets_cs);
 		INIT_CS(&hosts_cs);
@@ -133,8 +130,6 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 		}
 		
 		initialised_cs = 0;
-		
-		free_interfaces(nics);
 		
 		reg_close();
 		

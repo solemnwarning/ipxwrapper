@@ -17,8 +17,8 @@ WSAEventSelect:4
 WSACloseEvent:4
 WSAResetEvent:4
 WSASetEvent:4
-r_EnumProtocolsA:4
-r_EnumProtocolsW:4
+r_EnumProtocolsA:1
+r_EnumProtocolsW:1
 r_WSARecvEx:4
 r_bind:4
 r_closesocket:4
