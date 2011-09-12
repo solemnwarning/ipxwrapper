@@ -562,6 +562,14 @@ static void baddr_to_str(char *str, const unsigned char *bin, int nbytes) {
 }
 
 static void init_windows() {
+	INITCOMMONCONTROLSEX common_controls;
+	common_controls.dwSize = sizeof(common_controls);
+	common_controls.dwICC = ICC_LISTVIEW_CLASSES;
+	
+	if(!InitCommonControlsEx(&common_controls)) {
+		die("Failed to initialise common controls");
+	}
+	
 	WNDCLASS wclass;
 	
 	memset(&wclass, 0, sizeof(wclass));

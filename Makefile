@@ -58,7 +58,7 @@ ipxwrapper.dll: $(IPXWRAPPER_DEPS)
 	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -shared -o ipxwrapper.dll $(IPXWRAPPER_DEPS) -liphlpapi
 
 ipxconfig.exe: src/ipxconfig.cpp
-	$(CXX) $(CXXFLAGS) -static-libgcc -static-libstdc++ -D_WIN32_IE=0x0400 -mwindows -o ipxconfig.exe src/ipxconfig.cpp -liphlpapi
+	$(CXX) $(CXXFLAGS) -static-libgcc -static-libstdc++ -D_WIN32_IE=0x0400 -mwindows -o ipxconfig.exe src/ipxconfig.cpp -liphlpapi -lcomctl32
 
 dpwsockx.dll: src/directplay.o src/log.o src/dpwsockx_stubs.o src/common.o
 	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -shared -o dpwsockx.dll src/directplay.o src/log.o src/common.o src/dpwsockx_stubs.o src/dpwsockx.def -lwsock32
