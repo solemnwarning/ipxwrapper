@@ -1,8 +1,4 @@
 Version ???:
-	Feature: DirectPlay support added via custom service provider.
-	
-	Update: Isolated router code from the rest of IPXWrapper.
-	
 	Cleanup: Moved certain library functions out of ipxwrapper.c and tidied up.
 	
 	Cleanup: Removed winstuff.h, added wsnwlink.h from Wine.
@@ -10,6 +6,25 @@ Version ???:
 	Cleanup: Merged EnumProtocolsA and EnumProtocolsW into a single function.
 	
 	Cleanup: Locking code partially cleaned up.
+	
+	Feature: Support separate router process to allow for multiple processes
+	using IPX sockets.
+	
+	Bugfix: Return correct value when SO_BROADCAST is requested from getsockopt.
+	
+	Feature: Support address reuse with SO_REUSEADDR.
+	
+	Bugfix: Properly terminate worker threads.
+	
+	Bugfix: Load symbols from correct DLL on first try to prevent corruption of
+	system error code.
+	
+	Feature: New DirectPlay service provider for IPX.
+	
+	Bugfix: Correctly initialise common controls in ipxconfig.
+	
+	Update: Load interfaces on each bind/getsockopt call to allow configuration
+	changes without restarting.
 
 Version 0.2.2:
 	Feature: Redesigned ipxconfig UI.

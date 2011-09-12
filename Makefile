@@ -26,13 +26,14 @@ CXXFLAGS := $(CFLAGS)
 IPXWRAPPER_DEPS := src/ipxwrapper.o src/winsock.o src/ipxwrapper_stubs.o src/log.o src/common.o \
 	src/interface.o src/router.o src/ipxwrapper.def
 
-BIN_FILES := changes.txt license.txt readme.txt ipxwrapper.dll mswsock.dll wsock32.dll ipxconfig.exe
+BIN_FILES := changes.txt license.txt readme.txt ipxwrapper.dll mswsock.dll wsock32.dll ipxconfig.exe \
+	ipxrouter.exe dpwsockx.dll
 SRC_FILES := changes.txt license.txt Makefile mkstubs.pl readme.txt src/config.h src/ipxconfig.cpp \
 	src/ipxwrapper.c src/ipxwrapper.def src/ipxwrapper.h src/ipxwrapper_stubs.txt src/log.c \
 	src/mswsock.def src/mswsock_stubs.txt src/stubdll.c src/winsock.c src/wsock32.def \
 	src/wsock32_stubs.txt src/directplay.c src/dpwsockx.def src/dpwsockx_stubs.txt src/common.c \
-	src/common.h src/router.c src/router.h include/dplay.h include/dplaysp.h include/dplobby.h \
-	include/wsnwlink.h
+	src/common.h src/router.c src/router.h src/router-exe.c src/interface.c src/interface.h \
+	include/dplay.h include/dplaysp.h include/dplobby.h include/wsnwlink.h
 
 all: ipxwrapper.dll wsock32.dll mswsock.dll ipxconfig.exe dpwsockx.dll ipxrouter.exe
 
