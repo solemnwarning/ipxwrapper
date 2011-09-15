@@ -73,3 +73,4 @@ NPLoadNameSpaces
 TransmitFile
 AcceptEx
 GetAcceptExSockaddrs
+WSHEnumProtocols:0

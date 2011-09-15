@@ -50,6 +50,7 @@ EXPORTS
 	__WSAFDIsSet			@151
 	WEP				@500
 	WSApSetPostRoutine		@1000
+	WSHEnumProtocols		@1005
 	inet_network			@1100
 	getnetbyname			@1101
 	rcmd				@1102

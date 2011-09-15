@@ -31,3 +31,4 @@ rresvport
 s_perror
 sethostname
 inet_addr
+WSHEnumProtocols:0

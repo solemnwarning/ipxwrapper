@@ -38,6 +38,10 @@ typedef struct _PROTOCOL_INFO {
 	void *lpProtocol ;
 } PROTOCOL_INFO;
 
+static size_t strsize(void *str, BOOL unicode) {
+	return unicode ? 2 + wcslen(str)*2 : 1 + strlen(str);
+}
+
 static int do_EnumProtocols(LPINT protocols, LPVOID buf, LPDWORD bsptr, BOOL unicode) {
 	int bufsize = *bsptr, rval, i, want_ipx = 0;
 	
@@ -61,28 +65,66 @@ static int do_EnumProtocols(LPINT protocols, LPVOID buf, LPDWORD bsptr, BOOL uni
 	if(want_ipx) {
 		for(i = 0; i < rval; i++) {
 			if(pinfo[i].iProtocol == NSPROTO_IPX) {
-				break;
+				return rval;
 			}
 		}
 		
-		if(i == rval) {
-			*bsptr += sizeof(PROTOCOL_INFO);
-			rval++;
-		}
+		*bsptr += sizeof(PROTOCOL_INFO) + (unicode ? 8 : 4);
 		
 		if(*bsptr > bufsize) {
 			SetLastError(ERROR_INSUFFICIENT_BUFFER);
 			return -1;
 		}
 		
-		pinfo[i].dwServiceFlags = 5641;
-		pinfo[i].iAddressFamily = AF_IPX;
-		pinfo[i].iMaxSockAddr = 16;
-		pinfo[i].iMinSockAddr = 14;
-		pinfo[i].iSocketType = SOCK_DGRAM;
-		pinfo[i].iProtocol = NSPROTO_IPX;
-		pinfo[i].dwMessageSize = 576;
-		pinfo[i].lpProtocol = unicode ? (char*)L"IPX" : "IPX";
+		/* Make sure there is space between the last PROTOCOL_INFO structure
+		 * and the protocol names for the extra structure.
+		*/
+		
+		size_t slen = 0, off = 0;
+		
+		for(i = 0; i < rval; i++) {
+			slen += strsize(pinfo[i].lpProtocol, unicode);
+		}
+		
+		char *name_buf = malloc(slen);
+		if(!name_buf) {
+			SetLastError(ERROR_OUTOFMEMORY);
+			return -1;
+		}
+		
+		for(i = 0; i < rval; i++) {
+			slen = strsize(pinfo[i].lpProtocol, unicode);
+			memcpy(name_buf + off, pinfo[i].lpProtocol, slen);
+			
+			off += slen;
+		}
+		
+		char *name_dest = ((char*)buf) + sizeof(PROTOCOL_INFO) * (rval + 1);
+		
+		memcpy(name_dest, name_buf, off);
+		free(name_buf);
+		
+		if(unicode) {
+			wcscpy((wchar_t*)(name_dest + off), L"IPX");
+		}else{
+			strcpy(name_dest + off, "IPX");
+		}
+		
+		for(i = 0, off = 0; i < rval; i++) {
+			pinfo[i].lpProtocol = name_dest + off;
+			off += strsize(pinfo[i].lpProtocol, unicode);
+		}
+		
+		int ipx_off = rval++;
+		
+		pinfo[ipx_off].dwServiceFlags = 5641;
+		pinfo[ipx_off].iAddressFamily = AF_IPX;
+		pinfo[ipx_off].iMaxSockAddr = 16;
+		pinfo[ipx_off].iMinSockAddr = 14;
+		pinfo[ipx_off].iSocketType = SOCK_DGRAM;
+		pinfo[ipx_off].iProtocol = NSPROTO_IPX;
+		pinfo[ipx_off].dwMessageSize = 576;
+		pinfo[ipx_off].lpProtocol = name_dest + off;
 	}
 	
 	return rval;
@@ -94,6 +136,10 @@ INT APIENTRY EnumProtocolsA(LPINT protocols, LPVOID buf, LPDWORD bsptr) {
 
 INT APIENTRY EnumProtocolsW(LPINT protocols, LPVOID buf, LPDWORD bsptr) {
 	return do_EnumProtocols(protocols, buf, bsptr, TRUE);
+}
+
+INT WINAPI WSHEnumProtocols(LPINT protocols, LPWSTR ign, LPVOID buf, LPDWORD bsptr) {
+	return do_EnumProtocols(protocols, buf, bsptr, FALSE);
 }
 
 SOCKET WSAAPI socket(int af, int type, int protocol) {

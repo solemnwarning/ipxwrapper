@@ -32,3 +32,4 @@ EXPORTS
 	rresvport			@30
 	s_perror			@31
 	sethostname			@32
+	WSHEnumProtocols		@2026
