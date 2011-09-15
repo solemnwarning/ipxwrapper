@@ -148,7 +148,9 @@ int WSAAPI closesocket(SOCKET fd) {
 	
 	log_printf("IPX socket closed (fd = %d)", fd);
 	
-	rclient_unbind(&g_rclient, fd);
+	if(ptr->flags & IPX_BOUND) {
+		rclient_unbind(&g_rclient, fd);
+	}
 	
 	if(ptr == sockets) {
 		sockets = ptr->next;
@@ -223,7 +225,11 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen) {
 		memcpy(&(ptr->addr), &ipxaddr, sizeof(ipxaddr));
 		ptr->flags |= IPX_BOUND;
 		
-		rclient_set_port(&g_rclient, fd, bind_addr.sin_port);
+		if(ptr->flags & IPX_RECV) {
+			rclient_set_port(&g_rclient, fd, bind_addr.sin_port);
+		}
+		
+		rclient_set_filter(&g_rclient, fd, ptr->flags & IPX_FILTER ? ptr->f_ptype : -1);
 		
 		RETURN(0);
 	}else{
@@ -502,7 +508,7 @@ int WSAAPI setsockopt(SOCKET fd, int level, int optname, const char FAR *optval,
 			}
 			
 			if(optname == IPX_FILTERPTYPE) {
-				if(!rclient_set_filter(&g_rclient, fd, *intval)) {
+				if(sockptr->flags & IPX_BOUND && !rclient_set_filter(&g_rclient, fd, *intval)) {
 					RETURN(-1);
 				}
 				
@@ -513,7 +519,7 @@ int WSAAPI setsockopt(SOCKET fd, int level, int optname, const char FAR *optval,
 			}
 			
 			if(optname == IPX_STOPFILTERPTYPE) {
-				if(!rclient_set_filter(&g_rclient, fd, -1)) {
+				if(sockptr->flags & IPX_BOUND && !rclient_set_filter(&g_rclient, fd, -1)) {
 					RETURN(-1);
 				}
 				
@@ -535,7 +541,7 @@ int WSAAPI setsockopt(SOCKET fd, int level, int optname, const char FAR *optval,
 				
 				RETURN(0);
 			}else if(optname == SO_REUSEADDR) {
-				if(!rclient_set_reuse(&g_rclient, fd, *bval)) {
+				if(sockptr->flags & IPX_BOUND && !rclient_set_reuse(&g_rclient, fd, *bval)) {
 					RETURN(-1);
 				}
 				
@@ -638,7 +644,7 @@ int PASCAL shutdown(SOCKET fd, int cmd) {
 	
 	if(sockptr) {
 		if(cmd == SD_RECEIVE || cmd == SD_BOTH) {
-			if(!rclient_set_port(&g_rclient, fd, 0)) {
+			if(sockptr->flags & IPX_BOUND && !rclient_set_port(&g_rclient, fd, 0)) {
 				RETURN(-1);
 			}
 			
