@@ -817,3 +817,24 @@ int PASCAL send(SOCKET fd, const char *buf, int len, int flags) {
 		return r_send(fd, buf, len, flags);
 	}
 }
+
+int PASCAL getpeername(SOCKET fd, struct sockaddr *addr, int *addrlen) {
+	ipx_socket *sockptr = get_socket(fd);
+	
+	if(sockptr) {
+		if(!(sockptr->flags & IPX_CONNECTED)) {
+			RETURN_WSA(WSAENOTCONN, -1);
+		}
+		
+		if(*addrlen < sizeof(struct sockaddr_ipx)) {
+			RETURN_WSA(WSAEFAULT, -1);
+		}
+		
+		memcpy(addr, &(sockptr->remote_addr), sizeof(struct sockaddr_ipx));
+		*addrlen = sizeof(struct sockaddr_ipx);
+		
+		RETURN(0);
+	}else{
+		return r_getpeername(fd, addr, addrlen);
+	}
+}

@@ -2,7 +2,7 @@ accept
 bind:0
 closesocket:0
 connect:0
-getpeername
+getpeername:0
 getsockname:0
 getsockopt:0
 htonl

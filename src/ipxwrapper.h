@@ -131,5 +131,6 @@ SOCKET WSAAPI r_socket(int,int,int);
 int PASCAL r_ioctlsocket(SOCKET fd, long cmd, u_long *argp);
 int PASCAL r_connect(SOCKET fd, const struct sockaddr *addr, int addrlen);
 int PASCAL r_send(SOCKET fd, const char *buf, int len, int flags);
+int PASCAL r_getpeername(SOCKET fd, struct sockaddr *addr, int *addrlen);
 
 #endif /* !IPXWRAPPER_H */
