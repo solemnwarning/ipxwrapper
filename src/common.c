@@ -113,9 +113,11 @@ void load_dll(unsigned int dllnum) {
 		strcat(path, dll_names[dllnum]);
 	}
 	
-	dll_handles[dllnum] = LoadLibrary(dllnum ? path : dll_names[dllnum]);
+	const char *dll = dllnum ? path : dll_names[dllnum];
+	
+	dll_handles[dllnum] = LoadLibrary(dll);
 	if(!dll_handles[dllnum]) {
-		log_printf("Error loading %s: %s", path, w32_error(GetLastError()));
+		log_printf("Error loading %s: %s", dll, w32_error(GetLastError()));
 		abort();
 	}
 }
