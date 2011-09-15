@@ -16,7 +16,7 @@ ntohs
 recv:0
 recvfrom:0
 select
-send
+send:0
 sendto:0
 setsockopt:0
 shutdown:0

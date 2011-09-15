@@ -802,3 +802,18 @@ int PASCAL connect(SOCKET fd, const struct sockaddr *addr, int addrlen) {
 		return r_connect(fd, addr, addrlen);
 	}
 }
+
+int PASCAL send(SOCKET fd, const char *buf, int len, int flags) {
+	ipx_socket *sockptr = get_socket(fd);
+	
+	if(sockptr) {
+		if(!(sockptr->flags & IPX_CONNECTED)) {
+			RETURN_WSA(WSAENOTCONN, -1);
+		}
+		
+		int ret = sendto(fd, buf, len, 0, (struct sockaddr*)&(sockptr->remote_addr), sizeof(struct sockaddr_ipx));
+		RETURN(ret);
+	}else{
+		return r_send(fd, buf, len, flags);
+	}
+}
