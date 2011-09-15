@@ -741,3 +741,64 @@ int PASCAL ioctlsocket(SOCKET fd, long cmd, u_long *argp) {
 	
 	return r_ioctlsocket(fd, cmd, argp);
 }
+
+int PASCAL connect(SOCKET fd, const struct sockaddr *addr, int addrlen) {
+	ipx_socket *sockptr = get_socket(fd);
+	
+	if(sockptr) {
+		if(addrlen < sizeof(struct sockaddr_ipx)) {
+			RETURN_WSA(WSAEFAULT, -1);
+		}
+		
+		struct sockaddr_ipx *ipxaddr = (struct sockaddr_ipx*)addr;
+		
+		const unsigned char z6[] = {0,0,0,0,0,0};
+		
+		if(ipxaddr->sa_family == AF_UNSPEC || (ipxaddr->sa_family == AF_IPX && memcmp(ipxaddr->sa_nodenum, z6, 6) == 0)) {
+			if(!(sockptr->flags & IPX_CONNECTED)) {
+				RETURN(0);
+			}
+			
+			struct sockaddr_ipx dc_addr;
+			dc_addr.sa_family = AF_UNSPEC;
+			
+			if(!rclient_set_remote(&g_rclient, fd, &dc_addr)) {
+				RETURN(-1);
+			}
+			
+			sockptr->flags &= ~IPX_CONNECTED;
+			
+			RETURN(0);
+		}
+		
+		if(ipxaddr->sa_family != AF_IPX) {
+			RETURN_WSA(WSAEAFNOSUPPORT, -1);
+		}
+		
+		if(!(sockptr->flags & IPX_BOUND)) {
+			log_printf("connect() on unbound socket, attempting implicit bind");
+			
+			struct sockaddr_ipx bind_addr;
+			
+			bind_addr.sa_family = AF_IPX;
+			memcpy(bind_addr.sa_netnum, ipxaddr->sa_netnum, 4);
+			memset(bind_addr.sa_nodenum, 0, 6);
+			bind_addr.sa_socket = 0;
+			
+			if(bind(fd, (struct sockaddr*)&bind_addr, sizeof(bind_addr)) == -1) {
+				RETURN(-1);
+			}
+		}
+		
+		if(!rclient_set_remote(&g_rclient, fd, ipxaddr)) {
+			RETURN(-1);
+		}
+		
+		memcpy(&(sockptr->remote_addr), addr, sizeof(*ipxaddr));
+		sockptr->flags |= IPX_CONNECTED;
+		
+		RETURN(0);
+	}else{
+		return r_connect(fd, addr, addrlen);
+	}
+}

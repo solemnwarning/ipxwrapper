@@ -297,7 +297,10 @@ DWORD router_main(void *arg) {
 				packet->dest_socket == ra->addr.sa_socket &&
 				
 				/* Check source IP is within correct subnet */
-				((ra->ipaddr & ra->netmask) == (addr.sin_addr.s_addr & ra->netmask) || !global_conf.filter)
+				((ra->ipaddr & ra->netmask) == (addr.sin_addr.s_addr & ra->netmask) || !global_conf.filter) &&
+				
+				/* Check source address matches remote_addr if set */
+				(ra->remote_addr.sa_family == AF_UNSPEC || (memcmp(ra->remote_addr.sa_netnum, packet->src_net, 4) == 0 && memcmp(ra->remote_addr.sa_nodenum, packet->src_node, 6) == 0))
 			) {
 				addr.sin_addr.s_addr = inet_addr("127.0.0.1");
 				addr.sin_port = ra->local_port;
@@ -538,6 +541,18 @@ static int router_set_reuse(struct router_vars *router, SOCKET control, SOCKET s
 	return 1;
 }
 
+static BOOL router_set_remote(struct router_vars *router, SOCKET control, SOCKET sock, const struct sockaddr_ipx *addr) {
+	EnterCriticalSection(&(router->crit_sec));
+	
+	struct router_addr *ra = router_get(router, control, sock);
+	if(ra) {
+		ra->remote_addr = *addr;
+	}
+	
+	LeaveCriticalSection(&(router->crit_sec));
+	return TRUE;
+}
+
 static BOOL router_handle_call(struct router_vars *router, int sock, struct router_call *call) {
 	struct router_ret ret;
 	
@@ -574,6 +589,11 @@ static BOOL router_handle_call(struct router_vars *router, int sock, struct rout
 				ret.err_code = WSAEINVAL;
 			}
 			
+			break;
+		}
+		
+		case rc_remote: {
+			router_set_remote(router, sock, call->sock, &(call->arg_addr));
 			break;
 		}
 		
@@ -889,6 +909,30 @@ BOOL rclient_set_reuse(struct rclient *rclient, SOCKET sock, BOOL reuse) {
 	}
 	
 	log_printf("rclient_set_reuse: No router?!");
+	
+	WSASetLastError(WSAENETDOWN);
+	return FALSE;
+}
+
+BOOL rclient_set_remote(struct rclient *rclient, SOCKET sock, const struct sockaddr_ipx *addr) {
+	if(rclient->sock != -1) {
+		struct router_call call;
+		struct router_ret ret;
+		
+		call.call = rc_remote;
+		call.sock = sock;
+		call.arg_addr = *addr;
+		
+		if(!rclient_do(rclient, &call, &ret)) {
+			return FALSE;
+		}
+		
+		return TRUE;
+	}else if(rclient->router) {
+		return router_set_remote(rclient->router, 0, sock, addr);
+	}
+	
+	log_printf("rclient_bind: No router?!");
 	
 	WSASetLastError(WSAENETDOWN);
 	return FALSE;

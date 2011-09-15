@@ -1,7 +1,7 @@
 accept
 bind:0
 closesocket:0
-connect
+connect:0
 getpeername
 getsockname:0
 getsockopt:0

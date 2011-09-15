@@ -31,7 +31,8 @@ struct router_call {
 		rc_unbind,
 		rc_port,
 		rc_filter,
-		rc_reuse
+		rc_reuse,
+		rc_remote
 	} call;
 	
 	SOCKET sock;
@@ -60,6 +61,9 @@ struct router_addr {
 	/* Address of IP interface */
 	uint32_t ipaddr;
 	uint32_t netmask;
+	
+	/* Only accept packets from this address (any if AF_UNSPEC) */
+	struct sockaddr_ipx remote_addr;
 	
 	struct router_addr *next;
 };
@@ -114,5 +118,6 @@ BOOL rclient_unbind(struct rclient *rclient, SOCKET sock);
 BOOL rclient_set_port(struct rclient *rclient, SOCKET sock, uint16_t port);
 BOOL rclient_set_filter(struct rclient *rclient, SOCKET sock, int ptype);
 BOOL rclient_set_reuse(struct rclient *rclient, SOCKET sock, BOOL reuse);
+BOOL rclient_set_remote(struct rclient *rclient, SOCKET sock, const struct sockaddr_ipx *addr);
 
 #endif /* !IPXWRAPPER_ROUTER_H */

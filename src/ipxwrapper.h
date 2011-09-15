@@ -39,6 +39,7 @@
 #define IPX_SEND	(int)(1<<3)
 #define IPX_RECV	(int)(1<<4)
 #define IPX_REUSE	(int)(1<<6)
+#define IPX_CONNECTED	(int)(1<<7)
 
 #define RETURN(...) \
 	unlock_sockets();\
@@ -64,11 +65,8 @@ struct ipx_socket {
 	struct sockaddr_ipx addr;
 	uint32_t nic_bcast;
 	
-	/* Extra bind address, only used for receiving packets.
-	 * Only defined when IPX_EX_BOUND is set.
-	*/
-	struct ipx_interface *ex_nic;
-	uint16_t ex_socket;
+	/* Address used with connect call, only set when IPX_CONNECTED is */
+	struct sockaddr_ipx remote_addr;
 	
 	ipx_socket *next;
 };
@@ -131,5 +129,6 @@ int WSAAPI r_setsockopt(SOCKET,int,int,const char*,int);
 int WSAAPI r_shutdown(SOCKET,int);
 SOCKET WSAAPI r_socket(int,int,int);
 int PASCAL r_ioctlsocket(SOCKET fd, long cmd, u_long *argp);
+int PASCAL r_connect(SOCKET fd, const struct sockaddr *addr, int addrlen);
 
 #endif /* !IPXWRAPPER_H */

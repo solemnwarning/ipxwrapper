@@ -15,3 +15,4 @@ EXPORTS
 	WSARecvEx
 	ioctlsocket
 	WSHEnumProtocols
+	connect
