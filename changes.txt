@@ -25,6 +25,15 @@ Version ???:
 	
 	Update: Load interfaces on each bind/getsockopt call to allow configuration
 	changes without restarting.
+	
+	Bugfix: Load EnumProtocolsA/EnumProtocolsW directly from mswsock.dll to avoid
+	stack overflow under certain conditions.
+	
+	Bugfix: Correctly store protocol names at end of EnumProtocols buffer.
+	
+	Update: Implemented windows 95/98 WSHEnumProtocols function.
+	
+	Update: Implemented connect, send and getpeername functions.
 
 Version 0.2.2:
 	Feature: Redesigned ipxconfig UI.
