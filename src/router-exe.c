@@ -37,8 +37,6 @@ int main(int argc, char **argv) {
 		global_conf.filter = 1;
 	}
 	
-	reg_close();
-	
 	WSADATA wsdata;
 	int err = WSAStartup(MAKEWORD(2,0), &wsdata);
 	
@@ -55,6 +53,8 @@ int main(int argc, char **argv) {
 		
 		WSACleanup();
 	}
+	
+	reg_close();
 	
 	system("pause");
 	

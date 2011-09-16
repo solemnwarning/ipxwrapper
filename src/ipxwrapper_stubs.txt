@@ -19,7 +19,7 @@ WSAResetEvent:4
 WSASetEvent:4
 r_EnumProtocolsA:2
 r_EnumProtocolsW:2
-r_WSARecvEx:4
+r_WSARecvEx:2
 r_bind:4
 r_closesocket:4
 r_getsockname:4
