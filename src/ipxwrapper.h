@@ -27,11 +27,9 @@
 #include "config.h"
 #include "router.h"
 
-/* Maximum UDP data size is 65467, we use a smaller value to ensure we have
- * plenty of space to play with for headers, etc
-*/
-#define MAX_PACKET_SIZE 63487
-#define PACKET_BUF_SIZE 65536
+/* The standard Windows driver (in XP) only allows 1467 bytes anyway */
+#define MAX_DATA_SIZE 8192
+#define MAX_PKT_SIZE 8219
 
 #define IPX_FILTER	(int)(1<<0)
 #define IPX_BOUND	(int)(1<<1)

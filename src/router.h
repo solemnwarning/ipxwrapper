@@ -24,7 +24,6 @@
 #include <stdint.h>
 
 #define MAX_ROUTER_CLIENTS 128
-#define ROUTER_BUF_SIZE PACKET_BUF_SIZE + sizeof(struct rpacket_header)
 
 struct router_call {
 	enum {

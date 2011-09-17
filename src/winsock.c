@@ -305,6 +305,8 @@ int WSAAPI getsockname(SOCKET fd, struct sockaddr *addr, int *addrlen) {
 	}
 }
 
+#define RECVBUF_SIZE (sizeof(struct rpacket_header) + MAX_PKT_SIZE)
+
 /* Recieve a packet from an IPX socket
  * addr must be NULL or a region of memory big enough for a sockaddr_ipx
  *
@@ -322,7 +324,7 @@ static int recv_packet(ipx_socket *sockptr, char *buf, int bufsize, int flags, s
 		return -1;
 	}
 	
-	char *recvbuf = malloc(ROUTER_BUF_SIZE);
+	char *recvbuf = malloc(RECVBUF_SIZE);
 	if(!recvbuf) {
 		WSASetLastError(ERROR_OUTOFMEMORY);
 		return -1;
@@ -331,7 +333,7 @@ static int recv_packet(ipx_socket *sockptr, char *buf, int bufsize, int flags, s
 	struct rpacket_header *rp_header = (struct rpacket_header*)recvbuf;
 	struct ipx_packet *packet = (struct ipx_packet*)(recvbuf + sizeof(*rp_header));
 	
-	int rval = r_recv(fd, recvbuf, ROUTER_BUF_SIZE, flags);
+	int rval = r_recv(fd, recvbuf, RECVBUF_SIZE, flags);
 	if(rval == -1) {
 		free(recvbuf);
 		return -1;
@@ -464,7 +466,7 @@ int WSAAPI getsockopt(SOCKET fd, int level, int optname, char FAR *optval, int F
 			
 			if(optname == IPX_MAXSIZE) {
 				CHECK_OPTLEN(sizeof(int));
-				*intval = MAX_PACKET_SIZE;
+				*intval = MAX_DATA_SIZE;
 				
 				RETURN(0);
 			}
@@ -487,7 +489,7 @@ int WSAAPI getsockopt(SOCKET fd, int level, int optname, char FAR *optval, int F
 				/* TODO: LAN/WAN detection, link speed detection */
 				ipxdata->wan = FALSE;
 				ipxdata->status = FALSE;
-				ipxdata->maxpkt = MAX_PACKET_SIZE;
+				ipxdata->maxpkt = MAX_DATA_SIZE;
 				ipxdata->linkspeed = 100000; /* 10MBps */
 				
 				free_interfaces(nic);
@@ -638,7 +640,7 @@ int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct s
 			}
 		}
 		
-		if(len > MAX_PACKET_SIZE) {
+		if(len > MAX_DATA_SIZE) {
 			RETURN_WSA(WSAEMSGSIZE, -1);
 		}
 		

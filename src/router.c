@@ -98,7 +98,7 @@ struct router_vars *router_init(BOOL global) {
 		return NULL;
 	}
 	
-	if(!(router->recvbuf = malloc(ROUTER_BUF_SIZE))) {
+	if(!(router->recvbuf = malloc(sizeof(struct rpacket_header) + MAX_PKT_SIZE))) {
 		log_printf("Out of memory! Cannot allocate recv buffer");
 		
 		router_destroy(router);
@@ -257,9 +257,9 @@ DWORD router_main(void *arg) {
 		int addrlen = sizeof(addr);
 		
 		struct rpacket_header *rp_header = (struct rpacket_header*)router->recvbuf;
-		ipx_packet *packet = (ipx_packet*)(router->recvbuf + sizeof(struct rpacket_header));
+		ipx_packet *packet = (ipx_packet*)(router->recvbuf + sizeof(*rp_header));
 		
-		int len = recvfrom(router->udp_sock, (char*)packet, PACKET_BUF_SIZE, 0, (struct sockaddr*)&addr, &addrlen);
+		int len = recvfrom(router->udp_sock, (char*)packet, MAX_PKT_SIZE, 0, (struct sockaddr*)&addr, &addrlen);
 		if(len == -1) {
 			if(WSAGetLastError() == WSAEWOULDBLOCK || WSAGetLastError() == WSAECONNRESET) {
 				continue;
@@ -273,7 +273,7 @@ DWORD router_main(void *arg) {
 		
 		packet->size = ntohs(packet->size);
 		
-		if(len < sizeof(ipx_packet) - 1 || packet->size > MAX_PACKET_SIZE || packet->size + sizeof(ipx_packet) - 1 != len) {
+		if(len < sizeof(ipx_packet) - 1 || packet->size > MAX_DATA_SIZE || packet->size + sizeof(ipx_packet) - 1 != len) {
 			LeaveCriticalSection(&(router->crit_sec));
 			continue;
 		}

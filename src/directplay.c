@@ -84,7 +84,7 @@ static BOOL recv_packet(int sockfd, char *buf, IDirectPlaySP *sp) {
 	struct sockaddr_ipx addr;
 	int addrlen = sizeof(addr);
 	
-	int r = recvfrom(sockfd, buf, PACKET_BUF_SIZE, 0, (struct sockaddr*)&addr, &addrlen);
+	int r = recvfrom(sockfd, buf, MAX_DATA_SIZE, 0, (struct sockaddr*)&addr, &addrlen);
 	if(r == -1) {
 		if(WSAGetLastError() == WSAEWOULDBLOCK || WSAGetLastError() == WSAECONNRESET) {
 			return TRUE;
@@ -106,7 +106,7 @@ static DWORD WINAPI worker_main(LPVOID sp) {
 	struct sp_data *sp_data = get_sp_data((IDirectPlaySP*)sp);
 	release_sp_data((IDirectPlaySP*)sp);
 	
-	char *buf = malloc(PACKET_BUF_SIZE);
+	char *buf = malloc(MAX_DATA_SIZE);
 	if(!buf) {
 		abort();
 	}
