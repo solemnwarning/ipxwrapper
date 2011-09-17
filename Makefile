@@ -85,5 +85,5 @@ src/dpwsockx_stubs.s: src/dpwsockx_stubs.txt
 src/%_stubs.o: src/%_stubs.s
 	nasm -f win32 -o $@ $<
 
-src/%.o: src/%.c src/ipxwrapper.h src/config.h src/common.h
+src/%.o: src/%.c src/ipxwrapper.h src/config.h src/common.h src/router.h
 	$(CC) $(CFLAGS) -c -o $@ $<

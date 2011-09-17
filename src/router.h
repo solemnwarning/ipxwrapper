@@ -31,7 +31,7 @@ struct router_call {
 		rc_unbind,
 		rc_port,
 		rc_filter,
-		rc_reuse,
+		rc_flags,
 		rc_remote
 	} call;
 	
@@ -56,7 +56,7 @@ struct router_addr {
 	SOCKET ws_socket;	/* Application socket */
 	SOCKET control_socket;	/* Control socket */
 	int filter_ptype;	/* Packet type filter, negative to disable */
-	BOOL reuse;		/* SO_REUSEADDR */
+	int flags;
 	
 	/* Address of IP interface */
 	uint32_t ipaddr;
@@ -118,11 +118,11 @@ BOOL rclient_init(struct rclient *rclient);
 BOOL rclient_start(struct rclient *rclient);
 void rclient_stop(struct rclient *rclient);
 
-BOOL rclient_bind(struct rclient *rclient, SOCKET sock, struct sockaddr_ipx *addr, uint32_t *nic_bcast, BOOL reuse);
+BOOL rclient_bind(struct rclient *rclient, SOCKET sock, struct sockaddr_ipx *addr, uint32_t *nic_bcast, int flags);
 BOOL rclient_unbind(struct rclient *rclient, SOCKET sock);
 BOOL rclient_set_port(struct rclient *rclient, SOCKET sock, uint16_t port);
 BOOL rclient_set_filter(struct rclient *rclient, SOCKET sock, int ptype);
-BOOL rclient_set_reuse(struct rclient *rclient, SOCKET sock, BOOL reuse);
+BOOL rclient_set_flags(struct rclient *rclient, SOCKET sock, int flags);
 BOOL rclient_set_remote(struct rclient *rclient, SOCKET sock, const struct sockaddr_ipx *addr);
 
 #endif /* !IPXWRAPPER_ROUTER_H */

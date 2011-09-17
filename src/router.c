@@ -287,8 +287,8 @@ DWORD router_main(void *arg) {
 			if(
 				ra->local_port &&
 				(ra->filter_ptype < 0 || ra->filter_ptype == packet->ptype) &&
-				(memcmp(packet->dest_net, ra->addr.sa_netnum, 4) == 0 || memcmp(packet->dest_net, f6, 4) == 0) &&
-				(memcmp(packet->dest_node, ra->addr.sa_nodenum, 6) == 0 || memcmp(packet->dest_node, f6, 6) == 0) &&
+				(memcmp(packet->dest_net, ra->addr.sa_netnum, 4) == 0 || (memcmp(packet->dest_net, f6, 4) == 0 && (ra->flags & IPX_BROADCAST || !global_conf.w95_bug) && ra->flags & IPX_RECV_BCAST)) &&
+				(memcmp(packet->dest_node, ra->addr.sa_nodenum, 6) == 0 || (memcmp(packet->dest_node, f6, 6) == 0 && (ra->flags & IPX_BROADCAST || !global_conf.w95_bug) && ra->flags & IPX_RECV_BCAST)) &&
 				packet->dest_socket == ra->addr.sa_socket &&
 				
 				/* Check source IP is within correct subnet */
@@ -314,7 +314,7 @@ DWORD router_main(void *arg) {
 	return 0;
 }
 
-static int router_bind(struct router_vars *router, SOCKET control, SOCKET sock, struct sockaddr_ipx *addr, uint32_t *nic_bcast, BOOL reuse) {
+static int router_bind(struct router_vars *router, SOCKET control, SOCKET sock, struct sockaddr_ipx *addr, uint32_t *nic_bcast, int flags) {
 	/* Network number 00:00:00:00 is specified as the "current" network, this code
 	 * treats it as a wildcard when used for the network OR node numbers.
 	 *
@@ -406,7 +406,7 @@ static int router_bind(struct router_vars *router, SOCKET control, SOCKET sock, 
 		struct router_addr *a = router->addrs;
 		
 		while(a) {
-			if(a->addr.sa_socket == addr->sa_socket && (!a->reuse || !reuse)) {
+			if(a->addr.sa_socket == addr->sa_socket && (!(a->flags & IPX_REUSE) || !(flags & IPX_REUSE))) {
 				log_printf("bind failed: requested socket in use");
 				
 				LeaveCriticalSection(&(router->crit_sec));
@@ -433,7 +433,7 @@ static int router_bind(struct router_vars *router, SOCKET control, SOCKET sock, 
 	new_addr->ws_socket = sock;
 	new_addr->control_socket = control;
 	new_addr->filter_ptype = -1;
-	new_addr->reuse = reuse;
+	new_addr->flags = flags;
 	new_addr->ipaddr = iface_ipaddr;
 	new_addr->netmask = iface_netmask;
 	new_addr->next = router->addrs;
@@ -512,28 +512,30 @@ static void router_set_filter(struct router_vars *router, SOCKET control, SOCKET
 	LeaveCriticalSection(&(router->crit_sec));
 }
 
-static int router_set_reuse(struct router_vars *router, SOCKET control, SOCKET sock, BOOL reuse) {
+static int router_set_flags(struct router_vars *router, SOCKET control, SOCKET sock, int flags) {
 	EnterCriticalSection(&(router->crit_sec));
 	
 	struct router_addr *addr = router_get(router, control, sock);
 	if(addr) {
-		struct router_addr *test = router->addrs;
-		
-		while(test) {
-			if(addr != test && memcmp(&(addr->addr), &(test->addr), sizeof(struct sockaddr_ipx)) == 0 && !reuse) {
-				/* Refuse to disable SO_REUSEADDR when another binding for the same address exists */
-				LeaveCriticalSection(&(router->crit_sec));
-				return 0;
-			}
+		if(addr->flags & IPX_REUSE && !(flags & IPX_REUSE)) {
+			struct router_addr *test = router->addrs;
 			
-			test = test->next;
+			while(test) {
+				if(addr != test && memcmp(&(addr->addr), &(test->addr), sizeof(struct sockaddr_ipx)) == 0) {
+					/* Refuse to disable SO_REUSEADDR when another binding for the same address exists */
+					LeaveCriticalSection(&(router->crit_sec));
+					return WSAEINVAL;
+				}
+				
+				test = test->next;
+			}
 		}
 		
-		addr->reuse = reuse;
+		addr->flags = flags;
 	}
 	
 	LeaveCriticalSection(&(router->crit_sec));
-	return 1;
+	return ERROR_SUCCESS;
 }
 
 static BOOL router_set_remote(struct router_vars *router, SOCKET control, SOCKET sock, const struct sockaddr_ipx *addr) {
@@ -579,11 +581,8 @@ static BOOL router_handle_call(struct router_vars *router, int sock, struct rout
 			break;
 		}
 		
-		case rc_reuse: {
-			if(!router_set_reuse(router, sock, call->sock, call->arg_int)) {
-				ret.err_code = WSAEINVAL;
-			}
-			
+		case rc_flags: {
+			ret.err_code = router_set_flags(router, sock, call->sock, call->arg_int);
 			break;
 		}
 		
@@ -879,14 +878,14 @@ BOOL rclient_set_filter(struct rclient *rclient, SOCKET sock, int ptype) {
 	return FALSE;
 }
 
-BOOL rclient_set_reuse(struct rclient *rclient, SOCKET sock, BOOL reuse) {
+BOOL rclient_set_flags(struct rclient *rclient, SOCKET sock, int flags) {
 	if(rclient->sock != -1) {
 		struct router_call call;
 		struct router_ret ret;
 		
-		call.call = rc_reuse;
+		call.call = rc_flags;
 		call.sock = sock;
-		call.arg_int = reuse;
+		call.arg_int = flags;
 		
 		if(!rclient_do(rclient, &call, &ret)) {
 			return FALSE;
@@ -895,11 +894,18 @@ BOOL rclient_set_reuse(struct rclient *rclient, SOCKET sock, BOOL reuse) {
 		if(ret.err_code == ERROR_SUCCESS) {
 			return TRUE;
 		}else{
-			WSASetLastError(WSAEINVAL);
+			WSASetLastError(ret.err_code);
 			return FALSE;
 		}
 	}else if(rclient->router) {
-		router_set_reuse(rclient->router, 0, sock, reuse);
+		int err = router_set_flags(rclient->router, 0, sock, flags);
+		if(err == ERROR_SUCCESS) {
+			return TRUE;
+		}else{
+			WSASetLastError(err);
+			return FALSE;
+		}
+		
 		return TRUE;
 	}
 	

@@ -160,7 +160,7 @@ SOCKET WSAAPI socket(int af, int type, int protocol) {
 			return -1;
 		}
 		
-		nsock->flags = IPX_SEND | IPX_RECV;
+		nsock->flags = IPX_SEND | IPX_RECV | IPX_RECV_BCAST;
 		nsock->s_ptype = (protocol ? NSPROTO_IPX - protocol : 0);
 		
 		lock_sockets();
@@ -544,6 +544,18 @@ int WSAAPI getsockopt(SOCKET fd, int level, int optname, char FAR *optval, int F
 	return r_getsockopt(fd, level, optname, optval, optlen);
 }
 
+#define SET_FLAG(flag, state) \
+	if(state) { \
+		sockptr->flags |= flag; \
+	}else{ \
+		sockptr->flags &= flag; \
+	}
+
+#define RC_SET_FLAG(flag, state) \
+	if(sockptr->flags & IPX_BOUND && !rclient_set_flags(&g_rclient, fd, (sockptr->flags & ~(flag)) | ((state) ? (flag) : 0))) { \
+		RETURN(-1); \
+	}
+
 int WSAAPI setsockopt(SOCKET fd, int level, int optname, const char FAR *optval, int optlen) {
 	int *intval = (int*)optval;
 	BOOL *bval = (BOOL*)optval;
@@ -578,28 +590,25 @@ int WSAAPI setsockopt(SOCKET fd, int level, int optname, const char FAR *optval,
 				RETURN(0);
 			}
 			
+			if(optname == IPX_RECEIVE_BROADCAST) {
+				RC_SET_FLAG(IPX_RECV_BCAST, *bval);
+				SET_FLAG(IPX_RECV_BCAST, *bval);
+				
+				RETURN(0);
+			}
+			
 			RETURN_WSA(WSAENOPROTOOPT, -1);
 		}
 		
 		if(level == SOL_SOCKET) {
 			if(optname == SO_BROADCAST) {
-				if(*bval) {
-					sockptr->flags |= IPX_BROADCAST;
-				}else{
-					sockptr->flags &= ~IPX_BROADCAST;
-				}
-				
+				SET_FLAG(IPX_BROADCAST, *bval);
 				RETURN(0);
-			}else if(optname == SO_REUSEADDR) {
-				if(sockptr->flags & IPX_BOUND && !rclient_set_reuse(&g_rclient, fd, *bval)) {
-					RETURN(-1);
-				}
-				
-				if(*bval) {
-					sockptr->flags |= IPX_REUSE;
-				}else{
-					sockptr->flags &= ~IPX_REUSE;
-				}
+			}
+			
+			if(optname == SO_REUSEADDR) {
+				RC_SET_FLAG(IPX_REUSE, *bval);
+				SET_FLAG(IPX_REUSE, *bval);
 				
 				RETURN(0);
 			}
