@@ -98,7 +98,7 @@ struct router_vars *router_init(BOOL global) {
 		return NULL;
 	}
 	
-	if(!(router->recvbuf = malloc(PACKET_BUF_SIZE))) {
+	if(!(router->recvbuf = malloc(ROUTER_BUF_SIZE))) {
 		log_printf("Out of memory! Cannot allocate recv buffer");
 		
 		router_destroy(router);
@@ -115,7 +115,7 @@ struct router_vars *router_init(BOOL global) {
 		
 		/* TODO: Use different port number for control socket? */
 		
-		addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+		addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 		
 		if(bind(router->listener, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
 			log_printf("Failed to bind TCP socket: %s", w32_error(WSAGetLastError()));
@@ -256,7 +256,10 @@ DWORD router_main(void *arg) {
 		struct sockaddr_in addr;
 		int addrlen = sizeof(addr);
 		
-		int len = recvfrom(router->udp_sock, router->recvbuf, PACKET_BUF_SIZE, 0, (struct sockaddr*)&addr, &addrlen);
+		struct rpacket_header *rp_header = (struct rpacket_header*)router->recvbuf;
+		ipx_packet *packet = (ipx_packet*)(router->recvbuf + sizeof(struct rpacket_header));
+		
+		int len = recvfrom(router->udp_sock, (char*)packet, PACKET_BUF_SIZE, 0, (struct sockaddr*)&addr, &addrlen);
 		if(len == -1) {
 			if(WSAGetLastError() == WSAEWOULDBLOCK || WSAGetLastError() == WSAECONNRESET) {
 				continue;
@@ -268,23 +271,15 @@ DWORD router_main(void *arg) {
 		
 		EnterCriticalSection(&(router->crit_sec));
 		
-		ipx_packet *packet = (ipx_packet*)router->recvbuf;
-		
 		packet->size = ntohs(packet->size);
 		
-		if(packet->size > MAX_PACKET_SIZE || packet->size + sizeof(ipx_packet) - 1 != len) {
+		if(len < sizeof(ipx_packet) - 1 || packet->size > MAX_PACKET_SIZE || packet->size + sizeof(ipx_packet) - 1 != len) {
 			LeaveCriticalSection(&(router->crit_sec));
 			continue;
 		}
 		
-		/* Replace destination network field of packet with source IP address
-		 * so that the client can cache it.
-		*/
-		
-		char dest_net[4];
-		
-		memcpy(dest_net, packet->dest_net, 4);
-		memcpy(packet->dest_net, &(addr.sin_addr.s_addr), 4);
+		memset(&rp_header, 0, sizeof(*rp_header));
+		rp_header->src_ipaddr = addr.sin_addr.s_addr;
 		
 		struct router_addr *ra = router->addrs;
 		
@@ -292,7 +287,7 @@ DWORD router_main(void *arg) {
 			if(
 				ra->local_port &&
 				(ra->filter_ptype < 0 || ra->filter_ptype == packet->ptype) &&
-				(memcmp(dest_net, ra->addr.sa_netnum, 4) == 0 || memcmp(dest_net, f6, 4) == 0) &&
+				(memcmp(packet->dest_net, ra->addr.sa_netnum, 4) == 0 || memcmp(packet->dest_net, f6, 4) == 0) &&
 				(memcmp(packet->dest_node, ra->addr.sa_nodenum, 6) == 0 || memcmp(packet->dest_node, f6, 6) == 0) &&
 				packet->dest_socket == ra->addr.sa_socket &&
 				
@@ -302,10 +297,10 @@ DWORD router_main(void *arg) {
 				/* Check source address matches remote_addr if set */
 				(ra->remote_addr.sa_family == AF_UNSPEC || (memcmp(ra->remote_addr.sa_netnum, packet->src_net, 4) == 0 && memcmp(ra->remote_addr.sa_nodenum, packet->src_node, 6) == 0))
 			) {
-				addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+				addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 				addr.sin_port = ra->local_port;
 				
-				if(sendto(router->udp_sock, (char*)packet, len, 0, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
+				if(sendto(router->udp_sock, (char*)rp_header, sizeof(*rp_header) + len, 0, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
 					log_printf("Error relaying packet: %s", w32_error(WSAGetLastError()));
 				}
 			}
@@ -672,7 +667,7 @@ BOOL rclient_start(struct rclient *rclient) {
 	
 	struct sockaddr_in addr;
 	addr.sin_family = AF_INET;
-	addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+	addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 	addr.sin_port = htons(global_conf.udp_port);
 	
 	if(connect(rclient->sock, (struct sockaddr*)&addr, sizeof(addr)) == 0) {

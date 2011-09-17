@@ -249,7 +249,7 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen) {
 		
 		struct sockaddr_in bind_addr;
 		bind_addr.sin_family = AF_INET;
-		bind_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+		bind_addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 		bind_addr.sin_port = 0;
 		
 		if(r_bind(fd, (struct sockaddr*)&bind_addr, sizeof(bind_addr)) == -1) {
@@ -322,28 +322,30 @@ static int recv_packet(ipx_socket *sockptr, char *buf, int bufsize, int flags, s
 		return -1;
 	}
 	
-	struct ipx_packet *packet = malloc(PACKET_BUF_SIZE);
-	if(!packet) {
+	char *recvbuf = malloc(ROUTER_BUF_SIZE);
+	if(!recvbuf) {
 		WSASetLastError(ERROR_OUTOFMEMORY);
 		return -1;
 	}
 	
-	int rval = r_recv(fd, (char*)packet, PACKET_BUF_SIZE, flags);
+	struct rpacket_header *rp_header = (struct rpacket_header*)recvbuf;
+	struct ipx_packet *packet = (struct ipx_packet*)(recvbuf + sizeof(*rp_header));
+	
+	int rval = r_recv(fd, recvbuf, ROUTER_BUF_SIZE, flags);
 	if(rval == -1) {
-		free(packet);
+		free(recvbuf);
 		return -1;
 	}
 	
-	if(rval < sizeof(ipx_packet) || rval != packet->size + sizeof(ipx_packet) - 1) {
+	if(rval < sizeof(*rp_header) + sizeof(ipx_packet) - 1 || rval != sizeof(*rp_header) + packet->size + sizeof(ipx_packet) - 1) {
 		log_printf("Invalid packet received on loopback port!");
 		
-		free(packet);
+		free(recvbuf);
 		WSASetLastError(WSAEWOULDBLOCK);
 		return -1;
 	}
 	
-	/* Router thread replaces destination network number with source IP address */
-	add_host(packet->src_net, packet->src_node, *((uint32_t*)packet->dest_net));
+	add_host(packet->src_net, packet->src_node, rp_header->src_ipaddr);
 	
 	if(addr) {
 		addr->sa_family = AF_IPX;
@@ -354,7 +356,7 @@ static int recv_packet(ipx_socket *sockptr, char *buf, int bufsize, int flags, s
 	
 	memcpy(buf, packet->data, packet->size <= bufsize ? packet->size : bufsize);
 	rval = packet->size;
-	free(packet);
+	free(recvbuf);
 	
 	return rval;
 }

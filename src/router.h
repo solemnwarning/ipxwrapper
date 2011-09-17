@@ -24,6 +24,7 @@
 #include <stdint.h>
 
 #define MAX_ROUTER_CLIENTS 128
+#define ROUTER_BUF_SIZE PACKET_BUF_SIZE + sizeof(struct rpacket_header)
 
 struct router_call {
 	enum {
@@ -103,6 +104,11 @@ struct rclient {
 	struct router_vars *router;
 	HANDLE thread;
 };
+
+struct rpacket_header {
+	uint8_t src_ipaddr;
+	char spare[20];
+} __attribute__((__packed__));
 
 struct router_vars *router_init(BOOL global);
 void router_destroy(struct router_vars *router);
