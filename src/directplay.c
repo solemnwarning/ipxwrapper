@@ -561,7 +561,7 @@ HRESULT WINAPI SPInit(LPSPINITDATA data) {
 
 BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 	if(why == DLL_PROCESS_ATTACH) {
-		log_open();
+		log_open("ipxwrapper.log");
 		
 		reg_open(KEY_QUERY_VALUE);
 		

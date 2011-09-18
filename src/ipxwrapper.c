@@ -63,7 +63,7 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 	static int initialised_cs = 0;
 	
 	if(why == DLL_PROCESS_ATTACH) {
-		log_open();
+		log_open("ipxwrapper.log");
 		
 		if(!rclient_init(&g_rclient)) {
 			return FALSE;

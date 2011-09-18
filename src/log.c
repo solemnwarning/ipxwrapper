@@ -25,13 +25,13 @@
 static HANDLE log_fh = NULL;
 static HANDLE log_mutex = NULL;
 
-void log_open() {
+void log_open(const char *file) {
 	if(!(log_mutex = CreateMutex(NULL, FALSE, NULL))) {
 		abort();
 	}
 	
 	log_fh = CreateFile(
-		"ipxwrapper.log",
+		file,
 		GENERIC_READ | GENERIC_WRITE,
 		FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE,
 		NULL,

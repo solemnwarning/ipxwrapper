@@ -64,8 +64,8 @@ ipxconfig.exe: src/ipxconfig.cpp
 dpwsockx.dll: src/directplay.o src/log.o src/dpwsockx_stubs.o src/common.o
 	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -shared -o dpwsockx.dll src/directplay.o src/log.o src/common.o src/dpwsockx_stubs.o src/dpwsockx.def -lwsock32
 
-ipxrouter.exe: src/router-exe.o src/router.o src/interface.o src/common.o
-	$(CC) $(CFLAGS) -static-libgcc -o ipxrouter.exe $^ -lws2_32 -liphlpapi
+ipxrouter.exe: src/router-exe.o src/router.o src/interface.o src/common.o src/log.o
+	$(CC) $(CFLAGS) -static-libgcc -mwindows -o ipxrouter.exe $^ -lws2_32 -liphlpapi
 
 src/ipxwrapper_stubs.s: src/ipxwrapper_stubs.txt
 	perl mkstubs.pl src/ipxwrapper_stubs.txt src/ipxwrapper_stubs.s 0

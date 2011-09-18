@@ -111,9 +111,6 @@ void unlock_sockets(void);
 ipx_host *find_host(const unsigned char *net, const unsigned char *node);
 void add_host(const unsigned char *net, const unsigned char *node, uint32_t ipaddr);
 
-void log_open();
-void log_close();
-
 INT APIENTRY r_EnumProtocolsA(LPINT,LPVOID,LPDWORD);
 INT APIENTRY r_EnumProtocolsW(LPINT,LPVOID,LPDWORD);
 int PASCAL FAR r_WSARecvEx(SOCKET,char*,int,int*);

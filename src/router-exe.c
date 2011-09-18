@@ -15,6 +15,7 @@
  * Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
+#include <windows.h>
 #include <stdio.h>
 #include <stdarg.h>
 
@@ -24,9 +25,18 @@
 
 struct reg_global global_conf;
 
+static HMODULE netshell_dll = NULL;
+
+#define APPWM_TRAY (WM_APP+1)
+#define MNU_EXIT 101
+
+static void die(const char *fmt, ...);
+static void init_ui();
+static LRESULT CALLBACK tray_wproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
+static void show_menu(HWND hwnd);
+
 int main(int argc, char **argv) {
-	setvbuf(stdout, NULL, _IONBF, 0);
-	setvbuf(stderr, NULL, _IONBF, 0);
+	log_open("ipxrouter.log");
 	
 	reg_open(KEY_QUERY_VALUE);
 		
@@ -39,37 +49,196 @@ int main(int argc, char **argv) {
 	
 	WSADATA wsdata;
 	int err = WSAStartup(MAKEWORD(2,0), &wsdata);
-	
 	if(err) {
-		log_printf("Failed to initialize winsock: %s", w32_error(err));
-	}else{
-		struct router_vars *router = router_init(TRUE);
-		
-		if(router) {
-			//FreeConsole();
-			router_main(router);
-			router_destroy(router);
-		}
-		
-		WSACleanup();
+		die("Failed to initialize winsock: %s", w32_error(err));
 	}
+	
+	struct router_vars *router = router_init(TRUE);
+	if(!router) {
+		die("Error while initializing router, check ipxrouter.log");
+	}
+	
+	HANDLE worker = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)&router_main, router, 0, NULL);
+	if(!worker) {
+		die("Failed to create router thread: %s", w32_error(GetLastError()));
+	}
+	
+	init_ui();
+	
+	MSG msg;
+	
+	while(GetMessage(&msg, NULL, 0, 0) > 0) {
+		TranslateMessage(&msg);
+		DispatchMessage(&msg);
+	}
+	
+	EnterCriticalSection(&(router->crit_sec));
+	
+	router->running = FALSE;
+	WSASetEvent(router->wsa_event);
+	
+	LeaveCriticalSection(&(router->crit_sec));
+	
+	if(WaitForSingleObject(worker, 3000) == WAIT_TIMEOUT) {
+		log_printf("Router thread didn't exit in 3 seconds, terminating");
+		TerminateThread(worker, 0);
+	}
+	
+	CloseHandle(worker);
+	router_destroy(router);
+	
+	WSACleanup();
 	
 	reg_close();
 	
-	system("pause");
+	log_close();
 	
 	return 0;
 }
 
-void log_printf(const char *fmt, ...) {
+static void die(const char *fmt, ...) {
 	va_list argv;
+	char msg[512];
 	
 	va_start(argv, fmt);
-	
-	//AllocConsole();
-	
-	vfprintf(stderr, fmt, argv);
-	fputc('\n', stderr);
-	
+	vsnprintf(msg, sizeof(msg), fmt, argv);
 	va_end(argv);
+	
+	MessageBox(NULL, msg, "Fatal error", MB_OK | MB_TASKMODAL);
+	exit(1);
+}
+
+static void init_ui() {
+	WNDCLASS wclass;
+	
+	wclass.style = 0;
+	wclass.lpfnWndProc = &tray_wproc;
+	wclass.cbClsExtra = 0;
+	wclass.cbWndExtra = 0;
+	wclass.hInstance = GetModuleHandle(NULL);
+	wclass.hIcon = NULL;
+	wclass.hCursor = LoadCursor(NULL, IDC_ARROW);
+	wclass.hbrBackground = NULL;
+	wclass.lpszMenuName = NULL;
+	wclass.lpszClassName = "ipxrouter_tray";
+	
+	if(!RegisterClass(&wclass)) {
+		die("RegisterClass: %s", w32_error(GetLastError()));
+	}
+	
+	HWND window = CreateWindow(
+		"ipxrouter_tray",
+		"IPX Router",
+		0,
+		CW_USEDEFAULT, CW_USEDEFAULT,
+		CW_USEDEFAULT, CW_USEDEFAULT,
+		NULL,
+		NULL,
+		GetModuleHandle(NULL),
+		NULL
+	);
+	
+	if(!window) {
+		die("CreateWindow: ", w32_error(GetLastError()));
+	}
+	
+	if(!(netshell_dll = LoadLibrary("netshell.dll"))) {
+		die("Error loading netshell.dll: ", w32_error(GetLastError()));
+	}
+	
+	HICON icon = LoadIcon(netshell_dll, MAKEINTRESOURCE(162));
+	if(!icon) {
+		die("Error loading icon: ", w32_error(GetLastError()));
+	}
+	
+	NOTIFYICONDATA tray;
+	
+	tray.cbSize = sizeof(tray);
+	tray.hWnd = window;
+	tray.uID = 1;
+	tray.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
+	tray.uCallbackMessage = APPWM_TRAY;
+	tray.hIcon = icon;
+	strcpy(tray.szTip, "IPXWrapper Router");
+	
+	if(!Shell_NotifyIcon(NIM_ADD, &tray)) {
+		die("Shell_NotifyIcon failed");
+	}
+}
+
+static LRESULT CALLBACK tray_wproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+	switch(msg) {
+		case WM_CLOSE: {
+			DestroyWindow(hwnd);
+			break;
+		}
+		
+		case WM_DESTROY: {
+			PostQuitMessage(0);
+			break;
+		}
+		
+		case APPWM_TRAY: {
+			if(lp == WM_LBUTTONUP || lp == WM_RBUTTONUP) {
+				show_menu(hwnd);
+			}
+			
+			break;
+		}
+		
+		case WM_COMMAND: {
+			if(wp == MNU_EXIT) {
+				if(MessageBox(NULL, "If the router is stopped any existing sockets will become invalid.\nAre you sure you want to exit?", "IPXWrapper", MB_YESNO) == IDNO) {
+					return 0;
+				}
+				
+				NOTIFYICONDATA tray;
+				tray.cbSize = sizeof(tray);
+				tray.hWnd = hwnd;
+				tray.uID = 1;
+				tray.uFlags = 0;
+				
+				Shell_NotifyIcon(NIM_DELETE, &tray);
+				DestroyWindow(hwnd);
+			}
+			
+			break;
+		}
+		
+		default: {
+			return DefWindowProc(hwnd, msg, wp, lp);
+		}
+	}
+	
+	return 0;
+}
+
+static void show_menu(HWND hwnd) {
+	POINT cursor_pos;
+	
+	GetCursorPos(&cursor_pos);
+	
+	SetForegroundWindow(hwnd);
+	
+	HMENU menu = CreatePopupMenu();
+	if(!menu) {
+		die("CreatePopupMenu: %s", w32_error(GetLastError()));
+	}
+	
+	InsertMenu(menu, -1, MF_BYPOSITION | MF_STRING, MNU_EXIT, "Exit");
+	
+	SetMenuDefaultItem(menu, MNU_EXIT, FALSE);
+	
+	SetFocus(hwnd);
+	
+	TrackPopupMenu(
+		menu,
+		TPM_LEFTALIGN | TPM_BOTTOMALIGN,
+		cursor_pos.x, cursor_pos.y,
+		0,
+		hwnd,
+		NULL
+	);
+	
+	DestroyMenu(menu);
 }

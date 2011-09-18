@@ -21,13 +21,9 @@
 
 #include "common.h"
 
-void log_open();
-void log_close();
-void log_printf(const char *fmt, ...);
-
 BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 	if(why == DLL_PROCESS_ATTACH) {
-		log_open();
+		log_open("ipxwrapper.log");
 		
 		reg_open(KEY_QUERY_VALUE);
 		

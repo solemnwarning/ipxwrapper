@@ -61,4 +61,8 @@ void unload_dlls(void);
 void __stdcall *find_sym(unsigned int dllnum, const char *symbol);
 void __stdcall log_call(unsigned int dllnum, const char *symbol);
 
+void log_open(const char *file);
+void log_close();
+void log_printf(const char *fmt, ...);
+
 #endif /* !IPXWRAPPER_COMMON_H */
