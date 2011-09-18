@@ -570,19 +570,21 @@ static void init_windows() {
 		die("Failed to initialise common controls");
 	}
 	
-	WNDCLASS wclass;
+	WNDCLASSEX wclass;
+	wclass.cbSize = sizeof(wclass);
 	wclass.style = 0;
 	wclass.lpfnWndProc = &main_wproc;
 	wclass.cbClsExtra = 0;
 	wclass.cbWndExtra = 0;
 	wclass.hInstance = GetModuleHandle(NULL);
-	wclass.hIcon = (HICON)LoadImage(GetModuleHandle(NULL), MAKEINTRESOURCE(50), IMAGE_ICON, 0, 0, LR_DEFAULTSIZE);
+	wclass.hIcon = (HICON)LoadImage(GetModuleHandle(NULL), MAKEINTRESOURCE(50), IMAGE_ICON, 32, 32, LR_SHARED);
 	wclass.hCursor = LoadCursor(NULL, IDC_ARROW);
 	wclass.hbrBackground = (HBRUSH)(COLOR_BTNFACE+1);
 	wclass.lpszMenuName  = NULL;
 	wclass.lpszClassName = "ipxconfig_class";
+	wclass.hIconSm = (HICON)LoadImage(GetModuleHandle(NULL), MAKEINTRESOURCE(50), IMAGE_ICON, 16, 16, LR_SHARED);
 	
-	if(!RegisterClass(&wclass)) {
+	if(!RegisterClassEx(&wclass)) {
 		die("Failed to register ipxconfig_class: " + w32_errmsg(GetLastError()));
 	}
 	
