@@ -33,8 +33,8 @@ SRC_FILES := changes.txt license.txt Makefile mkstubs.pl readme.txt src/config.h
 	src/mswsock.def src/mswsock_stubs.txt src/stubdll.c src/winsock.c src/wsock32.def \
 	src/wsock32_stubs.txt src/directplay.c src/dpwsockx.def src/dpwsockx_stubs.txt src/common.c \
 	src/common.h src/router.c src/router.h src/router-exe.c src/interface.c src/interface.h \
-	src/ipxrouter.rc ipxrouter.ico include/dplay.h include/dplaysp.h include/dplobby.h \
-	include/wsnwlink.h
+	src/ipxrouter.rc ipxrouter.ico src/ipxconfig.rc ipxconfig.ico include/dplay.h \
+	include/dplaysp.h include/dplobby.h include/wsnwlink.h
 
 all: ipxwrapper.dll wsock32.dll mswsock.dll ipxconfig.exe dpwsockx.dll ipxrouter.exe
 
@@ -59,8 +59,8 @@ dist: all
 ipxwrapper.dll: $(IPXWRAPPER_DEPS)
 	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -shared -o ipxwrapper.dll $(IPXWRAPPER_DEPS) -liphlpapi
 
-ipxconfig.exe: src/ipxconfig.cpp
-	$(CXX) $(CXXFLAGS) -static-libgcc -static-libstdc++ -D_WIN32_IE=0x0400 -mwindows -o ipxconfig.exe src/ipxconfig.cpp -liphlpapi -lcomctl32
+ipxconfig.exe: src/ipxconfig.cpp src/ipxconfig-rc.o
+	$(CXX) $(CXXFLAGS) -static-libgcc -static-libstdc++ -D_WIN32_IE=0x0400 -mwindows -o ipxconfig.exe src/ipxconfig.cpp src/ipxconfig-rc.o -liphlpapi -lcomctl32
 
 dpwsockx.dll: src/directplay.o src/log.o src/dpwsockx_stubs.o src/common.o
 	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -shared -o dpwsockx.dll src/directplay.o src/log.o src/common.o src/dpwsockx_stubs.o src/dpwsockx.def -lwsock32
@@ -80,8 +80,8 @@ src/mswsock_stubs.s: src/mswsock_stubs.txt
 src/dpwsockx_stubs.s: src/dpwsockx_stubs.txt
 	perl mkstubs.pl src/dpwsockx_stubs.txt src/dpwsockx_stubs.s 3
 
-src/ipxrouter-rc.o: src/ipxrouter.rc
-	windres src/ipxrouter.rc -O coff -o src/ipxrouter-rc.o
+src/%-rc.o: src/%.rc
+	windres $< -O coff -o $@
 
 %.dll: src/stubdll.o src/%_stubs.o src/log.o src/common.o src/%.def
 	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -shared -o $@ $^

@@ -38,6 +38,8 @@ Version ???:
 	Update: Max packet (data) size reduced to 8KiB.
 	
 	Update: Implemented IPX_RECEIVE_BROADCAST option.
+	
+	Update: Added ipxconfig icon.
 
 Version 0.2.2:
 	Feature: Redesigned ipxconfig UI.

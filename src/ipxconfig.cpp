@@ -571,11 +571,12 @@ static void init_windows() {
 	}
 	
 	WNDCLASS wclass;
-	
-	memset(&wclass, 0, sizeof(wclass));
 	wclass.style = 0;
 	wclass.lpfnWndProc = &main_wproc;
+	wclass.cbClsExtra = 0;
+	wclass.cbWndExtra = 0;
 	wclass.hInstance = GetModuleHandle(NULL);
+	wclass.hIcon = (HICON)LoadImage(GetModuleHandle(NULL), MAKEINTRESOURCE(50), IMAGE_ICON, 0, 0, LR_DEFAULTSIZE);
 	wclass.hCursor = LoadCursor(NULL, IDC_ARROW);
 	wclass.hbrBackground = (HBRUSH)(COLOR_BTNFACE+1);
 	wclass.lpszMenuName  = NULL;
