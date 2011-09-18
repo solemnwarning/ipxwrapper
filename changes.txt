@@ -34,6 +34,10 @@ Version ???:
 	Update: Implemented windows 95/98 WSHEnumProtocols function.
 	
 	Update: Implemented connect, send and getpeername functions.
+	
+	Update: Max packet (data) size reduced to 8KiB.
+	
+	Update: Implemented IPX_RECEIVE_BROADCAST option.
 
 Version 0.2.2:
 	Feature: Redesigned ipxconfig UI.
