@@ -25,8 +25,6 @@
 
 struct reg_global global_conf;
 
-static HMODULE netshell_dll = NULL;
-
 #define APPWM_TRAY (WM_APP+1)
 #define MNU_EXIT 101
 
@@ -142,11 +140,7 @@ static void init_ui() {
 		die("CreateWindow: ", w32_error(GetLastError()));
 	}
 	
-	if(!(netshell_dll = LoadLibrary("netshell.dll"))) {
-		die("Error loading netshell.dll: ", w32_error(GetLastError()));
-	}
-	
-	HICON icon = LoadIcon(netshell_dll, MAKEINTRESOURCE(162));
+	HICON icon = (HICON)LoadImage(GetModuleHandle(NULL), MAKEINTRESOURCE(50), IMAGE_ICON, 0, 0, LR_DEFAULTSIZE);
 	if(!icon) {
 		die("Error loading icon: ", w32_error(GetLastError()));
 	}
