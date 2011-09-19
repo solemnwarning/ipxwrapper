@@ -27,14 +27,14 @@ IPXWRAPPER_DEPS := src/ipxwrapper.o src/winsock.o src/ipxwrapper_stubs.o src/log
 	src/interface.o src/router.o src/ipxwrapper.def
 
 BIN_FILES := changes.txt license.txt readme.txt ipxwrapper.dll mswsock.dll wsock32.dll ipxconfig.exe \
-	ipxrouter.exe dpwsockx.dll
+	ipxrouter.exe dpwsockx.dll directplay.reg
 SRC_FILES := changes.txt license.txt Makefile mkstubs.pl readme.txt src/config.h src/ipxconfig.cpp \
 	src/ipxwrapper.c src/ipxwrapper.def src/ipxwrapper.h src/ipxwrapper_stubs.txt src/log.c \
 	src/mswsock.def src/mswsock_stubs.txt src/stubdll.c src/winsock.c src/wsock32.def \
 	src/wsock32_stubs.txt src/directplay.c src/dpwsockx.def src/dpwsockx_stubs.txt src/common.c \
 	src/common.h src/router.c src/router.h src/router-exe.c src/interface.c src/interface.h \
-	src/ipxrouter.rc ipxrouter.ico src/ipxconfig.rc ipxconfig.ico include/dplay.h \
-	include/dplaysp.h include/dplobby.h include/wsnwlink.h
+	icons/ipxrouter.rc icons/ipxrouter.ico icons/ipxconfig.rc icons/ipxconfig.ico \
+	include/dplay.h include/dplaysp.h include/dplobby.h include/wsnwlink.h directplay.reg
 
 all: ipxwrapper.dll wsock32.dll mswsock.dll ipxconfig.exe dpwsockx.dll ipxrouter.exe
 
@@ -80,7 +80,7 @@ src/mswsock_stubs.s: src/mswsock_stubs.txt
 src/dpwsockx_stubs.s: src/dpwsockx_stubs.txt
 	perl mkstubs.pl src/dpwsockx_stubs.txt src/dpwsockx_stubs.s 3
 
-icons/%.o: icons/%.rc
+icons/%.o: icons/%.rc icons/%.ico
 	windres $< -O coff -o $@
 
 %.dll: src/stubdll.o src/%_stubs.o src/log.o src/common.o src/%.def
