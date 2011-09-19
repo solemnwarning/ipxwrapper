@@ -435,6 +435,7 @@ static int router_bind(struct router_vars *router, SOCKET control, SOCKET sock, 
 	new_addr->flags = flags;
 	new_addr->ipaddr = iface_ipaddr;
 	new_addr->netmask = iface_netmask;
+	new_addr->remote_addr.sa_family = AF_UNSPEC;
 	new_addr->next = router->addrs;
 	
 	router->addrs = new_addr;

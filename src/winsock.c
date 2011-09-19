@@ -238,7 +238,7 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen) {
 			RETURN_WSA(WSAEINVAL, -1);
 		}
 		
-		if(!rclient_bind(&g_rclient, fd, &ipxaddr, &(ptr->nic_bcast), ptr->flags & IPX_REUSE ? TRUE : FALSE)) {
+		if(!rclient_bind(&g_rclient, fd, &ipxaddr, &(ptr->nic_bcast), ptr->flags)) {
 			RETURN(-1);
 		}
 		
@@ -546,9 +546,9 @@ int WSAAPI getsockopt(SOCKET fd, int level, int optname, char FAR *optval, int F
 
 #define SET_FLAG(flag, state) \
 	if(state) { \
-		sockptr->flags |= flag; \
+		sockptr->flags |= (flag); \
 	}else{ \
-		sockptr->flags &= flag; \
+		sockptr->flags &= ~(flag); \
 	}
 
 #define RC_SET_FLAG(flag, state) \
@@ -602,7 +602,9 @@ int WSAAPI setsockopt(SOCKET fd, int level, int optname, const char FAR *optval,
 		
 		if(level == SOL_SOCKET) {
 			if(optname == SO_BROADCAST) {
+				RC_SET_FLAG(IPX_BROADCAST, *bval);
 				SET_FLAG(IPX_BROADCAST, *bval);
+				
 				RETURN(0);
 			}
 			

@@ -105,7 +105,7 @@ struct rclient {
 };
 
 struct rpacket_header {
-	uint8_t src_ipaddr;
+	uint32_t src_ipaddr;
 	char spare[20];
 } __attribute__((__packed__));
 
