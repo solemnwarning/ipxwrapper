@@ -277,7 +277,7 @@ DWORD router_main(void *arg) {
 			continue;
 		}
 		
-		memset(&rp_header, 0, sizeof(*rp_header));
+		memset(rp_header, 0, sizeof(*rp_header));
 		rp_header->src_ipaddr = addr.sin_addr.s_addr;
 		
 		struct router_addr *ra = router->addrs;
