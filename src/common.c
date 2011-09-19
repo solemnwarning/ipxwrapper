@@ -98,6 +98,11 @@ DWORD reg_get_bin(const char *val_name, void *buf, DWORD size) {
 	return size;
 }
 
+DWORD reg_get_dword(const char *val_name, DWORD default_val) {
+	DWORD buf;
+	return reg_get_bin(val_name, &buf, sizeof(buf)) == sizeof(buf) ? buf : default_val;
+}
+
 void load_dll(unsigned int dllnum) {
 	char path[512];
 	

@@ -39,6 +39,7 @@
 #define ID_OPT_BCAST 23
 #define ID_OPT_FILTER 24
 #define ID_OPT_LOG 25
+#define ID_OPT_CPORT 26
 
 #define ID_OK 31
 #define ID_CANCEL 32
@@ -61,7 +62,7 @@ struct iface {
 typedef std::vector<iface> iface_list;
 
 static void get_nics();
-static bool reg_write(const char *name, void *value, size_t size);
+static bool reg_write(const char *name, void *value, size_t size, DWORD type = REG_BINARY);
 static size_t reg_read(const char *name, void *buf, size_t max_size);
 static bool save_config();
 static bool store_nic();
@@ -110,6 +111,8 @@ static struct {
 	HWND opt_log;
 	HWND opt_port_lbl;
 	HWND opt_port;
+	HWND opt_cport_lbl;
+	HWND opt_cport;
 	
 	HWND ok_btn;
 	HWND can_btn;
@@ -221,10 +224,10 @@ static LRESULT CALLBACK main_wproc(HWND window, UINT msg, WPARAM wp, LPARAM lp) 
 			
 			/* Options groupbox */
 			
-			int lbl_w = get_text_width(windows.nic_net_lbl, "UDP port number");
+			int lbl_w = get_text_width(windows.nic_net_lbl, "Control port number");
 			int edit_w = get_text_width(windows.nic_node, "000000");
 			
-			int opt_h = 5 * text_h + edit_h + 18;
+			int opt_h = 5 * text_h + 2 * edit_h + 18;
 			
 			MoveWindow(windows.opt_group, 0, height - opt_h - btn_h - 12, width, opt_h, TRUE);
 			
@@ -232,6 +235,11 @@ static LRESULT CALLBACK main_wproc(HWND window, UINT msg, WPARAM wp, LPARAM lp) 
 			
 			MoveWindow(windows.opt_port_lbl, 10, y + edge, lbl_w, text_h, TRUE);
 			MoveWindow(windows.opt_port, 15 + lbl_w, y, edit_w, edit_h, TRUE);
+			
+			y += edit_h + 2;
+			
+			MoveWindow(windows.opt_cport_lbl, 10, y + edge, lbl_w, text_h, TRUE);
+			MoveWindow(windows.opt_cport, 15 + lbl_w, y, edit_w, edit_h, TRUE);
 			
 			MoveWindow(windows.opt_filter, 10, y += edit_h + 2, width - 20, text_h, TRUE);
 			MoveWindow(windows.opt_bcast, 10, y += text_h + 2, width - 20, text_h, TRUE);
@@ -394,7 +402,7 @@ static void get_nics() {
 	delete buf;
 }
 
-static bool reg_write(const char *name, void *value, size_t size) {
+static bool reg_write(const char *name, void *value, size_t size, DWORD type) {
 	if(!regkey) {
 		int err = RegCreateKeyEx(
 			HKEY_CURRENT_USER,
@@ -418,7 +426,7 @@ static bool reg_write(const char *name, void *value, size_t size) {
 		}
 	}
 	
-	int err = RegSetValueEx(regkey, name, 0, REG_BINARY, (BYTE*)value, size);
+	int err = RegSetValueEx(regkey, name, 0, type, (BYTE*)value, size);
 	if(err != ERROR_SUCCESS) {
 		std::string msg = "Error writing value to registry: " + w32_errmsg(err);
 		MessageBox(NULL, msg.c_str(), "Error", MB_OK | MB_TASKMODAL | MB_ICONERROR);
@@ -455,8 +463,8 @@ static bool save_config() {
 	}
 	
 	char port_s[32], *endptr;
-	GetWindowText(windows.opt_port, port_s, 32);
 	
+	GetWindowText(windows.opt_port, port_s, 32);
 	int port = strtol(port_s, &endptr, 10);
 	
 	if(port < 1 || port > 65535 || *endptr) {
@@ -464,6 +472,18 @@ static bool save_config() {
 		
 		SetFocus(windows.opt_port);
 		Edit_SetSel(windows.opt_port, 0, Edit_GetTextLength(windows.opt_port));
+		
+		return false;
+	}
+	
+	GetWindowText(windows.opt_cport, port_s, 32);
+	int control_port = strtol(port_s, &endptr, 10);
+	
+	if(port < 1 || port > 65535 || *endptr) {
+		MessageBox(windows.main, "Invalid port number.\nPort number must be an integer in the range 1 - 65535", "Error", MB_OK);
+		
+		SetFocus(windows.opt_cport);
+		Edit_SetSel(windows.opt_cport, 0, Edit_GetTextLength(windows.opt_cport));
 		
 		return false;
 	}
@@ -488,6 +508,10 @@ static bool save_config() {
 	}
 	
 	if(!reg_write("global", &global_conf, sizeof(global_conf)) || !reg_write("log_calls", &log_calls, 1)) {
+		return false;
+	}
+	
+	if(!reg_write("control_port", &control_port, sizeof(control_port), REG_DWORD)) {
 		return false;
 	}
 	
@@ -657,10 +681,21 @@ static void init_windows() {
 		windows.opt_port_lbl = create_child(windows.opt_group, 0, 0, 0, 0, "STATIC", "UDP port number", SS_RIGHT);
 		windows.opt_port = create_child(windows.opt_group, 0, 0, 0, 0, "EDIT", "", WS_TABSTOP, WS_EX_CLIENTEDGE, ID_OPT_PORT);
 		
-		char port_s[8];
-		sprintf(port_s, "%hu", global_conf.udp_port);
+		windows.opt_cport_lbl = create_child(windows.opt_group, 0, 0, 0, 0, "STATIC", "Control port number", SS_RIGHT);
+		windows.opt_cport = create_child(windows.opt_group, 0, 0, 0, 0, "EDIT", "", WS_TABSTOP, WS_EX_CLIENTEDGE, ID_OPT_CPORT);
 		
+		char port_s[8];
+		
+		sprintf(port_s, "%hu", global_conf.udp_port);
 		SetWindowText(windows.opt_port, port_s);
+		
+		DWORD port_buf;
+		if(reg_read("control_port", &port_buf, sizeof(DWORD)) != sizeof(DWORD) || port_buf > 65535) {
+			port_buf = DEFAULT_CONTROL_PORT;
+		}
+		
+		sprintf(port_s, "%hu", (uint16_t)port_buf);
+		SetWindowText(windows.opt_cport, port_s);
 		
 		windows.opt_w95 = create_child(windows.opt_group, 0, 0, 0, 0, "BUTTON", "Enable Windows 95 SO_BROADCAST bug", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_OPT_W95);
 		windows.opt_bcast = create_child(windows.opt_group, 0, 0, 0, 0, "BUTTON", "Send broadcast packets to all subnets", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_OPT_BCAST);

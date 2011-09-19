@@ -55,6 +55,7 @@ void reg_close(void);
 
 char reg_get_char(const char *val_name, char default_val);
 DWORD reg_get_bin(const char *val_name, void *buf, DWORD size);
+DWORD reg_get_dword(const char *val_name, DWORD default_val);
 
 void load_dll(unsigned int dllnum);
 void unload_dlls(void);

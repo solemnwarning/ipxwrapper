@@ -113,9 +113,8 @@ struct router_vars *router_init(BOOL global) {
 			return NULL;
 		}
 		
-		/* TODO: Use different port number for control socket? */
-		
 		addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+		addr.sin_port = htons(reg_get_dword("control_port", DEFAULT_CONTROL_PORT));
 		
 		if(bind(router->listener, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
 			log_printf("Failed to bind TCP socket: %s", w32_error(WSAGetLastError()));
