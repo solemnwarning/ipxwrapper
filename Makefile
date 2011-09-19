@@ -59,13 +59,13 @@ dist: all
 ipxwrapper.dll: $(IPXWRAPPER_DEPS)
 	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -shared -o ipxwrapper.dll $(IPXWRAPPER_DEPS) -liphlpapi
 
-ipxconfig.exe: src/ipxconfig.cpp src/ipxconfig-rc.o
-	$(CXX) $(CXXFLAGS) -static-libgcc -static-libstdc++ -D_WIN32_IE=0x0400 -mwindows -o ipxconfig.exe src/ipxconfig.cpp src/ipxconfig-rc.o -liphlpapi -lcomctl32
+ipxconfig.exe: src/ipxconfig.cpp icons/ipxconfig.o
+	$(CXX) $(CXXFLAGS) -static-libgcc -static-libstdc++ -D_WIN32_IE=0x0400 -mwindows -o ipxconfig.exe $^ -liphlpapi -lcomctl32
 
 dpwsockx.dll: src/directplay.o src/log.o src/dpwsockx_stubs.o src/common.o
 	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -shared -o dpwsockx.dll src/directplay.o src/log.o src/common.o src/dpwsockx_stubs.o src/dpwsockx.def -lwsock32
 
-ipxrouter.exe: src/router-exe.o src/router.o src/interface.o src/common.o src/log.o src/ipxrouter-rc.o
+ipxrouter.exe: src/router-exe.o src/router.o src/interface.o src/common.o src/log.o icons/ipxrouter.o
 	$(CC) $(CFLAGS) -static-libgcc -mwindows -o ipxrouter.exe $^ -lws2_32 -liphlpapi
 
 src/ipxwrapper_stubs.s: src/ipxwrapper_stubs.txt
@@ -80,7 +80,7 @@ src/mswsock_stubs.s: src/mswsock_stubs.txt
 src/dpwsockx_stubs.s: src/dpwsockx_stubs.txt
 	perl mkstubs.pl src/dpwsockx_stubs.txt src/dpwsockx_stubs.s 3
 
-src/%-rc.o: src/%.rc
+icons/%.o: icons/%.rc
 	windres $< -O coff -o $@
 
 %.dll: src/stubdll.o src/%_stubs.o src/log.o src/common.o src/%.def
