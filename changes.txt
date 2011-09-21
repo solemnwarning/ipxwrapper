@@ -1,4 +1,4 @@
-Version ???:
+Version 0.3:
 	Cleanup: Moved certain library functions out of ipxwrapper.c and tidied up.
 	
 	Cleanup: Removed winstuff.h, added wsnwlink.h from Wine.
@@ -23,7 +23,7 @@ Version ???:
 	
 	Bugfix: Correctly initialise common controls in ipxconfig.
 	
-	Update: Load interfaces on each bind/getsockopt call to allow configuration
+	Feature: Load interfaces on each bind/getsockopt call to allow configuration
 	changes without restarting.
 	
 	Bugfix: Load EnumProtocolsA/EnumProtocolsW directly from mswsock.dll to avoid
@@ -31,13 +31,13 @@ Version ???:
 	
 	Bugfix: Correctly store protocol names at end of EnumProtocols buffer.
 	
-	Update: Implemented windows 95/98 WSHEnumProtocols function.
+	Feature: Implemented windows 95/98 WSHEnumProtocols function.
 	
-	Update: Implemented connect, send and getpeername functions.
+	Feature: Implemented connect, send and getpeername functions.
 	
 	Update: Max packet (data) size reduced to 8KiB.
 	
-	Update: Implemented IPX_RECEIVE_BROADCAST option.
+	Feature: Implemented IPX_RECEIVE_BROADCAST option.
 	
 	Update: Added ipxconfig icon.
 

@@ -66,21 +66,8 @@ void reg_close(void) {
 }
 
 char reg_get_char(const char *val_name, char default_val) {
-	if(!regkey) {
-		return default_val;
-	}
-	
 	char buf;
-	DWORD size = 1;
-	
-	int err = RegQueryValueEx(regkey, val_name, NULL, NULL, (BYTE*)&buf, &size);
-	
-	if(err != ERROR_SUCCESS) {
-		log_printf("Error reading registry value: %s", w32_error(err));
-		return default_val;
-	}
-	
-	return size == 1 ? buf : default_val;
+	return reg_get_bin(val_name, &buf, 1) == 1 ? buf : default_val;
 }
 
 DWORD reg_get_bin(const char *val_name, void *buf, DWORD size) {
@@ -91,7 +78,10 @@ DWORD reg_get_bin(const char *val_name, void *buf, DWORD size) {
 	int err = RegQueryValueEx(regkey, val_name, NULL, NULL, (BYTE*)buf, &size);
 	
 	if(err != ERROR_SUCCESS) {
-		log_printf("Error reading registry value: %s", w32_error(err));
+		if(err != ERROR_FILE_NOT_FOUND) {
+			log_printf("Error reading registry value: %s", w32_error(err));
+		}
+		
 		return 0;
 	}
 	

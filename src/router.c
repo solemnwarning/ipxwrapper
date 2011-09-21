@@ -667,7 +667,7 @@ BOOL rclient_start(struct rclient *rclient) {
 	struct sockaddr_in addr;
 	addr.sin_family = AF_INET;
 	addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-	addr.sin_port = htons(global_conf.udp_port);
+	addr.sin_port = htons(reg_get_dword("control_port", DEFAULT_CONTROL_PORT));
 	
 	if(connect(rclient->sock, (struct sockaddr*)&addr, sizeof(addr)) == 0) {
 		return TRUE;
