@@ -39,6 +39,7 @@
 #define IPX_REUSE	(int)(1<<6)
 #define IPX_CONNECTED	(int)(1<<7)
 #define IPX_RECV_BCAST	(int)(1<<8)
+#define IPX_EXT_ADDR	(int)(1<<9)
 
 #define RETURN(...) \
 	unlock_sockets();\

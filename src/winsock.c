@@ -38,6 +38,16 @@ typedef struct _PROTOCOL_INFO {
 	void *lpProtocol ;
 } PROTOCOL_INFO;
 
+struct sockaddr_ipx_ext {
+	short sa_family;
+	char sa_netnum[4];
+	char sa_nodenum[6];
+	unsigned short sa_socket;
+	
+	unsigned char sa_ptype;
+	unsigned char sa_flags;
+};
+
 static size_t strsize(void *str, BOOL unicode) {
 	return unicode ? 2 + wcslen(str)*2 : 1 + strlen(str);
 }
@@ -313,9 +323,10 @@ int WSAAPI getsockname(SOCKET fd, struct sockaddr *addr, int *addrlen) {
  * The mutex should be locked before calling and will be released before returning
  * The size of the packet will be returned on success, even if it was truncated
 */
-static int recv_packet(ipx_socket *sockptr, char *buf, int bufsize, int flags, struct sockaddr_ipx *addr) {
+static int recv_packet(ipx_socket *sockptr, char *buf, int bufsize, int flags, struct sockaddr_ipx_ext *addr, int addrlen) {
 	SOCKET fd = sockptr->fd;
 	int is_bound = sockptr->flags & IPX_BOUND;
+	int extended_addr = sockptr->flags & IPX_EXT_ADDR;
 	
 	unlock_sockets();
 	
@@ -354,6 +365,23 @@ static int recv_packet(ipx_socket *sockptr, char *buf, int bufsize, int flags, s
 		memcpy(addr->sa_netnum, packet->src_net, 4);
 		memcpy(addr->sa_nodenum, packet->src_node, 6);
 		addr->sa_socket = packet->src_socket;
+		
+		if(extended_addr) {
+			if(addrlen >= sizeof(struct sockaddr_ipx_ext)) {
+				addr->sa_ptype = packet->ptype;
+				addr->sa_flags = 0;
+				
+				const unsigned char f6[] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
+				
+				if(memcpy(packet->dest_node, f6, 6) == 0) {
+					flags |= 0x01;
+				}
+				
+				/* TODO: Set 0x02 if packet was sent from local machine */
+			}else{
+				log_printf("IPX_EXTENDED_ADDRESS enabled, but recvfrom called with addrlen %d", addrlen);
+			}
+		}
 	}
 	
 	memcpy(buf, packet->data, packet->size <= bufsize ? packet->size : bufsize);
@@ -374,13 +402,15 @@ int WSAAPI recvfrom(SOCKET fd, char *buf, int len, int flags, struct sockaddr *a
 			return -1;
 		}
 		
-		int rval = recv_packet(sockptr, buf, len, flags, (struct sockaddr_ipx*)addr);
+		int extended_addr = sockptr->flags & IPX_EXT_ADDR;
+		
+		int rval = recv_packet(sockptr, buf, len, flags, (struct sockaddr_ipx_ext*)addr, *addrlen);
 		
 		/* The value pointed to by addrlen is only set if the recv call was
 		 * successful, may not be correct.
 		*/
 		if(rval >= 0 && addr && addrlen) {
-			*addrlen = sizeof(struct sockaddr_ipx);
+			*addrlen = (*addrlen >= sizeof(struct sockaddr_ipx_ext) && extended_addr ? sizeof(struct sockaddr_ipx_ext) : sizeof(struct sockaddr_ipx));
 		}
 		
 		if(rval > len) {
@@ -398,7 +428,7 @@ int WSAAPI recv(SOCKET fd, char *buf, int len, int flags) {
 	ipx_socket *sockptr = get_socket(fd);
 	
 	if(sockptr) {
-		int rval = recv_packet(sockptr, buf, len, flags, NULL);
+		int rval = recv_packet(sockptr, buf, len, flags, NULL, 0);
 		
 		if(rval > len) {
 			WSASetLastError(WSAEMSGSIZE);
@@ -415,7 +445,7 @@ int PASCAL WSARecvEx(SOCKET fd, char *buf, int len, int *flags) {
 	ipx_socket *sockptr = get_socket(fd);
 	
 	if(sockptr) {
-		int rval = recv_packet(sockptr, buf, len, 0, NULL);
+		int rval = recv_packet(sockptr, buf, len, 0, NULL, 0);
 		
 		if(rval > len) {
 			*flags = MSG_PARTIAL;
@@ -519,6 +549,14 @@ int WSAAPI getsockopt(SOCKET fd, int level, int optname, char FAR *optval, int F
 				RETURN(0);
 			}
 			
+			if(optname == IPX_EXTENDED_ADDRESS) {
+				CHECK_OPTLEN(sizeof(BOOL));
+				
+				*bval = (ptr->flags & IPX_EXT_ADDR ? TRUE : FALSE);
+				
+				RETURN(0);
+			}
+			
 			RETURN_WSA(WSAENOPROTOOPT, -1);
 		}
 		
@@ -597,6 +635,11 @@ int WSAAPI setsockopt(SOCKET fd, int level, int optname, const char FAR *optval,
 				RETURN(0);
 			}
 			
+			if(optname == IPX_EXTENDED_ADDRESS) {
+				SET_FLAG(IPX_EXT_ADDR, *bval);
+				RETURN(0);
+			}
+			
 			RETURN_WSA(WSAENOPROTOOPT, -1);
 		}
 		
@@ -623,7 +666,7 @@ int WSAAPI setsockopt(SOCKET fd, int level, int optname, const char FAR *optval,
 }
 
 int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct sockaddr *addr, int addrlen) {
-	struct sockaddr_ipx *ipxaddr = (struct sockaddr_ipx*)addr;
+	struct sockaddr_ipx_ext *ipxaddr = (struct sockaddr_ipx_ext*)addr;
 	
 	ipx_socket *sockptr = get_socket(fd);
 	
@@ -663,6 +706,14 @@ int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct s
 		}
 		
 		packet->ptype = sockptr->s_ptype;
+		
+		if(sockptr->flags & IPX_EXT_ADDR) {
+			if(addrlen >= 15) {
+				packet->ptype = ipxaddr->sa_ptype;
+			}else{
+				log_printf("IPX_EXTENDED_ADDRESS enabled, but sendto() called with addrlen %d", addrlen);
+			}
+		}
 		
 		memcpy(packet->dest_net, ipxaddr->sa_netnum, 4);
 		memcpy(packet->dest_node, ipxaddr->sa_nodenum, 6);
