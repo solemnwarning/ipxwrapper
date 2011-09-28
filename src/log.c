@@ -36,7 +36,7 @@ void log_open(const char *file) {
 		FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE,
 		NULL,
 		OPEN_ALWAYS,
-		FILE_ATTRIBUTE_NORMAL,
+		FILE_ATTRIBUTE_NORMAL | FILE_FLAG_WRITE_THROUGH,
 		NULL
 	);
 	
@@ -66,13 +66,13 @@ void log_printf(const char *fmt, ...) {
 	}
 	
 	va_list argv;
-	char msg[1024], tstr[32];
+	char msg[1024], tstr[64];
 	
 	va_start(argv, fmt);
 	vsnprintf(msg, 1024, fmt, argv);
 	va_end(argv);
 	
-	snprintf(tstr, 32, "[%u.%02u] ", (unsigned int)(called/1000), (unsigned int)((called % 1000) / 10));
+	snprintf(tstr, 64, "[%u.%02u, thread %u] ", (unsigned int)(called/1000), (unsigned int)((called % 1000) / 10), (unsigned int)GetCurrentThreadId());
 	
 	OVERLAPPED off;
 	off.Offset = 0;
@@ -90,8 +90,6 @@ void log_printf(const char *fmt, ...) {
 		WriteFile(log_fh, tstr, strlen(tstr), &written, NULL);
 		WriteFile(log_fh, msg, strlen(msg), &written, NULL);
 		WriteFile(log_fh, "\r\n", 2, &written, NULL);
-		
-		FlushFileBuffers(log_fh);
 	}
 	
 	UnlockFile(log_fh, 0, 0, 1, 0);
