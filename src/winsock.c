@@ -557,6 +557,8 @@ int WSAAPI getsockopt(SOCKET fd, int level, int optname, char FAR *optval, int F
 				RETURN(0);
 			}
 			
+			log_printf("Unknown NSPROTO_IPX socket option passed to getsockopt: %d", optname);
+			
 			RETURN_WSA(WSAENOPROTOOPT, -1);
 		}
 		
@@ -639,6 +641,8 @@ int WSAAPI setsockopt(SOCKET fd, int level, int optname, const char FAR *optval,
 				SET_FLAG(IPX_EXT_ADDR, *bval);
 				RETURN(0);
 			}
+			
+			log_printf("Unknown NSPROTO_IPX socket option passed to setsockopt: %d", optname);
 			
 			RETURN_WSA(WSAENOPROTOOPT, -1);
 		}

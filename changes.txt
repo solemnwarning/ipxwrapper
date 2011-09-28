@@ -1,3 +1,16 @@
+Version 0.3.1:
+	Bugfix: Fixed deadlock in DirectPlay service provider.
+	
+	Bugfix: Properly release event and lock objects when destroying a service
+	provider instance.
+	
+	Update: Open logfile with FILE_FLAG_WRITE_THROUGH instead of calling
+	FlushFileBuffers after every write for performance.
+	
+	Update: Include thread ID with every log message.
+	
+	Feature: Implemented IPX_EXTENDED_ADDRESS socket option.
+
 Version 0.3:
 	Cleanup: Moved certain library functions out of ipxwrapper.c and tidied up.
 	
