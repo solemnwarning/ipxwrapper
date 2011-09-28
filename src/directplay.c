@@ -38,11 +38,8 @@ struct sp_data {
 	BOOL running;
 	HANDLE worker_thread;
 	WSAEVENT event;
-};
-
-struct sp_data_cont {
-	struct sp_data *data;
-	HANDLE mutex;
+	
+	CRITICAL_SECTION lock;
 };
 
 #define DISCOVERY_SOCKET 42367
@@ -52,32 +49,23 @@ struct sp_data_cont {
 
 /* Lock the object mutex and return the data pointer */
 static struct sp_data *get_sp_data(IDirectPlaySP *sp) {
-	struct sp_data_cont *cont;
+	struct sp_data *data;
 	DWORD size;
 	
-	HRESULT r = IDirectPlaySP_GetSPData(sp, (void**)&cont, &size, DPGET_LOCAL);
+	HRESULT r = IDirectPlaySP_GetSPData(sp, (void**)&data, &size, DPGET_LOCAL);
 	if(r != DP_OK) {
 		log_printf("GetSPData: %d", (int)r);
 		abort();
 	}
 	
-	WaitForSingleObject(cont->mutex, INFINITE);
+	EnterCriticalSection(&(data->lock));
 	
-	return cont->data;
+	return data;
 }
 
 /* Release the object mutex */
-static void release_sp_data(IDirectPlaySP *sp) {
-	struct sp_data_cont *cont;
-	DWORD size;
-	
-	HRESULT r = IDirectPlaySP_GetSPData(sp, (void**)&cont, &size, DPGET_LOCAL);
-	if(r != DP_OK) {
-		log_printf("GetSPData: %d", (int)r);
-		abort();
-	}
-	
-	ReleaseMutex(cont->mutex);
+static void release_sp_data(struct sp_data *data) {
+	LeaveCriticalSection(&(data->lock));
 }
 
 static BOOL recv_packet(int sockfd, char *buf, IDirectPlaySP *sp) {
@@ -104,7 +92,7 @@ static BOOL recv_packet(int sockfd, char *buf, IDirectPlaySP *sp) {
 
 static DWORD WINAPI worker_main(LPVOID sp) {
 	struct sp_data *sp_data = get_sp_data((IDirectPlaySP*)sp);
-	release_sp_data((IDirectPlaySP*)sp);
+	release_sp_data(sp_data);
 	
 	char *buf = malloc(MAX_DATA_SIZE);
 	if(!buf) {
@@ -119,11 +107,11 @@ static DWORD WINAPI worker_main(LPVOID sp) {
 		WSAResetEvent(sp_data->event);
 		
 		if(!sp_data->running) {
-			release_sp_data((IDirectPlaySP*)sp);
+			release_sp_data(sp_data);
 			return 0;
 		}
 		
-		release_sp_data((IDirectPlaySP*)sp);
+		release_sp_data(sp_data);
 		
 		if(!recv_packet(sp_data->sock, buf, sp)) {
 			return 1;
@@ -137,7 +125,7 @@ static DWORD WINAPI worker_main(LPVOID sp) {
 			closesocket(sp_data->ns_sock);
 			sp_data->ns_sock = -1;
 			
-			release_sp_data((IDirectPlaySP*)sp);
+			release_sp_data(sp_data);
 		}
 	}
 	
@@ -148,7 +136,7 @@ static BOOL init_worker(IDirectPlaySP *sp) {
 	struct sp_data *sp_data = get_sp_data(sp);
 	
 	if(sp_data->worker_thread) {
-		release_sp_data(sp);
+		release_sp_data(sp_data);
 		return TRUE;
 	}
 	
@@ -156,11 +144,11 @@ static BOOL init_worker(IDirectPlaySP *sp) {
 	if(!sp_data->worker_thread) {
 		log_printf("Failed to create worker thread");
 		
-		release_sp_data(sp);
+		release_sp_data(sp_data);
 		return FALSE;
 	}
 	
-	release_sp_data(sp);
+	release_sp_data(sp_data);
 	return TRUE;
 }
 
@@ -183,11 +171,11 @@ static HRESULT WINAPI IPX_EnumSessions(LPDPSP_ENUMSESSIONSDATA data) {
 	if(sendto(sp_data->sock, data->lpMessage + API_HEADER_SIZE, data->dwMessageSize - API_HEADER_SIZE, 0, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
 		log_printf("sendto failed: %s", w32_error(WSAGetLastError()));
 		
-		release_sp_data(data->lpISP);
+		release_sp_data(sp_data);
 		return DPERR_GENERIC;
 	}
 	
-	release_sp_data(data->lpISP);
+	release_sp_data(sp_data);
 	return DP_OK;
 }
 
@@ -213,18 +201,18 @@ static HRESULT WINAPI IPX_Send(LPDPSP_SENDDATA data) {
 	if(!addr) {
 		log_printf("No known address for player ID %u, dropping packet", data->idPlayerTo);
 		
-		release_sp_data(data->lpISP);
+		release_sp_data(sp_data);
 		return DP_OK;
 	}
 	
 	if(sendto(sp_data->sock, data->lpMessage + API_HEADER_SIZE, data->dwMessageSize - API_HEADER_SIZE, 0, (struct sockaddr*)addr, sizeof(*addr)) == -1) {
 		log_printf("sendto failed: %s", w32_error(WSAGetLastError()));
 		
-		release_sp_data(data->lpISP);
+		release_sp_data(sp_data);
 		return DPERR_GENERIC;
 	}
 	
-	release_sp_data(data->lpISP);
+	release_sp_data(sp_data);
 	return DP_OK;
 }
 
@@ -284,11 +272,11 @@ static HRESULT WINAPI IPX_Reply(LPDPSP_REPLYDATA data) {
 	if(sendto(sp_data->sock, data->lpMessage + API_HEADER_SIZE, data->dwMessageSize - API_HEADER_SIZE, 0, (struct sockaddr*)data->lpSPMessageHeader, sizeof(struct sockaddr_ipx)) == -1) {
 		log_printf("sendto failed: %s", w32_error(WSAGetLastError()));
 		
-		release_sp_data(data->lpISP);
+		release_sp_data(sp_data);
 		return DPERR_GENERIC;
 	}
 	
-	release_sp_data(data->lpISP);
+	release_sp_data(sp_data);
 	return DP_OK;
 }
 
@@ -343,7 +331,7 @@ static HRESULT WINAPI IPX_Open(LPDPSP_OPENDATA data) {
 	if(data->bCreate) {
 		if(sp_data->ns_sock == -1) {
 			if((sp_data->ns_sock = socket(AF_IPX, SOCK_DGRAM, NSPROTO_IPX)) == -1) {
-				release_sp_data(data->lpISP);
+				release_sp_data(sp_data);
 				
 				log_printf("Cannot create ns_sock: %s", w32_error(WSAGetLastError()));
 				return DPERR_CANNOTCREATESERVER;
@@ -362,7 +350,7 @@ static HRESULT WINAPI IPX_Open(LPDPSP_OPENDATA data) {
 				closesocket(sp_data->ns_sock);
 				sp_data->ns_sock = -1;
 				
-				release_sp_data(data->lpISP);
+				release_sp_data(sp_data);
 				
 				log_printf("Cannot bind ns_sock: %s", w32_error(WSAGetLastError()));
 				return DPERR_CANNOTCREATESERVER;
@@ -372,7 +360,7 @@ static HRESULT WINAPI IPX_Open(LPDPSP_OPENDATA data) {
 				closesocket(sp_data->ns_sock);
 				sp_data->ns_sock = -1;
 				
-				release_sp_data(data->lpISP);
+				release_sp_data(sp_data);
 				
 				log_printf("WSAEventSelect failed: %s", w32_error(WSAGetLastError()));
 				return DPERR_CANNOTCREATESERVER;
@@ -383,7 +371,7 @@ static HRESULT WINAPI IPX_Open(LPDPSP_OPENDATA data) {
 		sp_data->ns_id = 0;
 	}
 	
-	release_sp_data(data->lpISP);
+	release_sp_data(sp_data);
 	return DP_OK;
 }
 
@@ -397,7 +385,7 @@ static HRESULT WINAPI IPX_CloseEx(LPDPSP_CLOSEDATA data) {
 		sp_data->ns_sock = -1;
 	}
 	
-	release_sp_data(data->lpISP);
+	release_sp_data(sp_data);
 	return DP_OK;
 }
 
@@ -409,7 +397,7 @@ static HRESULT WINAPI IPX_ShutdownEx(LPDPSP_SHUTDOWNDATA data) {
 	sp_data->running = FALSE;
 	WSASetEvent(sp_data->event);
 	
-	release_sp_data(data->lpISP);
+	release_sp_data(sp_data);
 	
 	if(sp_data->worker_thread) {
 		if(WaitForSingleObject(sp_data->worker_thread, 3000) == WAIT_TIMEOUT) {
@@ -421,11 +409,13 @@ static HRESULT WINAPI IPX_ShutdownEx(LPDPSP_SHUTDOWNDATA data) {
 		sp_data->worker_thread = NULL;
 	}
 	
-	closesocket(sp_data->sock);
-	
 	if(sp_data->ns_sock != -1) {
 		closesocket(sp_data->ns_sock);
 	}
+	
+	closesocket(sp_data->sock);
+	WSACloseEvent(sp_data->event);
+	DeleteCriticalSection(&(sp_data->lock));
 	
 	return DP_OK;
 }
@@ -440,16 +430,16 @@ HRESULT WINAPI SPInit(LPSPINITDATA data) {
 	log_printf("SPInit: %p", data->lpISP);
 	
 	{
-		struct sp_data_cont *cont;
+		struct sp_data *sp_data;
 		DWORD size;
 		
-		HRESULT r = IDirectPlaySP_GetSPData(data->lpISP, (void**)&cont, &size, DPGET_LOCAL);
+		HRESULT r = IDirectPlaySP_GetSPData(data->lpISP, (void**)&sp_data, &size, DPGET_LOCAL);
 		if(r != DP_OK) {
 			log_printf("SPInit: GetSPData: %d", r);
 			return DPERR_UNAVAILABLE;
 		}
 		
-		if(cont) {
+		if(sp_data) {
 			log_printf("SPInit: Already initialised, returning DP_OK");
 			return DP_OK;
 		}
@@ -460,14 +450,15 @@ HRESULT WINAPI SPInit(LPSPINITDATA data) {
 		return DPERR_UNAVAILABLE;
 	}
 	
-	HANDLE mutex = CreateMutex(NULL, FALSE, NULL);
-	if(!mutex) {
+	if(!InitializeCriticalSectionAndSpinCount(&(sp_data->lock), 0x80000000)) {
+		log_printf("Error creating critical section: %s", w32_error(GetLastError()));
+		
 		free(sp_data);
 		return DPERR_UNAVAILABLE;
 	}
 	
 	if((sp_data->event = WSACreateEvent()) == WSA_INVALID_EVENT) {
-		CloseHandle(mutex);
+		DeleteCriticalSection(&(sp_data->lock));
 		free(sp_data);
 		
 		return DPERR_UNAVAILABLE;
@@ -475,7 +466,7 @@ HRESULT WINAPI SPInit(LPSPINITDATA data) {
 	
 	if((sp_data->sock = socket(AF_IPX, SOCK_DGRAM, NSPROTO_IPX)) == -1) {
 		WSACloseEvent(sp_data->event);
-		CloseHandle(mutex);
+		DeleteCriticalSection(&(sp_data->lock));
 		free(sp_data);
 		
 		return DPERR_UNAVAILABLE;
@@ -489,7 +480,7 @@ HRESULT WINAPI SPInit(LPSPINITDATA data) {
 	if(bind(sp_data->sock, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
 		closesocket(sp_data->sock);
 		WSACloseEvent(sp_data->event);
-		CloseHandle(mutex);
+		DeleteCriticalSection(&(sp_data->lock));
 		free(sp_data);
 		
 		return DPERR_UNAVAILABLE;
@@ -502,7 +493,7 @@ HRESULT WINAPI SPInit(LPSPINITDATA data) {
 		
 		closesocket(sp_data->sock);
 		WSACloseEvent(sp_data->event);
-		CloseHandle(mutex);
+		DeleteCriticalSection(&(sp_data->lock));
 		free(sp_data);
 		
 		return DPERR_UNAVAILABLE;
@@ -521,23 +512,19 @@ HRESULT WINAPI SPInit(LPSPINITDATA data) {
 		
 		closesocket(sp_data->sock);
 		WSACloseEvent(sp_data->event);
-		CloseHandle(mutex);
+		DeleteCriticalSection(&(sp_data->lock));
 		free(sp_data);
 		
 		return DPERR_UNAVAILABLE;
 	}
 	
-	struct sp_data_cont cont;
-	cont.data = sp_data;
-	cont.mutex = mutex;
-	
-	HRESULT r = IDirectPlaySP_SetSPData(data->lpISP, &cont, sizeof(cont), DPSET_LOCAL);
+	HRESULT r = IDirectPlaySP_SetSPData(data->lpISP, sp_data, sizeof(*sp_data), DPSET_LOCAL);
 	if(r != DP_OK) {
 		log_printf("SetSPData: %d", (int)r);
 		
 		closesocket(sp_data->sock);
 		WSACloseEvent(sp_data->event);
-		CloseHandle(mutex);
+		DeleteCriticalSection(&(sp_data->lock));
 		free(sp_data);
 		
 		return DPERR_UNAVAILABLE;
