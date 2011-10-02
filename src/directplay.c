@@ -427,7 +427,7 @@ HRESULT WINAPI SPInit(LPSPINITDATA data) {
 		return r_SPInit(data);
 	}
 	
-	log_printf("SPInit: %p", data->lpISP);
+	log_printf("SPInit: %p (lpAddress = %p, dwAddressSize = %u)", data->lpISP, data->lpAddress, (unsigned int)(data->dwAddressSize));
 	
 	{
 		struct sp_data *sp_data;
