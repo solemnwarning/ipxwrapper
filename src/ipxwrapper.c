@@ -31,12 +31,6 @@
 #include "interface.h"
 #include "router.h"
 
-#define DLL_UNLOAD(dll) \
-	if(dll) {\
-		FreeModule(dll);\
-		dll = NULL;\
-	}
-
 struct ipaddr_list {
 	uint32_t ipaddr;
 	struct ipaddr_list *next;
@@ -48,12 +42,14 @@ struct reg_global global_conf;
 
 struct rclient g_rclient;
 
-static ipx_host *hosts = NULL;
-
 static CRITICAL_SECTION sockets_cs;
 static CRITICAL_SECTION hosts_cs;
 static CRITICAL_SECTION addrs_cs;
 
+/* List of known IPX hosts */
+static ipx_host *hosts = NULL;
+
+/* List of local IP addresses with associated IPX interfaces */
 static struct ipaddr_list *local_addrs = NULL;
 static time_t local_updated = 0;
 
@@ -240,7 +236,7 @@ ipx_host *find_host(const unsigned char *net, const unsigned char *node) {
 	
 	while(hptr) {
 		if(memcmp(hptr->ipx_net, net, 4) == 0 && memcmp(hptr->ipx_node, node, 6) == 0) {
-			if(hptr->last_packet+TTL < time(NULL)) {
+			if(hptr->last_packet + HOST_TTL < time(NULL)) {
 				/* Host record has expired, delete */
 				
 				if(pptr) {
