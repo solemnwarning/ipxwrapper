@@ -21,6 +21,7 @@
 #define DEFAULT_PORT 54792
 #define DEFAULT_CONTROL_PORT 54793
 #define TTL 60
+#define IFACE_TTL 10
 
 struct reg_value {
 	unsigned char ipx_net[4];

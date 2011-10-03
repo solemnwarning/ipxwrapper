@@ -377,7 +377,9 @@ static int recv_packet(ipx_socket *sockptr, char *buf, int bufsize, int flags, s
 					flags |= 0x01;
 				}
 				
-				/* TODO: Set 0x02 if packet was sent from local machine */
+				if(ip_is_local(rp_header->src_ipaddr)) {
+					flags |= 0x02;
+				}
 			}else{
 				log_printf("IPX_EXTENDED_ADDRESS enabled, but recvfrom called with addrlen %d", addrlen);
 			}
