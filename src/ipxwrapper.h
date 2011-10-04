@@ -97,20 +97,16 @@ struct ipx_host {
 };
 
 extern ipx_socket *sockets;
-extern ipx_host *hosts;
 extern SOCKET send_fd;
 extern struct reg_global global_conf;
 extern struct rclient g_rclient;
-
-extern HMODULE winsock2_dll;
-extern HMODULE mswsock_dll;
-extern HMODULE wsock32_dll;
 
 ipx_socket *get_socket(SOCKET fd);
 void lock_sockets(void);
 void unlock_sockets(void);
 ipx_host *find_host(const unsigned char *net, const unsigned char *node);
 void add_host(const unsigned char *net, const unsigned char *node, uint32_t ipaddr);
+BOOL ip_is_local(uint32_t ipaddr);
 
 INT APIENTRY r_EnumProtocolsA(LPINT,LPVOID,LPDWORD);
 INT APIENTRY r_EnumProtocolsW(LPINT,LPVOID,LPDWORD);

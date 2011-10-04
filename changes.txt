@@ -10,6 +10,8 @@ Version 0.3.1:
 	Update: Include thread ID with every log message.
 	
 	Feature: Implemented IPX_EXTENDED_ADDRESS socket option.
+	
+	Bugfix: Deallocate hosts list in DLL cleanup.
 
 Version 0.3:
 	Cleanup: Moved certain library functions out of ipxwrapper.c and tidied up.

@@ -31,14 +31,12 @@
 #include "interface.h"
 #include "router.h"
 
-#define DLL_UNLOAD(dll) \
-	if(dll) {\
-		FreeModule(dll);\
-		dll = NULL;\
-	}
+struct ipaddr_list {
+	uint32_t ipaddr;
+	struct ipaddr_list *next;
+};
 
 ipx_socket *sockets = NULL;
-ipx_host *hosts = NULL;
 SOCKET send_fd = -1;
 struct reg_global global_conf;
 
@@ -46,6 +44,14 @@ struct rclient g_rclient;
 
 static CRITICAL_SECTION sockets_cs;
 static CRITICAL_SECTION hosts_cs;
+static CRITICAL_SECTION addrs_cs;
+
+/* List of known IPX hosts */
+static ipx_host *hosts = NULL;
+
+/* List of local IP addresses with associated IPX interfaces */
+static struct ipaddr_list *local_addrs = NULL;
+static time_t local_updated = 0;
 
 #define INIT_CS(cs) if(!init_cs(cs, &initialised_cs)) { return FALSE; }
 
@@ -58,6 +64,9 @@ static BOOL init_cs(CRITICAL_SECTION *cs, int *counter) {
 	(*counter)++;
 	return TRUE;
 }
+
+static void free_hosts(void);
+static void free_local_ips(void);
 
 BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 	static int initialised_cs = 0;
@@ -80,6 +89,7 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 		
 		INIT_CS(&sockets_cs);
 		INIT_CS(&hosts_cs);
+		INIT_CS(&addrs_cs);
 		
 		WSADATA wsdata;
 		int err = WSAStartup(MAKEWORD(1,1), &wsdata);
@@ -121,9 +131,13 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 		
 		rclient_stop(&g_rclient);
 		
+		free_local_ips();
+		free_hosts();
+		
 		WSACleanup();
 		
 		switch(initialised_cs) {
+			case 3: DeleteCriticalSection(&addrs_cs);
 			case 2: DeleteCriticalSection(&hosts_cs);
 			case 1: DeleteCriticalSection(&sockets_cs);
 			default: break;
@@ -222,7 +236,7 @@ ipx_host *find_host(const unsigned char *net, const unsigned char *node) {
 	
 	while(hptr) {
 		if(memcmp(hptr->ipx_net, net, 4) == 0 && memcmp(hptr->ipx_node, node, 6) == 0) {
-			if(hptr->last_packet+TTL < time(NULL)) {
+			if(hptr->last_packet + HOST_TTL < time(NULL)) {
 				/* Host record has expired, delete */
 				
 				if(pptr) {
@@ -245,4 +259,75 @@ ipx_host *find_host(const unsigned char *net, const unsigned char *node) {
 	
 	LeaveCriticalSection(&hosts_cs);
 	return hptr;
+}
+
+static void free_hosts(void) {
+	ipx_host *p = hosts, *d;
+	
+	while(p) {
+		d = p;
+		p = p->next;
+		
+		free(d);
+	}
+	
+	hosts = NULL;
+}
+
+/* Check if supplied IP (network byte order) is a local address */
+BOOL ip_is_local(uint32_t ipaddr) {
+	EnterCriticalSection(&addrs_cs);
+	
+	if(local_updated + IFACE_TTL < time(NULL)) {
+		/* TODO: Use all local IPs rather than just the ones with associated IPX addresses? */
+		
+		struct ipx_interface *ifaces = get_interfaces(-1);
+		struct ipx_interface *i = ifaces;
+		
+		while(i) {
+			struct ipaddr_list *nn = malloc(sizeof(struct ipaddr_list));
+			if(!nn) {
+				log_printf("Out of memory! Can't allocate ipaddr_list structure!");
+				break;
+			}
+			
+			nn->ipaddr = i->ipaddr;
+			nn->next = local_addrs;
+			local_addrs = nn;
+			
+			i = i->next;
+		}
+		
+		free_interfaces(ifaces);
+		
+		local_updated = time(NULL);
+	}
+	
+	struct ipaddr_list *p = local_addrs;
+	
+	while(p) {
+		if(p->ipaddr == ipaddr) {
+			LeaveCriticalSection(&addrs_cs);
+			return TRUE;
+		}
+		
+		p = p->next;
+	}
+	
+	LeaveCriticalSection(&addrs_cs);
+	return FALSE;
+}
+
+/* Free local IP address list */
+static void free_local_ips(void) {
+	struct ipaddr_list *p = local_addrs, *d;
+	
+	while(p) {
+		d = p;
+		p = p->next;
+		
+		free(d);
+	}
+	
+	local_addrs = NULL;
 }
