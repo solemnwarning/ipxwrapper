@@ -15,8 +15,6 @@
  * Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
-/* TODO: ASYNC I/O!! */
-
 #define INITGUID
 
 #include <windows.h>
@@ -179,33 +177,54 @@ static HRESULT WINAPI IPX_EnumSessions(LPDPSP_ENUMSESSIONSDATA data) {
 	return DP_OK;
 }
 
+static BOOL send_get_addr(struct sockaddr_ipx *addr, IDirectPlaySP *sp, DPID player_id) {
+	if(player_id) {
+		struct sockaddr_ipx *addr_p;
+		DWORD size;
+		
+		HRESULT r = IDirectPlaySP_GetSPPlayerData(sp, player_id, (void**)&addr_p, &size, DPGET_LOCAL);
+		if(r != DP_OK) {
+			log_printf("GetSPPlayerData: %d", (int)r);
+			return FALSE;
+		}
+		
+		if(!addr_p) {
+			goto NO_ADDR;
+		}
+		
+		memcpy(addr, addr_p, sizeof(*addr));
+		return TRUE;
+	}
+	
+	struct sp_data *sp_data = get_sp_data(sp);
+	
+	if(sp_data->ns_addr.sa_family) {
+		memcpy(addr, &(sp_data->ns_addr), sizeof(*addr));
+		
+		release_sp_data(sp_data);
+		return TRUE;
+	}
+	
+	release_sp_data(sp_data);
+	
+	NO_ADDR:
+	
+	log_printf("No known address for player ID %u, dropping packet", (unsigned int)player_id);
+	return FALSE;
+}
+
 static HRESULT WINAPI IPX_Send(LPDPSP_SENDDATA data) {
 	CALL("SP_Send");
 	
-	struct sockaddr_ipx *addr = NULL;
+	struct sockaddr_ipx addr;
 	
-	struct sp_data *sp_data = get_sp_data(data->lpISP);
-	
-	if(data->idPlayerTo) {
-		DWORD size;
-		
-		HRESULT r = IDirectPlaySP_GetSPPlayerData(data->lpISP, data->idPlayerTo, (void**)&addr, &size, DPGET_LOCAL);
-		if(r != DP_OK) {
-			log_printf("GetSPPlayerData: %d", (int)r);
-			addr = NULL;
-		}
-	}else if(sp_data->ns_addr.sa_family) {
-		addr = &(sp_data->ns_addr);
-	}
-	
-	if(!addr) {
-		log_printf("No known address for player ID %u, dropping packet", data->idPlayerTo);
-		
-		release_sp_data(sp_data);
+	if(!send_get_addr(&addr, data->lpISP, data->idPlayerTo)) {
 		return DP_OK;
 	}
 	
-	if(sendto(sp_data->sock, data->lpMessage + API_HEADER_SIZE, data->dwMessageSize - API_HEADER_SIZE, 0, (struct sockaddr*)addr, sizeof(*addr)) == -1) {
+	struct sp_data *sp_data = get_sp_data(data->lpISP);
+	
+	if(sendto(sp_data->sock, data->lpMessage + API_HEADER_SIZE, data->dwMessageSize - API_HEADER_SIZE, 0, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
 		log_printf("sendto failed: %s", w32_error(WSAGetLastError()));
 		
 		release_sp_data(sp_data);
@@ -219,7 +238,24 @@ static HRESULT WINAPI IPX_Send(LPDPSP_SENDDATA data) {
 static HRESULT WINAPI IPX_SendEx(LPDPSP_SENDEXDATA data) {
 	CALL("SP_SendEx");
 	
-	DPSP_SENDDATA s_data;
+	if(data->dwPriority || data->dwTimeout) {
+		log_printf(
+			"SendEx called with dwPriority = %u, dwTimeout = %u",
+			(unsigned int)(data->dwPriority),
+			(unsigned int)(data->dwTimeout)
+		);
+		
+		return DPERR_UNSUPPORTED;
+	}
+	
+	if(data->dwFlags & DPSEND_ASYNC) {
+		log_printf("SendEx called with DPSEND_ASYNC flag, not implemented");
+		return DPERR_UNSUPPORTED;
+	}
+	
+	/* NOTE: The buffer arrangement is entirely guessed and currently untested.
+	 * TODO: TEST!
+	*/
 	
 	char *buf = malloc(data->dwMessageSize);
 	size_t off = 0, i;
@@ -234,19 +270,27 @@ static HRESULT WINAPI IPX_SendEx(LPDPSP_SENDEXDATA data) {
 		off += data->lpSendBuffers[i].len;
 	}
 	
-	s_data.dwFlags = data->dwFlags;
-	s_data.idPlayerTo = data->idPlayerTo;
-	s_data.idPlayerFrom = data->idPlayerFrom;
-	s_data.lpMessage = buf;
-	s_data.dwMessageSize = data->dwMessageSize;
-	s_data.bSystemMessage = data->bSystemMessage;
-	s_data.lpISP = data->lpISP;
+	struct sockaddr_ipx addr;
 	
-	HRESULT ret = IPX_Send(&s_data);
+	if(!send_get_addr(&addr, data->lpISP, data->idPlayerTo)) {
+		return DP_OK;
+	}
+	
+	/* TODO: Support DPSEND_ASYNC */
+	
+	struct sp_data *sp_data = get_sp_data(data->lpISP);
+	
+	if(sendto(sp_data->sock, buf, off, 0, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
+		log_printf("sendto failed: %s", w32_error(WSAGetLastError()));
+		
+		release_sp_data(sp_data);
+		return DPERR_GENERIC;
+	}
 	
 	free(buf);
 	
-	return ret;
+	release_sp_data(sp_data);
+	return DP_OK;
 }
 
 static HRESULT WINAPI IPX_Reply(LPDPSP_REPLYDATA data) {
