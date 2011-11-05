@@ -104,6 +104,17 @@ struct ipx_interface *get_interfaces(int ifnum) {
 		
 		nnic->next = NULL;
 		
+		/* Workaround for buggy versions of Hamachi that don't initialise
+		 * the interface hardware address correctly.
+		*/
+		
+		const unsigned char hamachi_bug[] = {0x7A, 0x79, 0x00, 0x00, 0x00, 0x00};
+		
+		if(strcmp(ifptr->Description, "Hamachi Network Interface") == 0 && memcmp(nnic->ipx_node, hamachi_bug, 6) == 0) {
+			log_printf("Invalid Hamachi interface detected, correcting node number");
+			memcpy(nnic->ipx_node + 2, &(nnic->ipaddr), 4);
+		}
+		
 		if(got_rv && rv.primary) {
 			/* Force primary flag set, insert at start of NIC list */
 			nnic->next = nics;
