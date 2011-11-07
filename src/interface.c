@@ -57,11 +57,6 @@ struct ipx_interface *get_interfaces(int ifnum) {
 	int this_ifnum = 0;
 	
 	while(ifptr) {
-		if(ifnum >= 0 && this_ifnum++ != ifnum) {
-			ifptr = ifptr->Next;
-			continue;
-		}
-		
 		struct reg_value rv;
 		int got_rv = 0;
 		
@@ -74,6 +69,11 @@ struct ipx_interface *get_interfaces(int ifnum) {
 		
 		if(got_rv && !rv.enabled) {
 			/* Interface has been disabled, don't add it */
+			ifptr = ifptr->Next;
+			continue;
+		}
+		
+		if(ifnum >= 0 && this_ifnum++ != ifnum) {
 			ifptr = ifptr->Next;
 			continue;
 		}
