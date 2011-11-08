@@ -235,6 +235,11 @@ static HRESULT WINAPI IPX_Send(LPDPSP_SENDDATA data) {
 	return DP_OK;
 }
 
+/* This function is completely untested. It ignores the DPSEND_ASYNC flag and
+ * part of the interface has been guessed. Attempts at testing have failed as
+ * the DirectPlay builds on my test machine (XP _AND_ 7) call SP_Send, even
+ * when SP_SendEx is implemented and DPSEND_ASYNC is used.
+*/
 static HRESULT WINAPI IPX_SendEx(LPDPSP_SENDEXDATA data) {
 	CALL("SP_SendEx");
 	
@@ -245,11 +250,6 @@ static HRESULT WINAPI IPX_SendEx(LPDPSP_SENDEXDATA data) {
 			(unsigned int)(data->dwTimeout)
 		);
 		
-		return DPERR_UNSUPPORTED;
-	}
-	
-	if(data->dwFlags & DPSEND_ASYNC) {
-		log_printf("SendEx called with DPSEND_ASYNC flag, not implemented");
 		return DPERR_UNSUPPORTED;
 	}
 	
@@ -275,8 +275,6 @@ static HRESULT WINAPI IPX_SendEx(LPDPSP_SENDEXDATA data) {
 	if(!send_get_addr(&addr, data->lpISP, data->idPlayerTo)) {
 		return DP_OK;
 	}
-	
-	/* TODO: Support DPSEND_ASYNC */
 	
 	struct sp_data *sp_data = get_sp_data(data->lpISP);
 	
@@ -348,9 +346,12 @@ static HRESULT WINAPI IPX_GetCaps(LPDPSP_GETCAPSDATA data) {
 	
 	/* Most values are incorrect/inaccurate, copied from the MS implementation
 	 * for compatibility.
+	 *
+	 * No async support is implemented at this time, DirectPlay itself seems
+	 * to handle it.
 	*/
 	
-	data->lpCaps->dwFlags = 0;
+	data->lpCaps->dwFlags = DPCAPS_ASYNCSUPPORTED;
 	data->lpCaps->dwMaxBufferSize = 1024;
 	data->lpCaps->dwMaxQueueSize = 0;
 	data->lpCaps->dwMaxPlayers = 65536;

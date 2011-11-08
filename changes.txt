@@ -1,3 +1,11 @@
+Version 0.3.2:
+	Cleanup: Cleaned up Send/SendEx functions in DirectPlay service provider.
+	
+	Bugfix: Added workaround for Hamachi bug.
+	
+	Bugfix: Correctly return single interfaces from get_interfaces when some
+	are disabled in ipxconfig.
+
 Version 0.3.1:
 	Bugfix: Fixed deadlock in DirectPlay service provider.
 	
