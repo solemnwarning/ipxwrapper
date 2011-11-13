@@ -373,12 +373,12 @@ static int recv_packet(ipx_socket *sockptr, char *buf, int bufsize, int flags, s
 				
 				const unsigned char f6[] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
 				
-				if(memcpy(packet->dest_node, f6, 6) == 0) {
-					flags |= 0x01;
+				if(memcmp(packet->dest_node, f6, 6) == 0) {
+					addr->sa_flags |= 0x01;
 				}
 				
 				if(ip_is_local(rp_header->src_ipaddr)) {
-					flags |= 0x02;
+					addr->sa_flags |= 0x02;
 				}
 			}else{
 				log_printf("IPX_EXTENDED_ADDRESS enabled, but recvfrom called with addrlen %d", addrlen);
