@@ -783,7 +783,6 @@ int PASCAL ioctlsocket(SOCKET fd, long cmd, u_long *argp) {
 	ipx_socket *sockptr = get_socket(fd);
 	
 	if(sockptr && cmd == FIONREAD) {
-		ipx_packet packet;
 		fd_set fdset;
 		struct timeval tv = {0,0};
 		
@@ -798,13 +797,14 @@ int PASCAL ioctlsocket(SOCKET fd, long cmd, u_long *argp) {
 			RETURN(0);
 		}
 		
-		r = r_recv(sockptr->fd, (char*)&packet, sizeof(packet), MSG_PEEK);
-		if(r == -1 && WSAGetLastError() != WSAEMSGSIZE) {
-			RETURN(-1);
+		char tmp_buf;
+		
+		if((r = recv_packet(sockptr, &tmp_buf, 1, MSG_PEEK, NULL, 0)) == -1) {
+			return -1;
 		}
 		
-		*(unsigned long*)argp = packet.size;
-		RETURN(0);
+		*(unsigned long*)argp = r;
+		return 0;
 	}
 	
 	if(sockptr) {
