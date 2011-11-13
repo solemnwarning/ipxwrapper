@@ -745,6 +745,14 @@ int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct s
 		saddr.sin_port = htons(global_conf.udp_port);
 		saddr.sin_addr.s_addr = (host ? host->ipaddr : (global_conf.bcast_all ? INADDR_BROADCAST : sockptr->nic_bcast));
 		
+		if(log_calls) {
+			char net_s[12], node_s[18];
+			NET_TO_STRING(net_s, packet->dest_net);
+			NODE_TO_STRING(node_s, packet->dest_node);
+			
+			log_printf("Sending packet to %s/%s (%s)", net_s, node_s, inet_ntoa(saddr.sin_addr));
+		}
+		
 		int sval = r_sendto(send_fd, (char*)packet, psize, 0, (struct sockaddr*)&saddr, sizeof(saddr));
 		if(sval == -1) {
 			len = -1;

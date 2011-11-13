@@ -34,3 +34,4 @@ r_ioctlsocket:4
 r_connect:4
 r_send:4
 r_getpeername:4
+inet_ntoa:4

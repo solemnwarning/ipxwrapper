@@ -277,6 +277,18 @@ DWORD router_main(void *arg) {
 			continue;
 		}
 		
+		if(log_calls) {
+			char src_net[12], src_node[18];
+			NET_TO_STRING(src_net, packet->src_net);
+			NODE_TO_STRING(src_node, packet->src_node);
+			
+			char dest_net[12], dest_node[18];
+			NET_TO_STRING(dest_net, packet->dest_net);
+			NODE_TO_STRING(dest_node, packet->dest_node);
+			
+			log_printf("Recieved packet from %s/%s (%s) for %s/%s", src_net, src_node, inet_ntoa(addr.sin_addr), dest_net, dest_node);
+		}
+		
 		memset(rp_header, 0, sizeof(*rp_header));
 		rp_header->src_ipaddr = addr.sin_addr.s_addr;
 		
@@ -296,6 +308,10 @@ DWORD router_main(void *arg) {
 				/* Check source address matches remote_addr if set */
 				(ra->remote_addr.sa_family == AF_UNSPEC || (memcmp(ra->remote_addr.sa_netnum, packet->src_net, 4) == 0 && memcmp(ra->remote_addr.sa_nodenum, packet->src_node, 6) == 0))
 			) {
+				if(log_calls) {
+					log_printf("Relaying packet to local port %hu", ntohs(ra->local_port));
+				}
+				
 				addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 				addr.sin_port = ra->local_port;
 				
