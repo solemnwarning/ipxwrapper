@@ -5,6 +5,11 @@ Version 0.3.2:
 	
 	Bugfix: Correctly return single interfaces from get_interfaces when some
 	are disabled in ipxconfig.
+	
+	Bugfix: Properly test for broadcast packets and set sa_flags when dealing
+	with extended addresses.
+	
+	Bugfix: Don't choke on rpacket_header in ioctlsocket/FIONREAD.
 
 Version 0.3.1:
 	Bugfix: Fixed deadlock in DirectPlay service provider.
