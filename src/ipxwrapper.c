@@ -31,6 +31,9 @@
 #include "interface.h"
 #include "router.h"
 
+extern const char *version_string;
+extern const char *compile_time;
+
 struct ipaddr_list {
 	uint32_t ipaddr;
 	struct ipaddr_list *next;
@@ -73,6 +76,9 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 	
 	if(why == DLL_PROCESS_ATTACH) {
 		log_open("ipxwrapper.log");
+		
+		log_printf("IPXWrapper %s", version_string);
+		log_printf("Compiled at %s", compile_time);
 		
 		if(!rclient_init(&g_rclient)) {
 			return FALSE;

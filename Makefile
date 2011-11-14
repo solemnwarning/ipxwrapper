@@ -23,6 +23,8 @@ endif
 CFLAGS := -Wall $(DBG_OPT) -I./include/
 CXXFLAGS := $(CFLAGS)
 
+VERSION := revision $(shell svn info | grep Revision | sed -e 's/.*: //')
+
 IPXWRAPPER_DEPS := src/ipxwrapper.o src/winsock.o src/ipxwrapper_stubs.o src/log.o src/common.o \
 	src/interface.o src/router.o src/ipxwrapper.def
 
@@ -40,7 +42,7 @@ all: ipxwrapper.dll wsock32.dll mswsock.dll ipxconfig.exe dpwsockx.dll ipxrouter
 
 clean:
 	rm -f ipxwrapper.dll wsock32.dll mswsock.dll ipxconfig.exe dpwsockx.dll ipxrouter.exe
-	rm -f src/*.o src/*_stubs.s
+	rm -f src/*.o src/*_stubs.s version.o
 
 dist: all
 	mkdir ipxwrapper-$(VERSION)
@@ -57,7 +59,8 @@ dist: all
 .PHONY: all clean dist
 
 ipxwrapper.dll: $(IPXWRAPPER_DEPS)
-	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -shared -o ipxwrapper.dll $(IPXWRAPPER_DEPS) -liphlpapi
+	echo 'const char *version_string = "$(VERSION)", *compile_time = "'`date`'";' | $(CC) -c -x c -o version.o -
+	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -shared -o ipxwrapper.dll $(IPXWRAPPER_DEPS) version.o -liphlpapi
 
 ipxconfig.exe: src/ipxconfig.cpp icons/ipxconfig.o
 	$(CXX) $(CXXFLAGS) -static-libgcc -static-libstdc++ -D_WIN32_IE=0x0400 -mwindows -o ipxconfig.exe $^ -liphlpapi -lcomctl32
