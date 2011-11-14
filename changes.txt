@@ -10,6 +10,13 @@ Version 0.3.2:
 	with extended addresses.
 	
 	Bugfix: Don't choke on rpacket_header in ioctlsocket/FIONREAD.
+	
+	Feature: Log sent/received/relayed packets when call logging is enabled.
+	
+	Feature: Log version/revision number and compile time during ipxwrapper.dll
+	initialisation.
+	
+	Cleanup: Cleaned up error handling in SPInit.
 
 Version 0.3.1:
 	Bugfix: Fixed deadlock in DirectPlay service provider.

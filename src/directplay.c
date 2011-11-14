@@ -492,56 +492,38 @@ HRESULT WINAPI SPInit(LPSPINITDATA data) {
 	
 	struct sp_data *sp_data = malloc(sizeof(struct sp_data));
 	if(!sp_data) {
-		return DPERR_UNAVAILABLE;
+		goto FAIL1;
 	}
 	
 	if(!InitializeCriticalSectionAndSpinCount(&(sp_data->lock), 0x80000000)) {
-		log_printf("Error creating critical section: %s", w32_error(GetLastError()));
-		
-		free(sp_data);
-		return DPERR_UNAVAILABLE;
+		log_printf("Error initialising critical section: %s", w32_error(GetLastError()));
+		goto FAIL2;
 	}
 	
 	if((sp_data->event = WSACreateEvent()) == WSA_INVALID_EVENT) {
-		DeleteCriticalSection(&(sp_data->lock));
-		free(sp_data);
-		
-		return DPERR_UNAVAILABLE;
+		log_printf("Error creating WSA event object: %s", w32_error(WSAGetLastError()));
+		goto FAIL3;
 	}
 	
 	if((sp_data->sock = socket(AF_IPX, SOCK_DGRAM, NSPROTO_IPX)) == -1) {
-		WSACloseEvent(sp_data->event);
-		DeleteCriticalSection(&(sp_data->lock));
-		free(sp_data);
-		
-		return DPERR_UNAVAILABLE;
+		log_printf("Error creating IPX socket: %s", w32_error(WSAGetLastError()));
+		goto FAIL4;
 	}
 	
 	struct sockaddr_ipx addr;
 	memset(&addr, 0, sizeof(addr));
 	addr.sa_family = AF_IPX;
-	addr.sa_socket = 0;
 	
 	if(bind(sp_data->sock, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
-		closesocket(sp_data->sock);
-		WSACloseEvent(sp_data->event);
-		DeleteCriticalSection(&(sp_data->lock));
-		free(sp_data);
-		
-		return DPERR_UNAVAILABLE;
+		log_printf("Error binding IPX socket: %s", w32_error(WSAGetLastError()));
+		goto FAIL5;
 	}
 	
 	int addrlen = sizeof(sp_data->addr);
 	
 	if(getsockname(sp_data->sock, (struct sockaddr*)&(sp_data->addr), &addrlen) == -1) {
 		log_printf("getsockname failed: %s", w32_error(WSAGetLastError()));
-		
-		closesocket(sp_data->sock);
-		WSACloseEvent(sp_data->event);
-		DeleteCriticalSection(&(sp_data->lock));
-		free(sp_data);
-		
-		return DPERR_UNAVAILABLE;
+		goto FAIL5;
 	}
 	
 	sp_data->ns_sock = -1;
@@ -554,25 +536,13 @@ HRESULT WINAPI SPInit(LPSPINITDATA data) {
 	
 	if(WSAEventSelect(sp_data->sock, sp_data->event, FD_READ) == -1) {
 		log_printf("WSAEventSelect failed: %s", w32_error(WSAGetLastError()));
-		
-		closesocket(sp_data->sock);
-		WSACloseEvent(sp_data->event);
-		DeleteCriticalSection(&(sp_data->lock));
-		free(sp_data);
-		
-		return DPERR_UNAVAILABLE;
+		goto FAIL5;
 	}
 	
 	HRESULT r = IDirectPlaySP_SetSPData(data->lpISP, sp_data, sizeof(*sp_data), DPSET_LOCAL);
 	if(r != DP_OK) {
 		log_printf("SetSPData: %d", (int)r);
-		
-		closesocket(sp_data->sock);
-		WSACloseEvent(sp_data->event);
-		DeleteCriticalSection(&(sp_data->lock));
-		free(sp_data);
-		
-		return DPERR_UNAVAILABLE;
+		goto FAIL5;
 	}
 	
 	data->lpCB->EnumSessions = &IPX_EnumSessions;
@@ -589,6 +559,21 @@ HRESULT WINAPI SPInit(LPSPINITDATA data) {
 	data->dwSPVersion = DPSP_MAJORVERSIONMASK & DPSP_MAJORVERSION;
 	
 	return DP_OK;
+	
+	FAIL5:
+	closesocket(sp_data->sock);
+	
+	FAIL4:
+	WSACloseEvent(sp_data->event);
+	
+	FAIL3:
+	DeleteCriticalSection(&(sp_data->lock));
+	
+	FAIL2:
+	free(sp_data);
+	
+	FAIL1:
+	return DPERR_UNAVAILABLE;
 }
 
 BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
