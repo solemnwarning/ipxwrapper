@@ -60,7 +60,7 @@ static time_t local_updated = 0;
 
 static BOOL init_cs(CRITICAL_SECTION *cs, int *counter) {
 	if(!InitializeCriticalSectionAndSpinCount(cs, 0x80000000)) {
-		log_printf("Failed to initialise critical section: %s", w32_error(GetLastError()));
+		log_printf(LOG_ERROR, "Failed to initialise critical section: %s", w32_error(GetLastError()));
 		return FALSE;
 	}
 	
@@ -77,8 +77,8 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 	if(why == DLL_PROCESS_ATTACH) {
 		log_open("ipxwrapper.log");
 		
-		log_printf("IPXWrapper %s", version_string);
-		log_printf("Compiled at %s", compile_time);
+		log_printf(LOG_INFO, "IPXWrapper %s", version_string);
+		log_printf(LOG_INFO, "Compiled at %s", compile_time);
 		
 		if(!rclient_init(&g_rclient)) {
 			return FALSE;
@@ -93,6 +93,8 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 			global_conf.filter = 1;
 		}
 		
+		min_log_level = reg_get_dword("min_log_level", LOG_INFO);
+		
 		INIT_CS(&sockets_cs);
 		INIT_CS(&hosts_cs);
 		INIT_CS(&addrs_cs);
@@ -100,7 +102,7 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 		WSADATA wsdata;
 		int err = WSAStartup(MAKEWORD(1,1), &wsdata);
 		if(err) {
-			log_printf("Failed to initialize winsock: %s", w32_error(err));
+			log_printf(LOG_ERROR, "Failed to initialize winsock: %s", w32_error(err));
 			return FALSE;
 		}
 		
@@ -114,7 +116,7 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 			/* Create UDP socket for sending packets if not using a private router */
 			
 			if((send_fd = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
-				log_printf("Failed to create UDP socket: %s", w32_error(WSAGetLastError()));
+				log_printf(LOG_ERROR, "Failed to create UDP socket: %s", w32_error(WSAGetLastError()));
 				return FALSE;
 			}
 			
@@ -124,7 +126,7 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 			addr.sin_port = 0;
 			
 			if(bind(send_fd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
-				log_printf("Failed to bind UDP socket (send_fd): %s", w32_error(WSAGetLastError()));
+				log_printf(LOG_ERROR, "Failed to bind UDP socket (send_fd): %s", w32_error(WSAGetLastError()));
 				return FALSE;
 			}
 		}
@@ -218,7 +220,7 @@ void add_host(const unsigned char *net, const unsigned char *node, uint32_t ipad
 	if(!hptr) {
 		LeaveCriticalSection(&hosts_cs);
 		
-		log_printf("No memory for hosts list entry");
+		log_printf(LOG_ERROR, "No memory for hosts list entry");
 		return;
 	}
 	
@@ -293,7 +295,7 @@ BOOL ip_is_local(uint32_t ipaddr) {
 		while(i) {
 			struct ipaddr_list *nn = malloc(sizeof(struct ipaddr_list));
 			if(!nn) {
-				log_printf("Out of memory! Can't allocate ipaddr_list structure!");
+				log_printf(LOG_ERROR, "Out of memory! Can't allocate ipaddr_list structure!");
 				break;
 			}
 			

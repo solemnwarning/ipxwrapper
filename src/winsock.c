@@ -153,7 +153,7 @@ INT WINAPI WSHEnumProtocols(LPINT protocols, LPWSTR ign, LPVOID buf, LPDWORD bsp
 }
 
 SOCKET WSAAPI socket(int af, int type, int protocol) {
-	log_printf("socket(%d, %d, %d)", af, type, protocol);
+	log_printf(LOG_DEBUG, "socket(%d, %d, %d)", af, type, protocol);
 	
 	if(af == AF_IPX) {
 		ipx_socket *nsock = malloc(sizeof(ipx_socket));
@@ -164,7 +164,7 @@ SOCKET WSAAPI socket(int af, int type, int protocol) {
 		
 		nsock->fd = r_socket(AF_INET, SOCK_DGRAM, 0);
 		if(nsock->fd == -1) {
-			log_printf("Creating fake socket failed: %s", w32_error(WSAGetLastError()));
+			log_printf(LOG_ERROR, "Creating fake socket failed: %s", w32_error(WSAGetLastError()));
 			
 			free(nsock);
 			return -1;
@@ -178,7 +178,7 @@ SOCKET WSAAPI socket(int af, int type, int protocol) {
 		nsock->next = sockets;
 		sockets = nsock;
 		
-		log_printf("IPX socket created (fd = %d)", nsock->fd);
+		log_printf(LOG_INFO, "IPX socket created (fd = %d)", nsock->fd);
 		
 		RETURN(nsock->fd);
 	}else{
@@ -198,11 +198,11 @@ int WSAAPI closesocket(SOCKET fd) {
 	}
 	
 	if(ret == SOCKET_ERROR) {
-		log_printf("closesocket(%d) failed: %s", fd, w32_error(WSAGetLastError()));
+		log_printf(LOG_ERROR, "closesocket(%d) failed: %s", fd, w32_error(WSAGetLastError()));
 		RETURN(SOCKET_ERROR);
 	}
 	
-	log_printf("IPX socket closed (fd = %d)", fd);
+	log_printf(LOG_INFO, "IPX socket closed (fd = %d)", fd);
 	
 	if(ptr->flags & IPX_BOUND) {
 		rclient_unbind(&g_rclient, fd);
@@ -241,10 +241,10 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen) {
 		NET_TO_STRING(net_s, ipxaddr.sa_netnum);
 		NODE_TO_STRING(node_s, ipxaddr.sa_nodenum);
 		
-		log_printf("bind(%d, net=%s node=%s socket=%hu)", fd, net_s, node_s, ntohs(ipxaddr.sa_socket));
+		log_printf(LOG_INFO, "bind(%d, net=%s node=%s socket=%hu)", fd, net_s, node_s, ntohs(ipxaddr.sa_socket));
 		
 		if(ptr->flags & IPX_BOUND) {
-			log_printf("bind failed: socket already bound");
+			log_printf(LOG_ERROR, "bind failed: socket already bound");
 			RETURN_WSA(WSAEINVAL, -1);
 		}
 		
@@ -255,7 +255,7 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen) {
 		NET_TO_STRING(net_s, ipxaddr.sa_netnum);
 		NODE_TO_STRING(node_s, ipxaddr.sa_nodenum);
 		
-		log_printf("bind address: net=%s node=%s socket=%hu", net_s, node_s, ntohs(ipxaddr.sa_socket));
+		log_printf(LOG_INFO, "bind address: net=%s node=%s socket=%hu", net_s, node_s, ntohs(ipxaddr.sa_socket));
 		
 		struct sockaddr_in bind_addr;
 		bind_addr.sin_family = AF_INET;
@@ -263,7 +263,7 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen) {
 		bind_addr.sin_port = 0;
 		
 		if(r_bind(fd, (struct sockaddr*)&bind_addr, sizeof(bind_addr)) == -1) {
-			log_printf("Binding local UDP socket failed: %s", w32_error(WSAGetLastError()));
+			log_printf(LOG_ERROR, "Binding local UDP socket failed: %s", w32_error(WSAGetLastError()));
 			
 			rclient_unbind(&g_rclient, fd);
 			RETURN(-1);
@@ -272,7 +272,7 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen) {
 		int al = sizeof(bind_addr);
 		
 		if(r_getsockname(fd, (struct sockaddr*)&bind_addr, &al) == -1) {
-			log_printf("getsockname failed: %s", w32_error(WSAGetLastError()));
+			log_printf(LOG_ERROR, "getsockname failed: %s", w32_error(WSAGetLastError()));
 			
 			rclient_unbind(&g_rclient, fd);
 			RETURN(-1);
@@ -351,7 +351,7 @@ static int recv_packet(ipx_socket *sockptr, char *buf, int bufsize, int flags, s
 	}
 	
 	if(rval < sizeof(*rp_header) + sizeof(ipx_packet) - 1 || rval != sizeof(*rp_header) + packet->size + sizeof(ipx_packet) - 1) {
-		log_printf("Invalid packet received on loopback port!");
+		log_printf(LOG_ERROR, "Invalid packet received on loopback port!");
 		
 		free(recvbuf);
 		WSASetLastError(WSAEWOULDBLOCK);
@@ -381,7 +381,7 @@ static int recv_packet(ipx_socket *sockptr, char *buf, int bufsize, int flags, s
 					addr->sa_flags |= 0x02;
 				}
 			}else{
-				log_printf("IPX_EXTENDED_ADDRESS enabled, but recvfrom called with addrlen %d", addrlen);
+				log_printf(LOG_ERROR, "IPX_EXTENDED_ADDRESS enabled, but recvfrom called with addrlen %d", addrlen);
 			}
 		}
 	}
@@ -559,7 +559,7 @@ int WSAAPI getsockopt(SOCKET fd, int level, int optname, char FAR *optval, int F
 				RETURN(0);
 			}
 			
-			log_printf("Unknown NSPROTO_IPX socket option passed to getsockopt: %d", optname);
+			log_printf(LOG_ERROR, "Unknown NSPROTO_IPX socket option passed to getsockopt: %d", optname);
 			
 			RETURN_WSA(WSAENOPROTOOPT, -1);
 		}
@@ -644,7 +644,7 @@ int WSAAPI setsockopt(SOCKET fd, int level, int optname, const char FAR *optval,
 				RETURN(0);
 			}
 			
-			log_printf("Unknown NSPROTO_IPX socket option passed to setsockopt: %d", optname);
+			log_printf(LOG_ERROR, "Unknown NSPROTO_IPX socket option passed to setsockopt: %d", optname);
 			
 			RETURN_WSA(WSAENOPROTOOPT, -1);
 		}
@@ -686,7 +686,7 @@ int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct s
 		}
 		
 		if(!(sockptr->flags & IPX_BOUND)) {
-			log_printf("sendto() on unbound socket, attempting implicit bind");
+			log_printf(LOG_WARNING, "sendto() on unbound socket, attempting implicit bind");
 			
 			struct sockaddr_ipx bind_addr;
 			
@@ -717,7 +717,7 @@ int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct s
 			if(addrlen >= 15) {
 				packet->ptype = ipxaddr->sa_ptype;
 			}else{
-				log_printf("IPX_EXTENDED_ADDRESS enabled, but sendto() called with addrlen %d", addrlen);
+				log_printf(LOG_ERROR, "IPX_EXTENDED_ADDRESS enabled, but sendto() called with addrlen %d", addrlen);
 			}
 		}
 		
@@ -745,12 +745,12 @@ int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct s
 		saddr.sin_port = htons(global_conf.udp_port);
 		saddr.sin_addr.s_addr = (host ? host->ipaddr : (global_conf.bcast_all ? INADDR_BROADCAST : sockptr->nic_bcast));
 		
-		if(log_calls) {
+		if(min_log_level >= LOG_DEBUG) {
 			char net_s[12], node_s[18];
 			NET_TO_STRING(net_s, packet->dest_net);
 			NODE_TO_STRING(node_s, packet->dest_node);
 			
-			log_printf("Sending packet to %s/%s (%s)", net_s, node_s, inet_ntoa(saddr.sin_addr));
+			log_printf(LOG_DEBUG, "Sending packet to %s/%s (%s)", net_s, node_s, inet_ntoa(saddr.sin_addr));
 		}
 		
 		int sval = r_sendto(send_fd, (char*)packet, psize, 0, (struct sockaddr*)&saddr, sizeof(saddr));
@@ -856,7 +856,7 @@ int PASCAL connect(SOCKET fd, const struct sockaddr *addr, int addrlen) {
 		}
 		
 		if(!(sockptr->flags & IPX_BOUND)) {
-			log_printf("connect() on unbound socket, attempting implicit bind");
+			log_printf(LOG_WARNING, "connect() on unbound socket, attempting implicit bind");
 			
 			struct sockaddr_ipx bind_addr;
 			

@@ -78,7 +78,7 @@ int main(int argc, char **argv) {
 	LeaveCriticalSection(&(router->crit_sec));
 	
 	if(WaitForSingleObject(worker, 3000) == WAIT_TIMEOUT) {
-		log_printf("Router thread didn't exit in 3 seconds, terminating");
+		log_printf(LOG_WARNING, "Router thread didn't exit in 3 seconds, terminating");
 		TerminateThread(worker, 0);
 	}
 	

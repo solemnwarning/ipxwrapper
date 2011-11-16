@@ -35,7 +35,7 @@ static BOOL rclient_do(struct rclient *rclient, struct router_call *call, struct
 struct router_vars *router_init(BOOL global) {
 	struct router_vars *router = malloc(sizeof(struct router_vars));
 	if(!router) {
-		log_printf("Not enough memory to create router_vars!");
+		log_printf(LOG_ERROR, "Not enough memory to create router_vars!");
 		return NULL;
 	}
 	
@@ -51,21 +51,21 @@ struct router_vars *router_init(BOOL global) {
 	if(InitializeCriticalSectionAndSpinCount(&(router->crit_sec), 0x80000000)) {
 		router->crit_sec_init = TRUE;
 	}else{
-		log_printf("Error creating critical section: %s", w32_error(GetLastError()));
+		log_printf(LOG_ERROR, "Error creating critical section: %s", w32_error(GetLastError()));
 		
 		router_destroy(router);
 		return NULL;
 	}
 	
 	if((router->wsa_event = WSACreateEvent()) == WSA_INVALID_EVENT) {
-		log_printf("Error creating WSA event object: %s", w32_error(WSAGetLastError()));
+		log_printf(LOG_ERROR, "Error creating WSA event object: %s", w32_error(WSAGetLastError()));
 		
 		router_destroy(router);
 		return NULL;
 	}
 	
 	if((router->udp_sock = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
-		log_printf("Error creating UDP socket: %s", w32_error(WSAGetLastError()));
+		log_printf(LOG_ERROR, "Error creating UDP socket: %s", w32_error(WSAGetLastError()));
 		
 		router_destroy(router);
 		return NULL;
@@ -78,7 +78,7 @@ struct router_vars *router_init(BOOL global) {
 	addr.sin_port = htons(global_conf.udp_port);
 	
 	if(bind(router->udp_sock, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
-		log_printf("Error binding UDP socket: %s", w32_error(WSAGetLastError()));
+		log_printf(LOG_ERROR, "Error binding UDP socket: %s", w32_error(WSAGetLastError()));
 		
 		router_destroy(router);
 		return NULL;
@@ -92,14 +92,14 @@ struct router_vars *router_init(BOOL global) {
 	setsockopt(router->udp_sock, SOL_SOCKET, SO_SNDBUF, (char*)&bufsize, sizeof(int));
 	
 	if(WSAEventSelect(router->udp_sock, router->wsa_event, FD_READ) == -1) {
-		log_printf("WSAEventSelect error: %s", w32_error(WSAGetLastError()));
+		log_printf(LOG_ERROR, "WSAEventSelect error: %s", w32_error(WSAGetLastError()));
 		
 		router_destroy(router);
 		return NULL;
 	}
 	
 	if(!(router->recvbuf = malloc(sizeof(struct rpacket_header) + MAX_PKT_SIZE))) {
-		log_printf("Out of memory! Cannot allocate recv buffer");
+		log_printf(LOG_ERROR, "Out of memory! Cannot allocate recv buffer");
 		
 		router_destroy(router);
 		return NULL;
@@ -107,7 +107,7 @@ struct router_vars *router_init(BOOL global) {
 	
 	if(global) {
 		if((router->listener = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
-			log_printf("Failed to create TCP socket: %s", w32_error(WSAGetLastError()));
+			log_printf(LOG_ERROR, "Failed to create TCP socket: %s", w32_error(WSAGetLastError()));
 			
 			router_destroy(router);
 			return NULL;
@@ -117,21 +117,21 @@ struct router_vars *router_init(BOOL global) {
 		addr.sin_port = htons(reg_get_dword("control_port", DEFAULT_CONTROL_PORT));
 		
 		if(bind(router->listener, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
-			log_printf("Failed to bind TCP socket: %s", w32_error(WSAGetLastError()));
+			log_printf(LOG_ERROR, "Failed to bind TCP socket: %s", w32_error(WSAGetLastError()));
 			
 			router_destroy(router);
 			return NULL;
 		}
 		
 		if(listen(router->listener, 8) == -1) {
-			log_printf("Failed to listen for connections: %s", w32_error(WSAGetLastError()));
+			log_printf(LOG_ERROR, "Failed to listen for connections: %s", w32_error(WSAGetLastError()));
 			
 			router_destroy(router);
 			return NULL;
 		}
 		
 		if(WSAEventSelect(router->listener, router->wsa_event, FD_ACCEPT) == -1) {
-			log_printf("WSAEventSelect error: %s", w32_error(WSAGetLastError()));
+			log_printf(LOG_ERROR, "WSAEventSelect error: %s", w32_error(WSAGetLastError()));
 			
 			router_destroy(router);
 			return NULL;
@@ -201,12 +201,12 @@ DWORD router_main(void *arg) {
 			int newfd = accept(router->listener, NULL, NULL);
 			if(newfd != -1) {
 				if(router->client_count == MAX_ROUTER_CLIENTS) {
-					log_printf("Too many clients, dropping new connection!");
+					log_printf(LOG_WARNING, "Too many clients, dropping new connection!");
 					goto DROP_NEWFD;
 				}
 				
 				if(WSAEventSelect(newfd, router->wsa_event, FD_READ | FD_CLOSE) == -1) {
-					log_printf("WSAEventSelect error: %s", w32_error(WSAGetLastError()));
+					log_printf(LOG_ERROR, "WSAEventSelect error: %s", w32_error(WSAGetLastError()));
 					goto DROP_NEWFD;
 				}
 				
@@ -218,7 +218,7 @@ DWORD router_main(void *arg) {
 					closesocket(newfd);
 				}
 			}else if(WSAGetLastError() != WSAEWOULDBLOCK) {
-				log_printf("Failed to accept client connection: %s", w32_error(WSAGetLastError()));
+				log_printf(LOG_ERROR, "Failed to accept client connection: %s", w32_error(WSAGetLastError()));
 			}
 		}
 		
@@ -234,7 +234,7 @@ DWORD router_main(void *arg) {
 					/* Treat connection reset as regular close */
 					len = 0;
 				}else{
-					log_printf("Error reading from client socket: %s", w32_error(WSAGetLastError()));
+					log_printf(LOG_ERROR, "Error reading from client socket: %s", w32_error(WSAGetLastError()));
 				}
 			}
 			
@@ -264,7 +264,7 @@ DWORD router_main(void *arg) {
 				continue;
 			}
 			
-			log_printf("Error reading from UDP socket: %s", w32_error(WSAGetLastError()));
+			log_printf(LOG_ERROR, "Error reading from UDP socket: %s", w32_error(WSAGetLastError()));
 			return 1;
 		}
 		
@@ -277,7 +277,7 @@ DWORD router_main(void *arg) {
 			continue;
 		}
 		
-		if(log_calls) {
+		if(min_log_level >= LOG_DEBUG) {
 			char src_net[12], src_node[18];
 			NET_TO_STRING(src_net, packet->src_net);
 			NODE_TO_STRING(src_node, packet->src_node);
@@ -286,7 +286,7 @@ DWORD router_main(void *arg) {
 			NET_TO_STRING(dest_net, packet->dest_net);
 			NODE_TO_STRING(dest_node, packet->dest_node);
 			
-			log_printf("Recieved packet from %s/%s (%s) for %s/%s", src_net, src_node, inet_ntoa(addr.sin_addr), dest_net, dest_node);
+			log_printf(LOG_DEBUG, "Recieved packet from %s/%s (%s) for %s/%s", src_net, src_node, inet_ntoa(addr.sin_addr), dest_net, dest_node);
 		}
 		
 		memset(rp_header, 0, sizeof(*rp_header));
@@ -308,15 +308,13 @@ DWORD router_main(void *arg) {
 				/* Check source address matches remote_addr if set */
 				(ra->remote_addr.sa_family == AF_UNSPEC || (memcmp(ra->remote_addr.sa_netnum, packet->src_net, 4) == 0 && memcmp(ra->remote_addr.sa_nodenum, packet->src_node, 6) == 0))
 			) {
-				if(log_calls) {
-					log_printf("Relaying packet to local port %hu", ntohs(ra->local_port));
-				}
+				log_printf(LOG_DEBUG, "Relaying packet to local port %hu", ntohs(ra->local_port));
 				
 				addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 				addr.sin_port = ra->local_port;
 				
 				if(sendto(router->udp_sock, (char*)rp_header, sizeof(*rp_header) + len, 0, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
-					log_printf("Error relaying packet: %s", w32_error(WSAGetLastError()));
+					log_printf(LOG_ERROR, "Error relaying packet: %s", w32_error(WSAGetLastError()));
 				}
 			}
 			
@@ -356,7 +354,7 @@ static int router_bind(struct router_vars *router, SOCKET control, SOCKET sock, 
 	}
 	
 	if(!iface) {
-		log_printf("bind failed: no such address");
+		log_printf(LOG_ERROR, "bind failed: no such address");
 		
 		free_interfaces(ifaces);
 		
@@ -377,7 +375,7 @@ static int router_bind(struct router_vars *router, SOCKET control, SOCKET sock, 
 	EnterCriticalSection(&(router->crit_sec));
 	
 	if(router_get(router, control, sock)) {
-		log_printf("bind failed: socket already bound");
+		log_printf(LOG_ERROR, "bind failed: socket already bound");
 		
 		LeaveCriticalSection(&(router->crit_sec));
 		
@@ -397,7 +395,7 @@ static int router_bind(struct router_vars *router, SOCKET control, SOCKET sock, 
 		while(a) {
 			if(ntohs(a->addr.sa_socket) == s) {
 				if(s == 65535) {
-					log_printf("bind failed: out of sockets?!");
+					log_printf(LOG_ERROR, "bind failed: out of sockets?!");
 					
 					LeaveCriticalSection(&(router->crit_sec));
 					
@@ -422,7 +420,7 @@ static int router_bind(struct router_vars *router, SOCKET control, SOCKET sock, 
 		
 		while(a) {
 			if(a->addr.sa_socket == addr->sa_socket && (!(a->flags & IPX_REUSE) || !(flags & IPX_REUSE))) {
-				log_printf("bind failed: requested socket in use");
+				log_printf(LOG_ERROR, "bind failed: requested socket in use");
 				
 				LeaveCriticalSection(&(router->crit_sec));
 				
@@ -608,7 +606,7 @@ static BOOL router_handle_call(struct router_vars *router, int sock, struct rout
 		}
 		
 		default: {
-			log_printf("Recieved unknown call, dropping client");
+			log_printf(LOG_ERROR, "Recieved unknown call, dropping client");
 			return FALSE;
 		}
 	}
@@ -619,7 +617,7 @@ static BOOL router_handle_call(struct router_vars *router, int sock, struct rout
 		char *sbuf = ((char*)&ret) + sent;
 		
 		if((sr = send(sock, sbuf, sizeof(ret) - sent, 0)) == -1) {
-			log_printf("Send error: %s, dropping client", w32_error(WSAGetLastError()));
+			log_printf(LOG_ERROR, "Send error: %s, dropping client", w32_error(WSAGetLastError()));
 			return FALSE;
 		}
 		
@@ -658,7 +656,7 @@ BOOL rclient_init(struct rclient *rclient) {
 	if(InitializeCriticalSectionAndSpinCount(&(rclient->cs), 0x80000000)) {
 		rclient->cs_init = TRUE;
 	}else{
-		log_printf("Failed to initialise critical section: %s", w32_error(GetLastError()));
+		log_printf(LOG_ERROR, "Failed to initialise critical section: %s", w32_error(GetLastError()));
 		return FALSE;
 	}
 	
@@ -676,7 +674,7 @@ BOOL rclient_start(struct rclient *rclient) {
 	}
 	
 	if((rclient->sock = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
-		log_printf("Cannot create TCP socket: %s", w32_error(WSAGetLastError()));
+		log_printf(LOG_ERROR, "Cannot create TCP socket: %s", w32_error(WSAGetLastError()));
 		return FALSE;
 	}
 	
@@ -689,12 +687,12 @@ BOOL rclient_start(struct rclient *rclient) {
 		return TRUE;
 	}
 	
-	log_printf("Cannot connect to router process: %s", w32_error(WSAGetLastError()));
+	log_printf(LOG_ERROR, "Cannot connect to router process: %s", w32_error(WSAGetLastError()));
 	
 	closesocket(rclient->sock);
 	rclient->sock = -1;
 	
-	log_printf("Creating private router thread...");
+	log_printf(LOG_INFO, "Creating private router thread...");
 	
 	if(!(rclient->router = router_init(FALSE))) {
 		return FALSE;
@@ -702,7 +700,7 @@ BOOL rclient_start(struct rclient *rclient) {
 	
 	rclient->thread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)&router_main, rclient->router, 0, NULL);
 	if(!rclient->thread) {
-		log_printf("Failed to create router thread: %s", w32_error(GetLastError()));
+		log_printf(LOG_ERROR, "Failed to create router thread: %s", w32_error(GetLastError()));
 		
 		router_destroy(rclient->router);
 		rclient->router = NULL;
@@ -733,7 +731,7 @@ void rclient_stop(struct rclient *rclient) {
 		LeaveCriticalSection(&(rclient->router->crit_sec));
 		
 		if(WaitForSingleObject(rclient->thread, 3000) == WAIT_TIMEOUT) {
-			log_printf("Router thread didn't exit in 3 seconds, terminating");
+			log_printf(LOG_WARNING, "Router thread didn't exit in 3 seconds, terminating");
 			TerminateThread(rclient->thread, 0);
 		}
 		
@@ -757,7 +755,7 @@ static BOOL rclient_do(struct rclient *rclient, struct router_call *call, struct
 	
 	for(done = 0; done < sizeof(*call);) {
 		if((r = send(rclient->sock, ((char*)call) + done, sizeof(*call) - done, 0)) == -1) {
-			log_printf("rclient_do: send error: %s", w32_error(WSAGetLastError()));
+			log_printf(LOG_ERROR, "rclient_do: send error: %s", w32_error(WSAGetLastError()));
 			
 			LeaveCriticalSection(&(rclient->cs));
 			return FALSE;
@@ -768,12 +766,12 @@ static BOOL rclient_do(struct rclient *rclient, struct router_call *call, struct
 	
 	for(done = 0; done < sizeof(*ret);) {
 		if((r = recv(rclient->sock, ((char*)ret) + done, sizeof(*ret) - done, 0)) == -1) {
-			log_printf("rclient_do: recv error: %s", w32_error(WSAGetLastError()));
+			log_printf(LOG_ERROR, "rclient_do: recv error: %s", w32_error(WSAGetLastError()));
 			
 			LeaveCriticalSection(&(rclient->cs));
 			return FALSE;
 		}else if(r == 0) {
-			log_printf("rclient_do: Lost connection");
+			log_printf(LOG_ERROR, "rclient_do: Lost connection");
 			WSASetLastError(WSAECONNRESET);
 			
 			LeaveCriticalSection(&(rclient->cs));
@@ -814,7 +812,7 @@ BOOL rclient_bind(struct rclient *rclient, SOCKET sock, struct sockaddr_ipx *add
 		return router_bind(rclient->router, 0, sock, addr, nic_bcast, reuse) == 0 ? TRUE: FALSE;
 	}
 	
-	log_printf("rclient_bind: No router?!");
+	log_printf(LOG_ERROR, "rclient_bind: No router?!");
 	
 	WSASetLastError(WSAENETDOWN);
 	return FALSE;
@@ -838,7 +836,7 @@ BOOL rclient_unbind(struct rclient *rclient, SOCKET sock) {
 		return TRUE;
 	}
 	
-	log_printf("rclient_unbind: No router?!");
+	log_printf(LOG_ERROR, "rclient_unbind: No router?!");
 	
 	WSASetLastError(WSAENETDOWN);
 	return FALSE;
@@ -863,7 +861,7 @@ BOOL rclient_set_port(struct rclient *rclient, SOCKET sock, uint16_t port) {
 		return TRUE;
 	}
 	
-	log_printf("rclient_set_port: No router?!");
+	log_printf(LOG_ERROR, "rclient_set_port: No router?!");
 	
 	WSASetLastError(WSAENETDOWN);
 	return FALSE;
@@ -888,7 +886,7 @@ BOOL rclient_set_filter(struct rclient *rclient, SOCKET sock, int ptype) {
 		return TRUE;
 	}
 	
-	log_printf("rclient_set_filter: No router?!");
+	log_printf(LOG_ERROR, "rclient_set_filter: No router?!");
 	
 	WSASetLastError(WSAENETDOWN);
 	return FALSE;
@@ -925,7 +923,7 @@ BOOL rclient_set_flags(struct rclient *rclient, SOCKET sock, int flags) {
 		return TRUE;
 	}
 	
-	log_printf("rclient_set_reuse: No router?!");
+	log_printf(LOG_ERROR, "rclient_set_reuse: No router?!");
 	
 	WSASetLastError(WSAENETDOWN);
 	return FALSE;
@@ -949,7 +947,7 @@ BOOL rclient_set_remote(struct rclient *rclient, SOCKET sock, const struct socka
 		return router_set_remote(rclient->router, 0, sock, addr);
 	}
 	
-	log_printf("rclient_bind: No router?!");
+	log_printf(LOG_ERROR, "rclient_bind: No router?!");
 	
 	WSASetLastError(WSAENETDOWN);
 	return FALSE;

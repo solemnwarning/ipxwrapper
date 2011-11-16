@@ -23,7 +23,7 @@
 
 HKEY regkey = NULL;
 
-unsigned char log_calls = 0;
+enum ipx_log_level min_log_level = LOG_INFO;
 
 static const char *dll_names[] = {
 	"ipxwrapper.dll",
@@ -49,7 +49,7 @@ BOOL reg_open(REGSAM access) {
 	int err = RegOpenKeyEx(HKEY_CURRENT_USER, "Software\\IPXWrapper", 0, access, &regkey);
 	
 	if(err != ERROR_SUCCESS) {
-		log_printf("Could not open registry: %s", w32_error(err));
+		log_printf(LOG_ERROR, "Could not open registry: %s", w32_error(err));
 		regkey = NULL;
 		
 		return FALSE;
@@ -79,7 +79,7 @@ DWORD reg_get_bin(const char *val_name, void *buf, DWORD size) {
 	
 	if(err != ERROR_SUCCESS) {
 		if(err != ERROR_FILE_NOT_FOUND) {
-			log_printf("Error reading registry value: %s", w32_error(err));
+			log_printf(LOG_ERROR, "Error reading registry value: %s", w32_error(err));
 		}
 		
 		return 0;
@@ -100,7 +100,7 @@ void load_dll(unsigned int dllnum) {
 		GetSystemDirectory(path, sizeof(path));
 		
 		if(strlen(path) + strlen(dll_names[dllnum]) + 2 > sizeof(path)) {
-			log_printf("Path buffer too small, cannot load %s", dll_names[dllnum]);
+			log_printf(LOG_ERROR, "Path buffer too small, cannot load %s", dll_names[dllnum]);
 			abort();
 		}
 		
@@ -112,7 +112,7 @@ void load_dll(unsigned int dllnum) {
 	
 	dll_handles[dllnum] = LoadLibrary(dll);
 	if(!dll_handles[dllnum]) {
-		log_printf("Error loading %s: %s", dll, w32_error(GetLastError()));
+		log_printf(LOG_ERROR, "Error loading %s: %s", dll, w32_error(GetLastError()));
 		abort();
 	}
 }
@@ -135,7 +135,7 @@ void __stdcall *find_sym(unsigned int dllnum, const char *symbol) {
 	
 	void *ptr = GetProcAddress(dll_handles[dllnum], symbol);
 	if(!ptr) {
-		log_printf("Missing symbol in %s: %s", dll_names[dllnum], symbol);
+		log_printf(LOG_ERROR, "Missing symbol in %s: %s", dll_names[dllnum], symbol);
 		abort();
 	}
 	
@@ -143,7 +143,5 @@ void __stdcall *find_sym(unsigned int dllnum, const char *symbol) {
 }
 
 void __stdcall log_call(unsigned int dllnum, const char *symbol) {
-	if(log_calls) {
-		log_printf("%s:%s", dll_names[dllnum], symbol);
-	}
+	log_printf(LOG_CALL, "%s:%s", dll_names[dllnum], symbol);
 }

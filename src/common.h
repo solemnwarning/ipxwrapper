@@ -42,11 +42,17 @@
 		(unsigned int)(unsigned char)(node[5]) \
 	)
 
+enum ipx_log_level {
+	LOG_CALL = 1,
+	LOG_DEBUG,
+	LOG_INFO = 4,
+	LOG_WARNING,
+	LOG_ERROR
+};
+
 extern HKEY regkey;
 
-extern unsigned char log_calls;
-
-void log_printf(const char *fmt, ...);
+extern enum ipx_log_level min_log_level;
 
 const char *w32_error(DWORD errnum);
 
@@ -64,6 +70,6 @@ void __stdcall log_call(unsigned int dllnum, const char *symbol);
 
 void log_open(const char *file);
 void log_close();
-void log_printf(const char *fmt, ...);
+void log_printf(enum ipx_log_level level, const char *fmt, ...);
 
 #endif /* !IPXWRAPPER_COMMON_H */

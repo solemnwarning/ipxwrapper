@@ -21,6 +21,7 @@
 #include <stdarg.h>
 
 #include "ipxwrapper.h"
+#include "common.h"
 
 static HANDLE log_fh = NULL;
 static HANDLE log_mutex = NULL;
@@ -55,7 +56,7 @@ void log_close() {
 	log_mutex = NULL;
 }
 
-void log_printf(const char *fmt, ...) {
+void log_printf(enum ipx_log_level level, const char *fmt, ...) {
 	DWORD called = GetTickCount();
 	
 	WaitForSingleObject(log_mutex, INFINITE);

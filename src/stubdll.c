@@ -27,7 +27,7 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 		
 		reg_open(KEY_QUERY_VALUE);
 		
-		log_calls = reg_get_char("log_calls", 0);
+		min_log_level = reg_get_dword("min_log_level", LOG_INFO);
 		
 		reg_close();
 	}else if(why == DLL_PROCESS_DETACH) {

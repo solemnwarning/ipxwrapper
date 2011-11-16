@@ -319,8 +319,12 @@ int main() {
 		global_conf.filter = 1;
 	}
 	
-	if(reg_read("log_calls", &log_calls, 1) != 1) {
+	DWORD min_log_level;
+	
+	if(reg_read("min_log_level", &min_log_level, sizeof(DWORD)) != sizeof(DWORD) || min_log_level >= 4) {
 		log_calls = 0;
+	}else{
+		log_calls = 1;
 	}
 	
 	get_nics();
@@ -507,7 +511,9 @@ static bool save_config() {
 		}
 	}
 	
-	if(!reg_write("global", &global_conf, sizeof(global_conf)) || !reg_write("log_calls", &log_calls, 1)) {
+	DWORD min_log_level = log_calls ? 1 : 4;
+	
+	if(!reg_write("global", &global_conf, sizeof(global_conf)) || !reg_write("min_log_level", &min_log_level, sizeof(DWORD))) {
 		return false;
 	}
 	
@@ -700,7 +706,7 @@ static void init_windows() {
 		windows.opt_w95 = create_child(windows.opt_group, 0, 0, 0, 0, "BUTTON", "Enable Windows 95 SO_BROADCAST bug", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_OPT_W95);
 		windows.opt_bcast = create_child(windows.opt_group, 0, 0, 0, 0, "BUTTON", "Send broadcast packets to all subnets", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_OPT_BCAST);
 		windows.opt_filter = create_child(windows.opt_group, 0, 0, 0, 0, "BUTTON", "Filter receieved packets by subnet", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_OPT_FILTER);
-		windows.opt_log = create_child(windows.opt_group, 0, 0, 0, 0, "BUTTON", "Log all WinSock API calls", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_OPT_LOG);
+		windows.opt_log = create_child(windows.opt_group, 0, 0, 0, 0, "BUTTON", "Enable verbose logging", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_OPT_LOG);
 		
 		Button_SetCheck(windows.opt_w95, global_conf.w95_bug ? BST_CHECKED : BST_UNCHECKED);
 		Button_SetCheck(windows.opt_bcast, global_conf.bcast_all ? BST_CHECKED : BST_UNCHECKED);

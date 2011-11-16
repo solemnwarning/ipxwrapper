@@ -43,7 +43,7 @@ struct sp_data {
 #define DISCOVERY_SOCKET 42367
 #define API_HEADER_SIZE sizeof(struct sockaddr_ipx)
 
-#define CALL(n) if(log_calls) { log_printf("DirectPlay: %s", n); }
+#define CALL(func) log_printf(LOG_CALL, "directplay.c: " func);
 
 /* Lock the object mutex and return the data pointer */
 static struct sp_data *get_sp_data(IDirectPlaySP *sp) {
@@ -52,7 +52,7 @@ static struct sp_data *get_sp_data(IDirectPlaySP *sp) {
 	
 	HRESULT r = IDirectPlaySP_GetSPData(sp, (void**)&data, &size, DPGET_LOCAL);
 	if(r != DP_OK) {
-		log_printf("GetSPData: %d", (int)r);
+		log_printf(LOG_ERROR, "GetSPData: %d", (int)r);
 		abort();
 	}
 	
@@ -76,13 +76,13 @@ static BOOL recv_packet(int sockfd, char *buf, IDirectPlaySP *sp) {
 			return TRUE;
 		}
 		
-		log_printf("Read error (IPX): %s", w32_error(WSAGetLastError()));
+		log_printf(LOG_ERROR, "Read error (IPX): %s", w32_error(WSAGetLastError()));
 		return FALSE;
 	}
 	
 	HRESULT h = IDirectPlaySP_HandleMessage(sp, buf, r, &addr);
 	if(h != DP_OK) {
-		log_printf("HandleMessage error: %d", (int)h);
+		log_printf(LOG_ERROR, "HandleMessage error: %d", (int)h);
 	}
 	
 	return TRUE;
@@ -116,7 +116,7 @@ static DWORD WINAPI worker_main(LPVOID sp) {
 		}
 		
 		if(sp_data->ns_sock != -1 && !recv_packet(sp_data->ns_sock, buf, sp)) {
-			log_printf("Closing ns_sock due to error");
+			log_printf(LOG_ERROR, "Closing ns_sock due to error");
 			
 			get_sp_data((IDirectPlaySP*)sp);
 			
@@ -140,7 +140,7 @@ static BOOL init_worker(IDirectPlaySP *sp) {
 	
 	sp_data->worker_thread = CreateThread(NULL, 0, &worker_main, sp, 0, NULL);
 	if(!sp_data->worker_thread) {
-		log_printf("Failed to create worker thread");
+		log_printf(LOG_ERROR, "Failed to create worker thread");
 		
 		release_sp_data(sp_data);
 		return FALSE;
@@ -167,7 +167,7 @@ static HRESULT WINAPI IPX_EnumSessions(LPDPSP_ENUMSESSIONSDATA data) {
 	addr.sa_socket = htons(DISCOVERY_SOCKET);
 	
 	if(sendto(sp_data->sock, data->lpMessage + API_HEADER_SIZE, data->dwMessageSize - API_HEADER_SIZE, 0, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
-		log_printf("sendto failed: %s", w32_error(WSAGetLastError()));
+		log_printf(LOG_ERROR, "sendto failed: %s", w32_error(WSAGetLastError()));
 		
 		release_sp_data(sp_data);
 		return DPERR_GENERIC;
@@ -184,7 +184,7 @@ static BOOL send_get_addr(struct sockaddr_ipx *addr, IDirectPlaySP *sp, DPID pla
 		
 		HRESULT r = IDirectPlaySP_GetSPPlayerData(sp, player_id, (void**)&addr_p, &size, DPGET_LOCAL);
 		if(r != DP_OK) {
-			log_printf("GetSPPlayerData: %d", (int)r);
+			log_printf(LOG_ERROR, "GetSPPlayerData: %d", (int)r);
 			return FALSE;
 		}
 		
@@ -209,7 +209,7 @@ static BOOL send_get_addr(struct sockaddr_ipx *addr, IDirectPlaySP *sp, DPID pla
 	
 	NO_ADDR:
 	
-	log_printf("No known address for player ID %u, dropping packet", (unsigned int)player_id);
+	log_printf(LOG_WARNING, "No known address for player ID %u, dropping packet", (unsigned int)player_id);
 	return FALSE;
 }
 
@@ -225,7 +225,7 @@ static HRESULT WINAPI IPX_Send(LPDPSP_SENDDATA data) {
 	struct sp_data *sp_data = get_sp_data(data->lpISP);
 	
 	if(sendto(sp_data->sock, data->lpMessage + API_HEADER_SIZE, data->dwMessageSize - API_HEADER_SIZE, 0, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
-		log_printf("sendto failed: %s", w32_error(WSAGetLastError()));
+		log_printf(LOG_ERROR, "sendto failed: %s", w32_error(WSAGetLastError()));
 		
 		release_sp_data(sp_data);
 		return DPERR_GENERIC;
@@ -245,6 +245,7 @@ static HRESULT WINAPI IPX_SendEx(LPDPSP_SENDEXDATA data) {
 	
 	if(data->dwPriority || data->dwTimeout) {
 		log_printf(
+			LOG_ERROR,
 			"SendEx called with dwPriority = %u, dwTimeout = %u",
 			(unsigned int)(data->dwPriority),
 			(unsigned int)(data->dwTimeout)
@@ -262,7 +263,7 @@ static HRESULT WINAPI IPX_SendEx(LPDPSP_SENDEXDATA data) {
 	
 	for(i = 0; i < data->cBuffers; i++) {
 		if(off + data->lpSendBuffers[i].len > data->dwMessageSize) {
-			log_printf("dwMessageSize too small, aborting");
+			log_printf(LOG_ERROR, "dwMessageSize too small, aborting");
 			return DPERR_GENERIC;
 		}
 		
@@ -279,7 +280,7 @@ static HRESULT WINAPI IPX_SendEx(LPDPSP_SENDEXDATA data) {
 	struct sp_data *sp_data = get_sp_data(data->lpISP);
 	
 	if(sendto(sp_data->sock, buf, off, 0, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
-		log_printf("sendto failed: %s", w32_error(WSAGetLastError()));
+		log_printf(LOG_ERROR, "sendto failed: %s", w32_error(WSAGetLastError()));
 		
 		release_sp_data(sp_data);
 		return DPERR_GENERIC;
@@ -302,7 +303,7 @@ static HRESULT WINAPI IPX_Reply(LPDPSP_REPLYDATA data) {
 		
 		HRESULT r = IDirectPlaySP_GetSPPlayerData(data->lpISP, data->idNameServer, (void**)&addr_p, &size, DPGET_LOCAL);
 		if(r != DP_OK) {
-			log_printf("GetSPPlayerData: %d", (int)r);
+			log_printf(LOG_ERROR, "GetSPPlayerData: %d", (int)r);
 		}else if(addr_p) {
 			memcpy(&(sp_data->ns_addr), addr_p, sizeof(struct sockaddr_ipx));
 			sp_data->ns_id = data->idNameServer;
@@ -312,7 +313,7 @@ static HRESULT WINAPI IPX_Reply(LPDPSP_REPLYDATA data) {
 	/* Do the actual sending */
 	
 	if(sendto(sp_data->sock, data->lpMessage + API_HEADER_SIZE, data->dwMessageSize - API_HEADER_SIZE, 0, (struct sockaddr*)data->lpSPMessageHeader, sizeof(struct sockaddr_ipx)) == -1) {
-		log_printf("sendto failed: %s", w32_error(WSAGetLastError()));
+		log_printf(LOG_ERROR, "sendto failed: %s", w32_error(WSAGetLastError()));
 		
 		release_sp_data(sp_data);
 		return DPERR_GENERIC;
@@ -328,7 +329,7 @@ static HRESULT WINAPI IPX_CreatePlayer(LPDPSP_CREATEPLAYERDATA data) {
 	if(data->lpSPMessageHeader) {
 		HRESULT r = IDirectPlaySP_SetSPPlayerData(data->lpISP, data->idPlayer, data->lpSPMessageHeader, sizeof(struct sockaddr_ipx), DPSET_LOCAL);
 		if(r != DP_OK) {
-			log_printf("SetSPPlayerData: %d", (int)r);
+			log_printf(LOG_ERROR, "SetSPPlayerData: %d", (int)r);
 			return DPERR_GENERIC;
 		}
 	}
@@ -378,7 +379,7 @@ static HRESULT WINAPI IPX_Open(LPDPSP_OPENDATA data) {
 			if((sp_data->ns_sock = socket(AF_IPX, SOCK_DGRAM, NSPROTO_IPX)) == -1) {
 				release_sp_data(sp_data);
 				
-				log_printf("Cannot create ns_sock: %s", w32_error(WSAGetLastError()));
+				log_printf(LOG_ERROR, "Cannot create ns_sock: %s", w32_error(WSAGetLastError()));
 				return DPERR_CANNOTCREATESERVER;
 			}
 			
@@ -397,7 +398,7 @@ static HRESULT WINAPI IPX_Open(LPDPSP_OPENDATA data) {
 				
 				release_sp_data(sp_data);
 				
-				log_printf("Cannot bind ns_sock: %s", w32_error(WSAGetLastError()));
+				log_printf(LOG_ERROR, "Cannot bind ns_sock: %s", w32_error(WSAGetLastError()));
 				return DPERR_CANNOTCREATESERVER;
 			}
 			
@@ -407,7 +408,7 @@ static HRESULT WINAPI IPX_Open(LPDPSP_OPENDATA data) {
 				
 				release_sp_data(sp_data);
 				
-				log_printf("WSAEventSelect failed: %s", w32_error(WSAGetLastError()));
+				log_printf(LOG_ERROR, "WSAEventSelect failed: %s", w32_error(WSAGetLastError()));
 				return DPERR_CANNOTCREATESERVER;
 			}
 		}
@@ -446,7 +447,7 @@ static HRESULT WINAPI IPX_ShutdownEx(LPDPSP_SHUTDOWNDATA data) {
 	
 	if(sp_data->worker_thread) {
 		if(WaitForSingleObject(sp_data->worker_thread, 3000) == WAIT_TIMEOUT) {
-			log_printf("DirectPlay worker didn't exit in 3 seconds, killing");
+			log_printf(LOG_WARNING, "DirectPlay worker didn't exit in 3 seconds, killing");
 			TerminateThread(sp_data->worker_thread, 0);
 		}
 		
@@ -472,7 +473,7 @@ HRESULT WINAPI SPInit(LPSPINITDATA data) {
 		return r_SPInit(data);
 	}
 	
-	log_printf("SPInit: %p (lpAddress = %p, dwAddressSize = %u)", data->lpISP, data->lpAddress, (unsigned int)(data->dwAddressSize));
+	log_printf(LOG_DEBUG, "SPInit: %p (lpAddress = %p, dwAddressSize = %u)", data->lpISP, data->lpAddress, (unsigned int)(data->dwAddressSize));
 	
 	{
 		struct sp_data *sp_data;
@@ -480,12 +481,12 @@ HRESULT WINAPI SPInit(LPSPINITDATA data) {
 		
 		HRESULT r = IDirectPlaySP_GetSPData(data->lpISP, (void**)&sp_data, &size, DPGET_LOCAL);
 		if(r != DP_OK) {
-			log_printf("SPInit: GetSPData: %d", r);
+			log_printf(LOG_ERROR, "SPInit: GetSPData: %d", r);
 			return DPERR_UNAVAILABLE;
 		}
 		
 		if(sp_data) {
-			log_printf("SPInit: Already initialised, returning DP_OK");
+			log_printf(LOG_DEBUG, "SPInit: Already initialised, returning DP_OK");
 			return DP_OK;
 		}
 	}
@@ -496,17 +497,17 @@ HRESULT WINAPI SPInit(LPSPINITDATA data) {
 	}
 	
 	if(!InitializeCriticalSectionAndSpinCount(&(sp_data->lock), 0x80000000)) {
-		log_printf("Error initialising critical section: %s", w32_error(GetLastError()));
+		log_printf(LOG_ERROR, "Error initialising critical section: %s", w32_error(GetLastError()));
 		goto FAIL2;
 	}
 	
 	if((sp_data->event = WSACreateEvent()) == WSA_INVALID_EVENT) {
-		log_printf("Error creating WSA event object: %s", w32_error(WSAGetLastError()));
+		log_printf(LOG_ERROR, "Error creating WSA event object: %s", w32_error(WSAGetLastError()));
 		goto FAIL3;
 	}
 	
 	if((sp_data->sock = socket(AF_IPX, SOCK_DGRAM, NSPROTO_IPX)) == -1) {
-		log_printf("Error creating IPX socket: %s", w32_error(WSAGetLastError()));
+		log_printf(LOG_ERROR, "Error creating IPX socket: %s", w32_error(WSAGetLastError()));
 		goto FAIL4;
 	}
 	
@@ -515,14 +516,14 @@ HRESULT WINAPI SPInit(LPSPINITDATA data) {
 	addr.sa_family = AF_IPX;
 	
 	if(bind(sp_data->sock, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
-		log_printf("Error binding IPX socket: %s", w32_error(WSAGetLastError()));
+		log_printf(LOG_ERROR, "Error binding IPX socket: %s", w32_error(WSAGetLastError()));
 		goto FAIL5;
 	}
 	
 	int addrlen = sizeof(sp_data->addr);
 	
 	if(getsockname(sp_data->sock, (struct sockaddr*)&(sp_data->addr), &addrlen) == -1) {
-		log_printf("getsockname failed: %s", w32_error(WSAGetLastError()));
+		log_printf(LOG_ERROR, "getsockname failed: %s", w32_error(WSAGetLastError()));
 		goto FAIL5;
 	}
 	
@@ -535,13 +536,13 @@ HRESULT WINAPI SPInit(LPSPINITDATA data) {
 	setsockopt(sp_data->sock, SOL_SOCKET, SO_BROADCAST, (char*)&bcast, sizeof(BOOL));
 	
 	if(WSAEventSelect(sp_data->sock, sp_data->event, FD_READ) == -1) {
-		log_printf("WSAEventSelect failed: %s", w32_error(WSAGetLastError()));
+		log_printf(LOG_ERROR, "WSAEventSelect failed: %s", w32_error(WSAGetLastError()));
 		goto FAIL5;
 	}
 	
 	HRESULT r = IDirectPlaySP_SetSPData(data->lpISP, sp_data, sizeof(*sp_data), DPSET_LOCAL);
 	if(r != DP_OK) {
-		log_printf("SetSPData: %d", (int)r);
+		log_printf(LOG_ERROR, "SetSPData: %d", (int)r);
 		goto FAIL5;
 	}
 	
@@ -582,7 +583,7 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 		
 		reg_open(KEY_QUERY_VALUE);
 		
-		log_calls = reg_get_char("log_calls", 0);
+		min_log_level = reg_get_dword("min_log_level", LOG_INFO);
 		
 		reg_close();
 	}else if(why == DLL_PROCESS_DETACH) {

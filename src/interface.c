@@ -31,21 +31,21 @@ struct ipx_interface *get_interfaces(int ifnum) {
 	
 	int err = GetAdaptersInfo(&tbuf, &bufsize);
 	if(err == ERROR_NO_DATA) {
-		log_printf("No network interfaces detected!");
+		log_printf(LOG_WARNING, "No network interfaces detected!");
 		return NULL;
 	}else if(err != ERROR_SUCCESS && err != ERROR_BUFFER_OVERFLOW) {
-		log_printf("Error fetching network interfaces: %s", w32_error(err));
+		log_printf(LOG_ERROR, "Error fetching network interfaces: %s", w32_error(err));
 		return NULL;
 	}
 	
 	if(!(ifroot = malloc(bufsize))) {
-		log_printf("Out of memory! (Tried to allocate %u bytes)", (unsigned int)bufsize);
+		log_printf(LOG_ERROR, "Out of memory! (Tried to allocate %u bytes)", (unsigned int)bufsize);
 		return NULL;
 	}
 	
 	err = GetAdaptersInfo(ifroot, &bufsize);
 	if(err != ERROR_SUCCESS) {
-		log_printf("Error fetching network interfaces: %s", w32_error(err));
+		log_printf(LOG_ERROR, "Error fetching network interfaces: %s", w32_error(err));
 		
 		free(ifroot);
 		return NULL;
@@ -80,7 +80,7 @@ struct ipx_interface *get_interfaces(int ifnum) {
 		
 		struct ipx_interface *nnic = malloc(sizeof(struct ipx_interface));
 		if(!nnic) {
-			log_printf("Out of memory! (Tried to allocate %u bytes)", (unsigned int)sizeof(struct ipx_interface));
+			log_printf(LOG_ERROR, "Out of memory! (Tried to allocate %u bytes)", (unsigned int)sizeof(struct ipx_interface));
 			
 			free_interfaces(nics);
 			return NULL;
@@ -111,7 +111,7 @@ struct ipx_interface *get_interfaces(int ifnum) {
 		const unsigned char hamachi_bug[] = {0x7A, 0x79, 0x00, 0x00, 0x00, 0x00};
 		
 		if(strcmp(ifptr->Description, "Hamachi Network Interface") == 0 && memcmp(nnic->ipx_node, hamachi_bug, 6) == 0) {
-			log_printf("Invalid Hamachi interface detected, correcting node number");
+			log_printf(LOG_WARNING, "Invalid Hamachi interface detected, correcting node number");
 			memcpy(nnic->ipx_node + 2, &(nnic->ipaddr), 4);
 		}
 		
