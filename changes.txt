@@ -17,6 +17,10 @@ Version 0.3.2:
 	initialisation.
 	
 	Cleanup: Cleaned up error handling in SPInit.
+	
+	Cleanup: Updated logging API.
+	
+	Bugfix: Log stub DLL name rather than target DLL when logging calls.
 
 Version 0.3.1:
 	Bugfix: Fixed deadlock in DirectPlay service provider.

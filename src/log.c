@@ -59,6 +59,10 @@ void log_close() {
 void log_printf(enum ipx_log_level level, const char *fmt, ...) {
 	DWORD called = GetTickCount();
 	
+	if(level < min_log_level) {
+		return;
+	}
+	
 	WaitForSingleObject(log_mutex, INFINITE);
 	
 	if(!log_fh) {
