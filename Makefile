@@ -23,7 +23,7 @@ endif
 CFLAGS := -Wall $(DBG_OPT) -I./include/
 CXXFLAGS := $(CFLAGS)
 
-VERSION := r$(shell svn info | grep Revision | sed -e 's/.*: //')
+VERSION := 0.3.3
 
 IPXWRAPPER_DEPS := src/ipxwrapper.o src/winsock.o src/ipxwrapper_stubs.o src/log.o src/common.o \
 	src/interface.o src/router.o src/ipxwrapper.def

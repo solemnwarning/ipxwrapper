@@ -1,3 +1,8 @@
+Version 0.3.3:
+	Bugfix: Added DirectPlay registry key for 64-bit systems.
+	
+	Bugfix: Makefile correctly builds packages from SVN.
+
 Version 0.3.2:
 	Cleanup: Cleaned up Send/SendEx functions in DirectPlay service provider.
 	
