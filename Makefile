@@ -23,20 +23,21 @@ endif
 CFLAGS := -Wall $(DBG_OPT) -I./include/
 CXXFLAGS := $(CFLAGS)
 
-VERSION := revision $(shell svn info | grep Revision | sed -e 's/.*: //')
+VERSION := r$(shell svn info | grep Revision | sed -e 's/.*: //')
 
 IPXWRAPPER_DEPS := src/ipxwrapper.o src/winsock.o src/ipxwrapper_stubs.o src/log.o src/common.o \
 	src/interface.o src/router.o src/ipxwrapper.def
 
 BIN_FILES := changes.txt license.txt readme.txt ipxwrapper.dll mswsock.dll wsock32.dll ipxconfig.exe \
-	ipxrouter.exe dpwsockx.dll directplay.reg
+	ipxrouter.exe dpwsockx.dll directplay-win32.reg directplay-win64.reg
 SRC_FILES := changes.txt license.txt Makefile mkstubs.pl readme.txt src/config.h src/ipxconfig.cpp \
 	src/ipxwrapper.c src/ipxwrapper.def src/ipxwrapper.h src/ipxwrapper_stubs.txt src/log.c \
 	src/mswsock.def src/mswsock_stubs.txt src/stubdll.c src/winsock.c src/wsock32.def \
 	src/wsock32_stubs.txt src/directplay.c src/dpwsockx.def src/dpwsockx_stubs.txt src/common.c \
 	src/common.h src/router.c src/router.h src/router-exe.c src/interface.c src/interface.h \
 	icons/ipxrouter.rc icons/ipxrouter.ico icons/ipxconfig.rc icons/ipxconfig.ico \
-	include/dplay.h include/dplaysp.h include/dplobby.h include/wsnwlink.h directplay.reg
+	include/dplay.h include/dplaysp.h include/dplobby.h include/wsnwlink.h directplay-win32.reg \
+	directplay-win64.reg
 
 all: ipxwrapper.dll wsock32.dll mswsock.dll ipxconfig.exe dpwsockx.dll ipxrouter.exe
 
