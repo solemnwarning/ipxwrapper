@@ -278,6 +278,8 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen) {
 			RETURN(-1);
 		}
 		
+		log_printf(LOG_DEBUG, "Bound to local UDP port %hu", ntohs(bind_addr.sin_port));
+		
 		memcpy(&(ptr->addr), &ipxaddr, sizeof(ipxaddr));
 		ptr->flags |= IPX_BOUND;
 		
@@ -356,6 +358,14 @@ static int recv_packet(ipx_socket *sockptr, char *buf, int bufsize, int flags, s
 		free(recvbuf);
 		WSASetLastError(WSAEWOULDBLOCK);
 		return -1;
+	}
+	
+	if(min_log_level <= LOG_DEBUG) {
+		char net_s[12], node_s[18];
+		NET_TO_STRING(net_s, packet->src_net);
+		NODE_TO_STRING(node_s, packet->src_node);
+		
+		log_printf(LOG_DEBUG, "Received packet from %s/%s", net_s, node_s);
 	}
 	
 	add_host(packet->src_net, packet->src_node, rp_header->src_ipaddr);
@@ -605,6 +615,25 @@ int WSAAPI setsockopt(SOCKET fd, int level, int optname, const char FAR *optval,
 	ipx_socket *sockptr = get_socket(fd);
 	
 	if(sockptr) {
+		if(min_log_level <= LOG_DEBUG) {
+			char opt_s[24] = "";
+			
+			int i;
+			for(i = 0; i < optlen && i < 8 && optval; i++) {
+				if(i) {
+					strcat(opt_s, " ");
+				}
+				
+				sprintf(opt_s + i * 3, "%02X", (unsigned int)(unsigned char)optval[i]);
+			}
+			
+			if(optval) {
+				log_printf(LOG_DEBUG, "setsockopt(%d, %d, %d, {%s}, %d)", fd, level, optname, opt_s, optlen);
+			}else{
+				log_printf(LOG_DEBUG, "setsockopt(%d, %d, %d, NULL, %d)", fd, level, optname, optlen);
+			}
+		}
+		
 		if(level == NSPROTO_IPX) {
 			if(optname == IPX_PTYPE) {
 				sockptr->s_ptype = *intval;
@@ -745,7 +774,7 @@ int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct s
 		saddr.sin_port = htons(global_conf.udp_port);
 		saddr.sin_addr.s_addr = (host ? host->ipaddr : (global_conf.bcast_all ? INADDR_BROADCAST : sockptr->nic_bcast));
 		
-		if(min_log_level >= LOG_DEBUG) {
+		if(min_log_level <= LOG_DEBUG) {
 			char net_s[12], node_s[18];
 			NET_TO_STRING(net_s, packet->dest_net);
 			NODE_TO_STRING(node_s, packet->dest_node);
@@ -816,6 +845,7 @@ int PASCAL ioctlsocket(SOCKET fd, long cmd, u_long *argp) {
 	}
 	
 	if(sockptr) {
+		log_printf(LOG_DEBUG, "ioctlsocket(%d, %d)", fd, cmd);
 		unlock_sockets();
 	}
 	
