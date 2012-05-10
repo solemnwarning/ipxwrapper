@@ -20,7 +20,7 @@ else
 DBG_OPT := -Wl,-s
 endif
 
-CFLAGS := -Wall $(DBG_OPT) -I./include/
+CFLAGS := -Wall -D_WIN32_WINNT=0x0500 $(DBG_OPT) -I./include/
 CXXFLAGS := $(CFLAGS)
 
 VERSION := r$(shell svn info | grep Revision | sed -e 's/.*: //')

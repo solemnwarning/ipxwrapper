@@ -80,6 +80,16 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 		log_printf(LOG_INFO, "IPXWrapper %s", version_string);
 		log_printf(LOG_INFO, "Compiled at %s", compile_time);
 		
+		if(!getenv("SystemRoot")) {
+			log_printf(LOG_WARNING, "SystemRoot is not set in the environment");
+			
+			char env[268] = "SystemRoot=";
+			GetSystemWindowsDirectory(env+11, 256);
+			
+			log_printf(LOG_INFO, "Setting SystemRoot to '%s'", env+11);
+			_putenv(env);
+		}
+		
 		if(!rclient_init(&g_rclient)) {
 			return FALSE;
 		}
