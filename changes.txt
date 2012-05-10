@@ -1,3 +1,10 @@
+Version 0.3.4:
+	Feature: Added workaround for games that unset SystemRoot in the environment
+	such as Carmageddon II.
+	
+	Feature: Log packets sent/receieved at the WinSock wrapper functions when
+	verbose logging is enabled.
+
 Version 0.3.3:
 	Bugfix: Added DirectPlay registry key for 64-bit systems.
 	
