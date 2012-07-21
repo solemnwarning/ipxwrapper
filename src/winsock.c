@@ -216,6 +216,8 @@ int WSAAPI closesocket(SOCKET fd) {
 			if(ptr == pptr->next) {
 				pptr->next = ptr->next;
 				free(ptr);
+				
+				break;
 			}
 			
 			pptr = pptr->next;
