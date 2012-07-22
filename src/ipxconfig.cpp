@@ -192,9 +192,10 @@ static LRESULT CALLBACK main_wproc(HWND window, UINT msg, WPARAM wp, LPARAM lp) 
 				}
 			}else if(HIWORD(wp) == CBN_SELCHANGE && LOWORD(wp) == ID_PRI_LIST) {
 				int nic = ComboBox_GetCurSel(windows.primary);
+				int this_nic = 1;
 				
 				for(iface_list::iterator i = nics.begin(); i != nics.end(); i++) {
-					i->primary = (nic > 0 && i - nics.begin() == nic - 1);
+					i->primary = (i->enabled && this_nic++ == nic);
 				}
 			}
 			

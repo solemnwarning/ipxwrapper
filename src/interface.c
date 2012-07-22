@@ -54,7 +54,6 @@ struct ipx_interface *get_interfaces(int ifnum) {
 	struct ipx_interface *nics = NULL, *enic = NULL;
 	
 	IP_ADAPTER_INFO *ifptr = ifroot;
-	int this_ifnum = 0;
 	
 	while(ifptr) {
 		struct reg_value rv;
@@ -69,11 +68,6 @@ struct ipx_interface *get_interfaces(int ifnum) {
 		
 		if(got_rv && !rv.enabled) {
 			/* Interface has been disabled, don't add it */
-			ifptr = ifptr->Next;
-			continue;
-		}
-		
-		if(ifnum >= 0 && this_ifnum++ != ifnum) {
 			ifptr = ifptr->Next;
 			continue;
 		}
@@ -134,6 +128,25 @@ struct ipx_interface *get_interfaces(int ifnum) {
 	}
 	
 	free(ifroot);
+	
+	/* Delete every entry in the NIC list except the requested one */
+	if(ifnum >= 0) {
+		int this_ifnum = 0;
+		
+		while(nics && this_ifnum++ < ifnum) {
+			struct ipx_interface *dnic = nics;
+			nics = nics->next;
+			
+			free(dnic);
+		}
+		
+		while(nics && nics->next) {
+			struct ipx_interface *dnic = nics->next;
+			nics->next = nics->next->next;
+			
+			free(dnic);
+		}
+	}
 	
 	return nics;
 }
