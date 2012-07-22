@@ -523,8 +523,7 @@ int WSAAPI getsockopt(SOCKET fd, int level, int optname, char FAR *optval, int F
 				struct ipx_interface *nic = get_interfaces(ipxdata->adapternum);
 				
 				if(!nic) {
-					WSASetLastError(ERROR_NO_DATA);
-					return -1;
+					RETURN_WSA(ERROR_NO_DATA, -1);
 				}
 				
 				memcpy(ipxdata->netnum, nic->ipx_net, 4);
