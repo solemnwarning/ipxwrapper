@@ -59,8 +59,24 @@ struct ipx_interface *get_interfaces(int ifnum) {
 		struct reg_value rv;
 		int got_rv = 0;
 		
+		/* Format the hardware address as a hex string for fetching
+		 * settings from the registry.
+		*/
+		
 		char vname[18];
-		NODE_TO_STRING(vname, ifptr->Address);
+		
+		sprintf(
+			vname,
+			
+			"%02X:%02X:%02X:%02X:%02X:%02X",
+			
+			(unsigned int)(unsigned char)(ifptr->Address[0]),
+			(unsigned int)(unsigned char)(ifptr->Address[1]),
+			(unsigned int)(unsigned char)(ifptr->Address[2]),
+			(unsigned int)(unsigned char)(ifptr->Address[3]),
+			(unsigned int)(unsigned char)(ifptr->Address[4]),
+			(unsigned int)(unsigned char)(ifptr->Address[5])
+		);
 		
 		if(reg_get_bin(vname, &rv, sizeof(rv)) == sizeof(rv)) {
 			got_rv = 1;

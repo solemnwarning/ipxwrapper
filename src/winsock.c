@@ -233,7 +233,6 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen) {
 	
 	if(ptr) {
 		struct sockaddr_ipx ipxaddr;
-		char net_s[12], node_s[18];
 		
 		if(addrlen < sizeof(ipxaddr)) {
 			RETURN_WSA(WSAEFAULT, -1);
@@ -241,10 +240,9 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen) {
 		
 		memcpy(&ipxaddr, addr, sizeof(ipxaddr));
 		
-		NET_TO_STRING(net_s, ipxaddr.sa_netnum);
-		NODE_TO_STRING(node_s, ipxaddr.sa_nodenum);
+		IPX_STRING_ADDR(req_addr_s, ipxaddr.sa_netnum, ipxaddr.sa_nodenum, ipxaddr.sa_socket);
 		
-		log_printf(LOG_INFO, "bind(%d, net=%s node=%s socket=%hu)", fd, net_s, node_s, ntohs(ipxaddr.sa_socket));
+		log_printf(LOG_INFO, "bind(%d, %s)", fd, req_addr_s);
 		
 		if(ptr->flags & IPX_BOUND) {
 			log_printf(LOG_ERROR, "bind failed: socket already bound");
@@ -255,10 +253,9 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen) {
 			RETURN(-1);
 		}
 		
-		NET_TO_STRING(net_s, ipxaddr.sa_netnum);
-		NODE_TO_STRING(node_s, ipxaddr.sa_nodenum);
+		IPX_STRING_ADDR(got_addr_s, ipxaddr.sa_netnum, ipxaddr.sa_nodenum, ipxaddr.sa_socket);
 		
-		log_printf(LOG_INFO, "bind address: net=%s node=%s socket=%hu", net_s, node_s, ntohs(ipxaddr.sa_socket));
+		log_printf(LOG_INFO, "bind address: %s", got_addr_s);
 		
 		struct sockaddr_in bind_addr;
 		bind_addr.sin_family = AF_INET;
@@ -363,12 +360,11 @@ static int recv_packet(ipx_socket *sockptr, char *buf, int bufsize, int flags, s
 		return -1;
 	}
 	
-	if(min_log_level <= LOG_DEBUG) {
-		char net_s[12], node_s[18];
-		NET_TO_STRING(net_s, packet->src_net);
-		NODE_TO_STRING(node_s, packet->src_node);
+	if(min_log_level <= LOG_DEBUG)
+	{
+		IPX_STRING_ADDR(addr_s, packet->src_net, packet->src_node, packet->src_socket);
 		
-		log_printf(LOG_DEBUG, "Received packet from %s/%s", net_s, node_s);
+		log_printf(LOG_DEBUG, "Received packet from %s", addr_s);
 	}
 	
 	/* TODO: Move full sockaddr into rp_header? */
@@ -799,11 +795,9 @@ int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct s
 			
 			struct sockaddr_in *v4 = (struct sockaddr_in*)&send_addr;
 			
-			char net_s[12], node_s[18];
-			NET_TO_STRING(net_s, packet->dest_net);
-			NODE_TO_STRING(node_s, packet->dest_node);
+			IPX_STRING_ADDR(addr_s, packet->dest_net, packet->dest_node, packet->dest_socket);
 			
-			log_printf(LOG_DEBUG, "Sending packet to %s/%s (%s)", net_s, node_s, inet_ntoa(v4->sin_addr));
+			log_printf(LOG_DEBUG, "Sending packet to %s (%s)", addr_s, inet_ntoa(v4->sin_addr));
 		}
 		
 		int sval = r_sendto(send_fd, (char*)packet, psize, 0, (struct sockaddr*)&send_addr, addrlen);

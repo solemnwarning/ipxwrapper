@@ -45,6 +45,36 @@ const char *w32_error(DWORD errnum) {
 	return buf;	
 }
 
+/* Format an IPX address as a string.
+ *
+ * The socket number should be in network byte order and the supplied buffer
+ * must be at least IPX_SADDR_SIZE bytes long.
+*/
+void ipx_to_string(char *buf, const netnum_t net, const nodenum_t node, uint16_t sock)
+{
+	/* World's ugliest use of sprintf? */
+	
+	sprintf(
+		buf,
+		
+		"%02X:%02X:%02X:%02X/%02X:%02X:%02X:%02X:%02X:%02X/%hu",
+		
+		(unsigned int)(unsigned char)(net[0]),
+		(unsigned int)(unsigned char)(net[1]),
+		(unsigned int)(unsigned char)(net[2]),
+		(unsigned int)(unsigned char)(net[3]),
+		
+		(unsigned int)(unsigned char)(node[0]),
+		(unsigned int)(unsigned char)(node[1]),
+		(unsigned int)(unsigned char)(node[2]),
+		(unsigned int)(unsigned char)(node[3]),
+		(unsigned int)(unsigned char)(node[4]),
+		(unsigned int)(unsigned char)(node[5]),
+		
+		ntohs(sock)
+	);
+}
+
 BOOL reg_open(REGSAM access) {
 	int err = RegOpenKeyEx(HKEY_CURRENT_USER, "Software\\IPXWrapper", 0, access, &regkey);
 	

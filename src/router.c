@@ -278,15 +278,10 @@ DWORD router_main(void *arg) {
 		}
 		
 		if(min_log_level <= LOG_DEBUG) {
-			char src_net[12], src_node[18];
-			NET_TO_STRING(src_net, packet->src_net);
-			NODE_TO_STRING(src_node, packet->src_node);
+			IPX_STRING_ADDR(src_addr, packet->src_net, packet->src_node, packet->src_socket);
+			IPX_STRING_ADDR(dest_addr, packet->dest_net, packet->dest_node, packet->dest_socket);
 			
-			char dest_net[12], dest_node[18];
-			NET_TO_STRING(dest_net, packet->dest_net);
-			NODE_TO_STRING(dest_node, packet->dest_node);
-			
-			log_printf(LOG_DEBUG, "Recieved packet from %s/%s (%s) for %s/%s", src_net, src_node, inet_ntoa(addr.sin_addr), dest_net, dest_node);
+			log_printf(LOG_DEBUG, "Recieved packet from %s (%s) for %s", src_addr, inet_ntoa(addr.sin_addr), dest_addr);
 		}
 		
 		memset(rp_header, 0, sizeof(*rp_header));

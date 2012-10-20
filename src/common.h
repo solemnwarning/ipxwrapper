@@ -22,25 +22,10 @@
 #include <stdio.h>
 #include <stdint.h>
 
-#define NET_TO_STRING(s, net) \
-	sprintf( \
-		s, "%02X:%02X:%02X:%02X", \
-		(unsigned int)(unsigned char)(net[0]), \
-		(unsigned int)(unsigned char)(net[1]), \
-		(unsigned int)(unsigned char)(net[2]), \
-		(unsigned int)(unsigned char)(net[3]) \
-	)
+#define IPX_SADDR_SIZE 36
 
-#define NODE_TO_STRING(s, node) \
-	sprintf( \
-		s, "%02X:%02X:%02X:%02X:%02X:%02X", \
-		(unsigned int)(unsigned char)(node[0]), \
-		(unsigned int)(unsigned char)(node[1]), \
-		(unsigned int)(unsigned char)(node[2]), \
-		(unsigned int)(unsigned char)(node[3]), \
-		(unsigned int)(unsigned char)(node[4]), \
-		(unsigned int)(unsigned char)(node[5]) \
-	)
+typedef unsigned char netnum_t[4];
+typedef unsigned char nodenum_t[6];
 
 enum ipx_log_level {
 	LOG_CALL = 1,
@@ -55,6 +40,12 @@ extern HKEY regkey;
 extern enum ipx_log_level min_log_level;
 
 const char *w32_error(DWORD errnum);
+
+#define IPX_STRING_ADDR(var, net, node, sock) \
+	char var[IPX_SADDR_SIZE]; \
+	ipx_to_string(var, net, node, sock);
+
+void ipx_to_string(char *buf, const netnum_t net, const nodenum_t node, uint16_t sock);
 
 BOOL reg_open(REGSAM access);
 void reg_close(void);

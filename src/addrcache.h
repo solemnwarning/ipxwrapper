@@ -22,8 +22,7 @@
 #include <winsock2.h>
 #include <stdint.h>
 
-typedef unsigned char netnum_t[4];
-typedef unsigned char nodenum_t[6];
+#include "common.h"
 
 extern unsigned int addr_cache_ttl;
 
