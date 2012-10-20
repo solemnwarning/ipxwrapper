@@ -104,8 +104,6 @@ extern struct rclient g_rclient;
 ipx_socket *get_socket(SOCKET fd);
 void lock_sockets(void);
 void unlock_sockets(void);
-ipx_host *find_host(const unsigned char *net, const unsigned char *node);
-void add_host(const unsigned char *net, const unsigned char *node, uint32_t ipaddr);
 BOOL ip_is_local(uint32_t ipaddr);
 
 INT APIENTRY r_EnumProtocolsA(LPINT,LPVOID,LPDWORD);

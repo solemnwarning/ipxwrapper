@@ -26,6 +26,7 @@
 #include "common.h"
 #include "interface.h"
 #include "router.h"
+#include "addrcache.h"
 
 typedef struct _PROTOCOL_INFO {
 	DWORD dwServiceFlags ;
@@ -370,7 +371,14 @@ static int recv_packet(ipx_socket *sockptr, char *buf, int bufsize, int flags, s
 		log_printf(LOG_DEBUG, "Received packet from %s/%s", net_s, node_s);
 	}
 	
-	add_host(packet->src_net, packet->src_node, rp_header->src_ipaddr);
+	/* TODO: Move full sockaddr into rp_header? */
+	
+	struct sockaddr_in real_addr;
+	real_addr.sin_family = AF_INET;
+	real_addr.sin_addr.s_addr = rp_header->src_ipaddr;
+	real_addr.sin_port = htons(global_conf.udp_port);
+	
+	addr_cache_set((struct sockaddr*)&real_addr, sizeof(real_addr), packet->src_net, packet->src_node, 0);
 	
 	if(addr) {
 		addr->sa_family = AF_IPX;
@@ -768,22 +776,37 @@ int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct s
 		packet->size = htons(len);
 		memcpy(packet->data, buf, len);
 		
-		ipx_host *host = find_host(packet->dest_net, packet->dest_node);
+		/* Search the address cache for a real address */
 		
-		struct sockaddr_in saddr;
-		saddr.sin_family = AF_INET;
-		saddr.sin_port = htons(global_conf.udp_port);
-		saddr.sin_addr.s_addr = (host ? host->ipaddr : (global_conf.bcast_all ? INADDR_BROADCAST : sockptr->nic_bcast));
+		SOCKADDR_STORAGE send_addr;
+		size_t addrlen;
+		
+		if(!addr_cache_get(&send_addr, &addrlen, packet->dest_net, packet->dest_node, packet->dest_socket))
+		{
+			/* No cached address. Send using broadcast. */
+			
+			struct sockaddr_in *bcast = (struct sockaddr_in*)&send_addr;
+			
+			bcast->sin_family = AF_INET;
+			bcast->sin_addr.s_addr = (global_conf.bcast_all ? INADDR_BROADCAST : sockptr->nic_bcast);
+			bcast->sin_port = htons(global_conf.udp_port);
+			
+			addrlen = sizeof(*bcast);
+		}
 		
 		if(min_log_level <= LOG_DEBUG) {
+			/* TODO: Generic address display */
+			
+			struct sockaddr_in *v4 = (struct sockaddr_in*)&send_addr;
+			
 			char net_s[12], node_s[18];
 			NET_TO_STRING(net_s, packet->dest_net);
 			NODE_TO_STRING(node_s, packet->dest_node);
 			
-			log_printf(LOG_DEBUG, "Sending packet to %s/%s (%s)", net_s, node_s, inet_ntoa(saddr.sin_addr));
+			log_printf(LOG_DEBUG, "Sending packet to %s/%s (%s)", net_s, node_s, inet_ntoa(v4->sin_addr));
 		}
 		
-		int sval = r_sendto(send_fd, (char*)packet, psize, 0, (struct sockaddr*)&saddr, sizeof(saddr));
+		int sval = r_sendto(send_fd, (char*)packet, psize, 0, (struct sockaddr*)&send_addr, addrlen);
 		if(sval == -1) {
 			len = -1;
 		}

@@ -26,7 +26,7 @@ CXXFLAGS := $(CFLAGS)
 VERSION := r$(shell svn info | grep Revision | sed -e 's/.*: //')
 
 IPXWRAPPER_DEPS := src/ipxwrapper.o src/winsock.o src/ipxwrapper_stubs.o src/log.o src/common.o \
-	src/interface.o src/router.o src/ipxwrapper.def
+	src/interface.o src/router.o src/ipxwrapper.def src/addrcache.o
 
 BIN_FILES := changes.txt license.txt readme.txt ipxwrapper.dll mswsock.dll wsock32.dll ipxconfig.exe \
 	ipxrouter.exe dpwsockx.dll directplay-win32.reg directplay-win64.reg

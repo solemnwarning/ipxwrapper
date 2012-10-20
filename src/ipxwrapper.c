@@ -30,6 +30,7 @@
 #include "common.h"
 #include "interface.h"
 #include "router.h"
+#include "addrcache.h"
 
 extern const char *version_string;
 extern const char *compile_time;
@@ -46,34 +47,24 @@ struct reg_global global_conf;
 struct rclient g_rclient;
 
 static CRITICAL_SECTION sockets_cs;
-static CRITICAL_SECTION hosts_cs;
 static CRITICAL_SECTION addrs_cs;
-
-/* List of known IPX hosts */
-static ipx_host *hosts = NULL;
 
 /* List of local IP addresses with associated IPX interfaces */
 static struct ipaddr_list *local_addrs = NULL;
 static time_t local_updated = 0;
 
-#define INIT_CS(cs) if(!init_cs(cs, &initialised_cs)) { return FALSE; }
-
-static BOOL init_cs(CRITICAL_SECTION *cs, int *counter) {
-	if(!InitializeCriticalSectionAndSpinCount(cs, 0x80000000)) {
+static void init_cs(CRITICAL_SECTION *cs)
+{
+	if(!InitializeCriticalSectionAndSpinCount(cs, 0x80000000))
+	{
 		log_printf(LOG_ERROR, "Failed to initialise critical section: %s", w32_error(GetLastError()));
-		return FALSE;
+		abort();
 	}
-	
-	(*counter)++;
-	return TRUE;
 }
 
-static void free_hosts(void);
 static void free_local_ips(void);
 
 BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
-	static int initialised_cs = 0;
-	
 	if(why == DLL_PROCESS_ATTACH) {
 		log_open("ipxwrapper.log");
 		
@@ -90,6 +81,8 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 			_putenv(env);
 		}
 		
+		addr_cache_init();
+		
 		if(!rclient_init(&g_rclient)) {
 			return FALSE;
 		}
@@ -105,9 +98,8 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 		
 		min_log_level = reg_get_dword("min_log_level", LOG_INFO);
 		
-		INIT_CS(&sockets_cs);
-		INIT_CS(&hosts_cs);
-		INIT_CS(&addrs_cs);
+		init_cs(&sockets_cs);
+		init_cs(&addrs_cs);
 		
 		WSADATA wsdata;
 		int err = WSAStartup(MAKEWORD(1,1), &wsdata);
@@ -150,20 +142,15 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 		rclient_stop(&g_rclient);
 		
 		free_local_ips();
-		free_hosts();
 		
 		WSACleanup();
 		
-		switch(initialised_cs) {
-			case 3: DeleteCriticalSection(&addrs_cs);
-			case 2: DeleteCriticalSection(&hosts_cs);
-			case 1: DeleteCriticalSection(&sockets_cs);
-			default: break;
-		}
-		
-		initialised_cs = 0;
+		DeleteCriticalSection(&addrs_cs);
+		DeleteCriticalSection(&sockets_cs);
 		
 		reg_close();
+		
+		addr_cache_cleanup();
 		
 		unload_dlls();
 		
@@ -206,90 +193,6 @@ void lock_sockets(void) {
 /* Unlock the mutex */
 void unlock_sockets(void) {
 	LeaveCriticalSection(&sockets_cs);
-}
-
-/* Add a host to the hosts list or update an existing one */
-void add_host(const unsigned char *net, const unsigned char *node, uint32_t ipaddr) {
-	EnterCriticalSection(&hosts_cs);
-	
-	ipx_host *hptr = hosts;
-	
-	while(hptr) {
-		if(memcmp(hptr->ipx_net, net, 4) == 0 && memcmp(hptr->ipx_node, node, 6) == 0) {
-			hptr->ipaddr = ipaddr;
-			hptr->last_packet = time(NULL);
-			
-			LeaveCriticalSection(&hosts_cs);
-			return;
-		}
-		
-		hptr = hptr->next;
-	}
-	
-	hptr = malloc(sizeof(ipx_host));
-	if(!hptr) {
-		LeaveCriticalSection(&hosts_cs);
-		
-		log_printf(LOG_ERROR, "No memory for hosts list entry");
-		return;
-	}
-	
-	memcpy(hptr->ipx_net, net, 4);
-	memcpy(hptr->ipx_node, node, 6);
-	
-	hptr->ipaddr = ipaddr;
-	hptr->last_packet = time(NULL);
-	
-	hptr->next = hosts;
-	hosts = hptr;
-	
-	LeaveCriticalSection(&hosts_cs);
-}
-
-/* Search the hosts list */
-ipx_host *find_host(const unsigned char *net, const unsigned char *node) {
-	EnterCriticalSection(&hosts_cs);
-	
-	ipx_host *hptr = hosts, *pptr = NULL;
-	
-	while(hptr) {
-		if(memcmp(hptr->ipx_net, net, 4) == 0 && memcmp(hptr->ipx_node, node, 6) == 0) {
-			if(hptr->last_packet + HOST_TTL < time(NULL)) {
-				/* Host record has expired, delete */
-				
-				if(pptr) {
-					pptr->next = hptr->next;
-					free(hptr);
-				}else{
-					hosts = hptr->next;
-					free(hptr);
-				}
-				
-				hptr = NULL;
-			}
-			
-			break;
-		}
-		
-		pptr = hptr;
-		hptr = hptr->next;
-	}
-	
-	LeaveCriticalSection(&hosts_cs);
-	return hptr;
-}
-
-static void free_hosts(void) {
-	ipx_host *p = hosts, *d;
-	
-	while(p) {
-		d = p;
-		p = p->next;
-		
-		free(d);
-	}
-	
-	hosts = NULL;
 }
 
 /* Check if supplied IP (network byte order) is a local address */
