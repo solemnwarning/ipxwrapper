@@ -20,8 +20,15 @@ else
 DBG_OPT := -Wl,-s
 endif
 
-CFLAGS := -Wall -D_WIN32_WINNT=0x0500 $(DBG_OPT) -I./include/
+CFLAGS   := -Wall -D_WIN32_WINNT=0x0500 $(DBG_OPT) -I./include/
 CXXFLAGS := $(CFLAGS)
+
+# Used by mkdeps.pl
+#
+export CC
+export CFLAGS
+export CXX
+export CXXFLAGS
 
 VERSION := r$(shell svn info | grep Revision | sed -e 's/.*: //')
 
@@ -43,7 +50,7 @@ all: ipxwrapper.dll wsock32.dll mswsock.dll ipxconfig.exe dpwsockx.dll ipxrouter
 
 clean:
 	rm -f ipxwrapper.dll wsock32.dll mswsock.dll ipxconfig.exe dpwsockx.dll ipxrouter.exe
-	rm -f src/*.o src/*_stubs.s version.o
+	rm -f src/*.o src/*_stubs.s version.o Makefile.dep
 
 dist: all
 	mkdir ipxwrapper-$(VERSION)
@@ -57,7 +64,14 @@ dist: all
 	rm -r ipxwrapper-$(VERSION)-src/
 
 .SECONDARY:
-.PHONY: all clean dist
+.PHONY: all clean dist depend
+
+depend: Makefile.dep
+
+Makefile.dep: src/*.c src/*.cpp
+	perl mkdeps.pl
+
+-include Makefile.dep
 
 ipxwrapper.dll: $(IPXWRAPPER_DEPS)
 	echo 'const char *version_string = "$(VERSION)", *compile_time = "'`date`'";' | $(CC) -c -x c -o version.o -
@@ -93,5 +107,5 @@ icons/%.o: icons/%.rc icons/%.ico
 src/%_stubs.o: src/%_stubs.s
 	nasm -f win32 -o $@ $<
 
-src/%.o: src/%.c src/ipxwrapper.h src/config.h src/common.h src/router.h
+src/%.o: src/%.c
 	$(CC) $(CFLAGS) -c -o $@ $<
