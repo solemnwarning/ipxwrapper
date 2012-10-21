@@ -142,7 +142,7 @@ char *addr48_string(char *buf, addr48_t addr)
 */
 bool addr48_from_string(addr48_t *dest, const char *src)
 {
-	return _addr_from_string((unsigned char*)&dest, src, 6);
+	return _addr_from_string(((unsigned char*)&dest) + 2, src, 6);
 }
 
 /* Read a 48-bit network address from the registry.
