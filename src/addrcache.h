@@ -24,8 +24,6 @@
 
 #include "common.h"
 
-extern unsigned int addr_cache_ttl;
-
 void addr_cache_init(void);
 void addr_cache_cleanup(void);
 

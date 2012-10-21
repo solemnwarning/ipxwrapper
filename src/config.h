@@ -20,7 +20,6 @@
 
 #define DEFAULT_PORT 54792
 #define DEFAULT_ROUTER_PORT 54793
-#define IFACE_TTL 10
 
 #include "common.h"
 
@@ -31,6 +30,9 @@ typedef struct main_config {
 	bool w95_bug;
 	bool bcast_all;
 	bool src_filter;
+	
+	unsigned int addr_cache_ttl;
+	unsigned int iface_ttl;
 } main_config_t;
 
 struct v1_global_config {

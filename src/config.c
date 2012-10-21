@@ -26,11 +26,13 @@ main_config_t get_main_config(void)
 	
 	main_config_t config;
 	
-	config.udp_port    = DEFAULT_PORT;
-	config.router_port = DEFAULT_ROUTER_PORT;
-	config.w95_bug     = true;
-	config.bcast_all   = false;
-	config.src_filter  = true;
+	config.udp_port       = DEFAULT_PORT;
+	config.router_port    = DEFAULT_ROUTER_PORT;
+	config.w95_bug        = true;
+	config.bcast_all      = false;
+	config.src_filter     = true;
+	config.addr_cache_ttl = 30;
+	config.iface_ttl      = 5;
 	
 	HKEY reg      = reg_open_main(false);
 	DWORD version = reg_get_dword(reg, "config_version", 1);

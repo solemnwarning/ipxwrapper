@@ -188,7 +188,7 @@ void unlock_sockets(void) {
 BOOL ip_is_local(uint32_t ipaddr) {
 	EnterCriticalSection(&addrs_cs);
 	
-	if(local_updated + IFACE_TTL < time(NULL)) {
+	if(local_updated + main_config.iface_ttl < time(NULL)) {
 		/* TODO: Use all local IPs rather than just the ones with associated IPX addresses? */
 		
 		struct ipx_interface *ifaces = get_interfaces(-1);

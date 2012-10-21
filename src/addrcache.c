@@ -24,6 +24,7 @@
 
 #include "addrcache.h"
 #include "common.h"
+#include "ipxwrapper.h"
 
 struct host_table_key {
 	addr32_t netnum;
@@ -42,8 +43,6 @@ struct host_table {
 
 typedef struct host_table host_table_t;
 typedef struct host_table_key host_table_key_t;
-
-unsigned int addr_cache_ttl = 30;
 
 static host_table_t *host_table = NULL;
 static CRITICAL_SECTION host_table_cs;
@@ -124,7 +123,7 @@ int addr_cache_get(SOCKADDR_STORAGE *addr, size_t *addrlen, addr32_t net, addr48
 	
 	host_table_t *host = host_table_find(net, node);
 	
-	if(host && time(NULL) < host->time + addr_cache_ttl)
+	if(host && time(NULL) < host->time + main_config.addr_cache_ttl)
 	{
 		memcpy(addr, &(host->addr), host->addrlen);
 		*addrlen = host->addrlen;
