@@ -20,9 +20,33 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <ctype.h>
 
 #include "addr.h"
 #include "common.h"
+
+static bool _addr_from_string(unsigned char *dest, const char *src, int size)
+{
+	int i;
+	
+	for(i = 0; i < size; i++)
+	{
+		char term = (i + 1 == size ? '\0' : ':');
+		
+		if(isxdigit(src[0]) && (src[1] == term || (isxdigit(src[1]) && src[2] == term)))
+		{
+			dest[i] = strtoul(src, NULL, 16);
+			
+			src += strcspn(src, ":");
+			src += strspn(src, ":");
+		}
+		else{
+			return false;
+		}
+	}
+	
+	return true;
+}
 
 addr32_t addr32_in(const void *src)
 {
@@ -56,6 +80,14 @@ char *addr32_string(char *buf, addr32_t addr)
 	);
 	
 	return buf;
+}
+
+/* Parse a string-formatted 32-bit address and store it in an addr32_t value.
+ * Returns true on success, false on parse error.
+*/
+bool addr32_from_string(addr32_t *dest, const char *src)
+{
+	return _addr_from_string((unsigned char*)&dest, src, 4);
 }
 
 /* Read a 32-bit network address from the registry.
@@ -103,6 +135,14 @@ char *addr48_string(char *buf, addr48_t addr)
 	);
 	
 	return buf;
+}
+
+/* Parse a string-formatted 48-bit address and store it in an addr48_t value.
+ * Returns true on success, false on parse error.
+*/
+bool addr48_from_string(addr48_t *dest, const char *src)
+{
+	return _addr_from_string((unsigned char*)&dest, src, 6);
 }
 
 /* Read a 48-bit network address from the registry.

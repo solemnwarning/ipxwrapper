@@ -21,15 +21,9 @@
 #include <windows.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 #include "addr.h"
-
-#ifndef __cplusplus
-	typedef unsigned char bool;
-	
-	#define true  1
-	#define false 0
-#endif
 
 enum ipx_log_level {
 	LOG_CALL = 1,

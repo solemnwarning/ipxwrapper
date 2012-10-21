@@ -19,6 +19,11 @@
 #define IPXWRAPPER_ADDR_H
 
 #include <stdint.h>
+#include <stdbool.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef uint32_t addr32_t;
 typedef uint64_t addr48_t;
@@ -27,7 +32,9 @@ typedef uint64_t addr48_t;
 
 addr32_t addr32_in(const void *src);
 void *addr32_out(void *dest, addr32_t src);
+
 char *addr32_string(char *buf, addr32_t addr);
+bool addr32_from_string(addr32_t *dest, const char *src);
 
 addr32_t reg_get_addr32(HKEY key, const char *name, addr32_t default_value);
 
@@ -35,7 +42,9 @@ addr32_t reg_get_addr32(HKEY key, const char *name, addr32_t default_value);
 
 addr48_t addr48_in(const void *src);
 void *addr48_out(void *dest, addr48_t src);
+
 char *addr48_string(char *buf, addr48_t addr);
+bool addr48_from_string(addr48_t *dest, const char *src);
 
 addr48_t reg_get_addr48(HKEY key, const char *name, addr48_t default_value);
 
@@ -46,5 +55,9 @@ addr48_t reg_get_addr48(HKEY key, const char *name, addr48_t default_value);
 	ipx_to_string(var, net, node, sock);
 
 void ipx_to_string(char *buf, addr32_t net, addr48_t node, uint16_t sock);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* !IPXWRAPPER_ADDR_H */
