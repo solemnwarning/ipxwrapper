@@ -42,7 +42,7 @@ struct ipaddr_list {
 
 ipx_socket *sockets = NULL;
 SOCKET send_fd = -1;
-struct reg_global global_conf;
+main_config_t main_config;
 
 struct rclient g_rclient;
 
@@ -81,22 +81,13 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 			_putenv(env);
 		}
 		
+		main_config = get_main_config();
+		
 		addr_cache_init();
 		
 		if(!rclient_init(&g_rclient)) {
 			return FALSE;
 		}
-		
-		reg_open(KEY_QUERY_VALUE);
-		
-		if(reg_get_bin("global", &global_conf, sizeof(global_conf)) != sizeof(global_conf)) {
-			global_conf.udp_port = DEFAULT_PORT;
-			global_conf.w95_bug = 1;
-			global_conf.bcast_all = 0;
-			global_conf.filter = 1;
-		}
-		
-		min_log_level = reg_get_dword("min_log_level", LOG_INFO);
 		
 		init_cs(&sockets_cs);
 		init_cs(&addrs_cs);
@@ -147,8 +138,6 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 		
 		DeleteCriticalSection(&addrs_cs);
 		DeleteCriticalSection(&sockets_cs);
-		
-		reg_close();
 		
 		addr_cache_cleanup();
 		

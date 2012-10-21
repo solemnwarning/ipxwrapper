@@ -75,7 +75,7 @@ struct router_vars *router_init(BOOL global) {
 	
 	addr.sin_family = AF_INET;
 	addr.sin_addr.s_addr = INADDR_ANY;
-	addr.sin_port = htons(global_conf.udp_port);
+	addr.sin_port = htons(main_config.udp_port);
 	
 	if(bind(router->udp_sock, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
 		log_printf(LOG_ERROR, "Error binding UDP socket: %s", w32_error(WSAGetLastError()));
@@ -114,7 +114,7 @@ struct router_vars *router_init(BOOL global) {
 		}
 		
 		addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-		addr.sin_port = htons(reg_get_dword("control_port", DEFAULT_CONTROL_PORT));
+		addr.sin_port = htons(main_config.router_port);
 		
 		if(bind(router->listener, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
 			log_printf(LOG_ERROR, "Failed to bind TCP socket: %s", w32_error(WSAGetLastError()));
@@ -278,8 +278,8 @@ DWORD router_main(void *arg) {
 		}
 		
 		if(min_log_level <= LOG_DEBUG) {
-			IPX_STRING_ADDR(src_addr, packet->src_net, packet->src_node, packet->src_socket);
-			IPX_STRING_ADDR(dest_addr, packet->dest_net, packet->dest_node, packet->dest_socket);
+			IPX_STRING_ADDR(src_addr, addr32_in(packet->src_net), addr48_in(packet->src_node), packet->src_socket);
+			IPX_STRING_ADDR(dest_addr, addr32_in(packet->dest_net), addr48_in(packet->dest_node), packet->dest_socket);
 			
 			log_printf(LOG_DEBUG, "Recieved packet from %s (%s) for %s", src_addr, inet_ntoa(addr.sin_addr), dest_addr);
 		}
@@ -293,12 +293,12 @@ DWORD router_main(void *arg) {
 			if(
 				ra->local_port &&
 				(ra->filter_ptype < 0 || ra->filter_ptype == packet->ptype) &&
-				(memcmp(packet->dest_net, ra->addr.sa_netnum, 4) == 0 || (memcmp(packet->dest_net, f6, 4) == 0 && (ra->flags & IPX_BROADCAST || !global_conf.w95_bug) && ra->flags & IPX_RECV_BCAST)) &&
-				(memcmp(packet->dest_node, ra->addr.sa_nodenum, 6) == 0 || (memcmp(packet->dest_node, f6, 6) == 0 && (ra->flags & IPX_BROADCAST || !global_conf.w95_bug) && ra->flags & IPX_RECV_BCAST)) &&
+				(memcmp(packet->dest_net, ra->addr.sa_netnum, 4) == 0 || (memcmp(packet->dest_net, f6, 4) == 0 && (ra->flags & IPX_BROADCAST || !main_config.w95_bug) && ra->flags & IPX_RECV_BCAST)) &&
+				(memcmp(packet->dest_node, ra->addr.sa_nodenum, 6) == 0 || (memcmp(packet->dest_node, f6, 6) == 0 && (ra->flags & IPX_BROADCAST || !main_config.w95_bug) && ra->flags & IPX_RECV_BCAST)) &&
 				packet->dest_socket == ra->addr.sa_socket &&
 				
 				/* Check source IP is within correct subnet */
-				((ra->ipaddr & ra->netmask) == (addr.sin_addr.s_addr & ra->netmask) || !global_conf.filter) &&
+				((ra->ipaddr & ra->netmask) == (addr.sin_addr.s_addr & ra->netmask) || !main_config.src_filter) &&
 				
 				/* Check source address matches remote_addr if set */
 				(ra->remote_addr.sa_family == AF_UNSPEC || (memcmp(ra->remote_addr.sa_netnum, packet->src_net, 4) == 0 && memcmp(ra->remote_addr.sa_nodenum, packet->src_node, 6) == 0))
@@ -337,12 +337,14 @@ static int router_bind(struct router_vars *router, SOCKET control, SOCKET sock, 
 	*/
 	
 	struct ipx_interface *ifaces = get_interfaces(-1), *iface;
-	unsigned char z6[] = {0,0,0,0,0,0};
+	
+	addr32_t sa_netnum  = addr32_in(addr->sa_netnum);
+	addr48_t sa_nodenum = addr48_in(addr->sa_nodenum);
 	
 	for(iface = ifaces; iface; iface = iface->next) {
 		if(
-			(memcmp(addr->sa_netnum, iface->ipx_net, 4) == 0 || memcmp(addr->sa_netnum, z6, 4) == 0) &&
-			(memcmp(addr->sa_nodenum, iface->ipx_node, 6) == 0 || memcmp(addr->sa_nodenum, z6, 6) == 0)
+			(sa_netnum == iface->ipx_net || sa_netnum == 0)
+			&& (sa_nodenum == iface->ipx_node || sa_nodenum == 0)
 		) {
 			break;
 		}
@@ -357,8 +359,8 @@ static int router_bind(struct router_vars *router, SOCKET control, SOCKET sock, 
 		return -1;
 	}
 	
-	memcpy(addr->sa_netnum, iface->ipx_net, 4);
-	memcpy(addr->sa_nodenum, iface->ipx_node, 6);
+	addr32_out(addr->sa_netnum, iface->ipx_net);
+	addr48_out(addr->sa_nodenum, iface->ipx_node);
 	
 	*nic_bcast = iface->bcast;
 	
@@ -676,7 +678,7 @@ BOOL rclient_start(struct rclient *rclient) {
 	struct sockaddr_in addr;
 	addr.sin_family = AF_INET;
 	addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-	addr.sin_port = htons(reg_get_dword("control_port", DEFAULT_CONTROL_PORT));
+	addr.sin_port = htons(main_config.router_port);
 	
 	if(connect(rclient->sock, (struct sockaddr*)&addr, sizeof(addr)) == 0) {
 		return TRUE;

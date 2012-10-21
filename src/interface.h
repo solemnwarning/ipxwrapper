@@ -19,21 +19,27 @@
 #define IPXWRAPPER_INTERFACE_H
 
 #include <stdint.h>
+#include <utlist.h>
+
+#include "common.h"
+
+typedef struct ipx_interface ipx_interface_t;
 
 struct ipx_interface {
 	uint32_t ipaddr;
 	uint32_t netmask;
 	uint32_t bcast;
 	
-	unsigned char hwaddr[6];
+	addr48_t hwaddr;
 	
-	unsigned char ipx_net[4];
-	unsigned char ipx_node[6];
+	addr32_t ipx_net;
+	addr48_t ipx_node;
 	
-	struct ipx_interface *next;
+	ipx_interface_t *prev;
+	ipx_interface_t *next;
 };
 
-struct ipx_interface *get_interfaces(int ifnum);
-void free_interfaces(struct ipx_interface *iface);
+ipx_interface_t *get_interfaces(int ifnum);
+void free_interfaces(ipx_interface_t *iface);
 
 #endif /* !IPXWRAPPER_INTERFACE_H */

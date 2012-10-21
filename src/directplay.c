@@ -578,15 +578,18 @@ HRESULT WINAPI SPInit(LPSPINITDATA data) {
 }
 
 BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
-	if(why == DLL_PROCESS_ATTACH) {
+	if(why == DLL_PROCESS_ATTACH)
+	{
 		log_open("ipxwrapper.log");
 		
-		reg_open(KEY_QUERY_VALUE);
+		HKEY reg = reg_open_main(false);
 		
-		min_log_level = reg_get_dword("min_log_level", LOG_INFO);
+		min_log_level = reg_get_dword(reg, "min_log_level", LOG_INFO);
 		
-		reg_close();
-	}else if(why == DLL_PROCESS_DETACH) {
+		reg_close(reg);
+	}
+	else if(why == DLL_PROCESS_DETACH)
+	{
 		unload_dlls();
 		log_close();
 	}

@@ -79,6 +79,9 @@ static RECT get_window_rect(HWND hwnd);
 static std::string w32_errmsg(DWORD errnum);
 static void die(std::string msg);
 
+typedef struct v1_global_config reg_global;
+typedef struct v1_iface_config reg_value;
+
 static iface_list nics;
 static reg_global global_conf;
 static HKEY regkey = NULL;
@@ -698,7 +701,7 @@ static void init_windows() {
 		
 		DWORD port_buf;
 		if(reg_read("control_port", &port_buf, sizeof(DWORD)) != sizeof(DWORD) || port_buf > 65535) {
-			port_buf = DEFAULT_CONTROL_PORT;
+			port_buf = DEFAULT_ROUTER_PORT;
 		}
 		
 		sprintf(port_s, "%hu", (uint16_t)port_buf);

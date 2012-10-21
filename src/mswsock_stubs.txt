@@ -32,4 +32,3 @@ s_perror
 sethostname
 inet_addr
 WSHEnumProtocols:0
-ntohs:1

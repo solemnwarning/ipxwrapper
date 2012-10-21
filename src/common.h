@@ -22,10 +22,14 @@
 #include <stdio.h>
 #include <stdint.h>
 
-#define IPX_SADDR_SIZE 36
+#include "addr.h"
 
-typedef unsigned char netnum_t[4];
-typedef unsigned char nodenum_t[6];
+#ifndef __cplusplus
+	typedef unsigned char bool;
+	
+	#define true  1
+	#define false 0
+#endif
 
 enum ipx_log_level {
 	LOG_CALL = 1,
@@ -35,24 +39,16 @@ enum ipx_log_level {
 	LOG_ERROR
 };
 
-extern HKEY regkey;
-
 extern enum ipx_log_level min_log_level;
 
 const char *w32_error(DWORD errnum);
 
-#define IPX_STRING_ADDR(var, net, node, sock) \
-	char var[IPX_SADDR_SIZE]; \
-	ipx_to_string(var, net, node, sock);
+HKEY reg_open_main(bool readwrite);
+HKEY reg_open_subkey(HKEY parent, const char *path, bool readwrite);
+void reg_close(HKEY key);
 
-void ipx_to_string(char *buf, const netnum_t net, const nodenum_t node, uint16_t sock);
-
-BOOL reg_open(REGSAM access);
-void reg_close(void);
-
-char reg_get_char(const char *val_name, char default_val);
-DWORD reg_get_bin(const char *val_name, void *buf, DWORD size);
-DWORD reg_get_dword(const char *val_name, DWORD default_val);
+bool reg_get_bin(HKEY key, const char *name, void *buf, size_t size, const void *default_value);
+DWORD reg_get_dword(HKEY key, const char *name, DWORD default_value);
 
 void load_dll(unsigned int dllnum);
 void unload_dlls(void);

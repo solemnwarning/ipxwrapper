@@ -29,7 +29,7 @@ extern unsigned int addr_cache_ttl;
 void addr_cache_init(void);
 void addr_cache_cleanup(void);
 
-int addr_cache_get(SOCKADDR_STORAGE *addr, size_t *addrlen, netnum_t net, nodenum_t node, uint16_t sock);
-void addr_cache_set(const struct sockaddr *addr, size_t addrlen, netnum_t net, nodenum_t node, uint16_t sock);
+int addr_cache_get(SOCKADDR_STORAGE *addr, size_t *addrlen, addr32_t net, addr48_t node, uint16_t sock);
+void addr_cache_set(const struct sockaddr *addr, size_t addrlen, addr32_t net, addr48_t node, uint16_t sock);
 
 #endif /* !_ADDRCACHE_H */

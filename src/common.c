@@ -21,8 +21,6 @@
 #include "common.h"
 #include "config.h"
 
-HKEY regkey = NULL;
-
 enum ipx_log_level min_log_level = LOG_INFO;
 
 static const char *dll_names[] = {
@@ -45,82 +43,83 @@ const char *w32_error(DWORD errnum) {
 	return buf;	
 }
 
-/* Format an IPX address as a string.
- *
- * The socket number should be in network byte order and the supplied buffer
- * must be at least IPX_SADDR_SIZE bytes long.
-*/
-void ipx_to_string(char *buf, const netnum_t net, const nodenum_t node, uint16_t sock)
+HKEY reg_open_main(bool readwrite)
 {
-	/* World's ugliest use of sprintf? */
-	
-	sprintf(
-		buf,
-		
-		"%02X:%02X:%02X:%02X/%02X:%02X:%02X:%02X:%02X:%02X/%hu",
-		
-		(unsigned int)(unsigned char)(net[0]),
-		(unsigned int)(unsigned char)(net[1]),
-		(unsigned int)(unsigned char)(net[2]),
-		(unsigned int)(unsigned char)(net[3]),
-		
-		(unsigned int)(unsigned char)(node[0]),
-		(unsigned int)(unsigned char)(node[1]),
-		(unsigned int)(unsigned char)(node[2]),
-		(unsigned int)(unsigned char)(node[3]),
-		(unsigned int)(unsigned char)(node[4]),
-		(unsigned int)(unsigned char)(node[5]),
-		
-		ntohs(sock)
-	);
+	return reg_open_subkey(HKEY_CURRENT_USER, "Software\\IPXWrapper", readwrite);
 }
 
-BOOL reg_open(REGSAM access) {
-	int err = RegOpenKeyEx(HKEY_CURRENT_USER, "Software\\IPXWrapper", 0, access, &regkey);
+HKEY reg_open_subkey(HKEY parent, const char *path, bool readwrite)
+{
+	if(parent == NULL)
+	{
+		return NULL;
+	}
 	
-	if(err != ERROR_SUCCESS) {
+	HKEY key;
+	int err;
+	
+	if(readwrite)
+	{
+		err = RegCreateKeyEx(parent, path, 0, NULL, 0, KEY_READ | KEY_WRITE, NULL, &key, NULL);
+	}
+	else{
+		err = RegOpenKeyEx(parent, path, 0, KEY_READ, &key);
+	}
+	
+	if(err != ERROR_SUCCESS)
+	{
 		log_printf(LOG_ERROR, "Could not open registry: %s", w32_error(err));
-		regkey = NULL;
+		return NULL;
+	}
+	
+	return key;
+}
+
+void reg_close(HKEY key)
+{
+	if(key != NULL)
+	{
+		RegCloseKey(key);
+	}
+}
+
+bool reg_get_bin(HKEY key, const char *name, void *buf, size_t size, const void *default_value)
+{
+	if(key != NULL)
+	{
+		DWORD bs = size;
+		int err = RegQueryValueEx(key, name, NULL, NULL, (BYTE*)buf, &bs);
 		
-		return FALSE;
-	}
-	
-	return TRUE;
-}
-
-void reg_close(void) {
-	if(regkey) {
-		RegCloseKey(regkey);
-		regkey = NULL;
-	}
-}
-
-char reg_get_char(const char *val_name, char default_val) {
-	char buf;
-	return reg_get_bin(val_name, &buf, 1) == 1 ? buf : default_val;
-}
-
-DWORD reg_get_bin(const char *val_name, void *buf, DWORD size) {
-	if(!regkey) {
-		return 0;
-	}
-	
-	int err = RegQueryValueEx(regkey, val_name, NULL, NULL, (BYTE*)buf, &size);
-	
-	if(err != ERROR_SUCCESS) {
-		if(err != ERROR_FILE_NOT_FOUND) {
+		if(err == ERROR_SUCCESS)
+		{
+			if(bs == size)
+			{
+				return true;
+			}
+			else{
+				log_printf(LOG_WARNING, "Registry value with incorrect size: %s", name);
+			}
+		}
+		else if(err != ERROR_FILE_NOT_FOUND)
+		{
 			log_printf(LOG_ERROR, "Error reading registry value: %s", w32_error(err));
 		}
-		
-		return 0;
 	}
 	
-	return size;
+	if(default_value)
+	{
+		memcpy(buf, default_value, size);
+	}
+	
+	return false;
 }
 
-DWORD reg_get_dword(const char *val_name, DWORD default_val) {
+DWORD reg_get_dword(HKEY key, const char *name, DWORD default_value)
+{
 	DWORD buf;
-	return reg_get_bin(val_name, &buf, sizeof(buf)) == sizeof(buf) ? buf : default_val;
+	reg_get_bin(key, name, &buf, sizeof(buf), &default_value);
+	
+	return buf;
 }
 
 void load_dll(unsigned int dllnum) {

@@ -240,7 +240,7 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen) {
 		
 		memcpy(&ipxaddr, addr, sizeof(ipxaddr));
 		
-		IPX_STRING_ADDR(req_addr_s, ipxaddr.sa_netnum, ipxaddr.sa_nodenum, ipxaddr.sa_socket);
+		IPX_STRING_ADDR(req_addr_s, addr32_in(ipxaddr.sa_netnum), addr48_in(ipxaddr.sa_nodenum), ipxaddr.sa_socket);
 		
 		log_printf(LOG_INFO, "bind(%d, %s)", fd, req_addr_s);
 		
@@ -253,7 +253,7 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen) {
 			RETURN(-1);
 		}
 		
-		IPX_STRING_ADDR(got_addr_s, ipxaddr.sa_netnum, ipxaddr.sa_nodenum, ipxaddr.sa_socket);
+		IPX_STRING_ADDR(got_addr_s, addr32_in(ipxaddr.sa_netnum), addr48_in(ipxaddr.sa_nodenum), ipxaddr.sa_socket);
 		
 		log_printf(LOG_INFO, "bind address: %s", got_addr_s);
 		
@@ -362,7 +362,7 @@ static int recv_packet(ipx_socket *sockptr, char *buf, int bufsize, int flags, s
 	
 	if(min_log_level <= LOG_DEBUG)
 	{
-		IPX_STRING_ADDR(addr_s, packet->src_net, packet->src_node, packet->src_socket);
+		IPX_STRING_ADDR(addr_s, addr32_in(packet->src_net), addr48_in(packet->src_node), packet->src_socket);
 		
 		log_printf(LOG_DEBUG, "Received packet from %s", addr_s);
 	}
@@ -372,9 +372,9 @@ static int recv_packet(ipx_socket *sockptr, char *buf, int bufsize, int flags, s
 	struct sockaddr_in real_addr;
 	real_addr.sin_family = AF_INET;
 	real_addr.sin_addr.s_addr = rp_header->src_ipaddr;
-	real_addr.sin_port = htons(global_conf.udp_port);
+	real_addr.sin_port = htons(main_config.udp_port);
 	
-	addr_cache_set((struct sockaddr*)&real_addr, sizeof(real_addr), packet->src_net, packet->src_node, 0);
+	addr_cache_set((struct sockaddr*)&real_addr, sizeof(real_addr), addr32_in(packet->src_net), addr48_in(packet->src_node), 0);
 	
 	if(addr) {
 		addr->sa_family = AF_IPX;
@@ -530,8 +530,8 @@ int WSAAPI getsockopt(SOCKET fd, int level, int optname, char FAR *optval, int F
 					RETURN_WSA(ERROR_NO_DATA, -1);
 				}
 				
-				memcpy(ipxdata->netnum, nic->ipx_net, 4);
-				memcpy(ipxdata->nodenum, nic->ipx_node, 6);
+				addr32_out(ipxdata->netnum, nic->ipx_net);
+				addr48_out(ipxdata->nodenum, nic->ipx_node);
 				
 				/* TODO: LAN/WAN detection, link speed detection */
 				ipxdata->wan = FALSE;
@@ -777,15 +777,15 @@ int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct s
 		SOCKADDR_STORAGE send_addr;
 		size_t addrlen;
 		
-		if(!addr_cache_get(&send_addr, &addrlen, packet->dest_net, packet->dest_node, packet->dest_socket))
+		if(!addr_cache_get(&send_addr, &addrlen, addr32_in(packet->dest_net), addr48_in(packet->dest_node), packet->dest_socket))
 		{
 			/* No cached address. Send using broadcast. */
 			
 			struct sockaddr_in *bcast = (struct sockaddr_in*)&send_addr;
 			
 			bcast->sin_family = AF_INET;
-			bcast->sin_addr.s_addr = (global_conf.bcast_all ? INADDR_BROADCAST : sockptr->nic_bcast);
-			bcast->sin_port = htons(global_conf.udp_port);
+			bcast->sin_addr.s_addr = (main_config.bcast_all ? INADDR_BROADCAST : sockptr->nic_bcast);
+			bcast->sin_port = htons(main_config.udp_port);
 			
 			addrlen = sizeof(*bcast);
 		}
@@ -795,7 +795,7 @@ int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct s
 			
 			struct sockaddr_in *v4 = (struct sockaddr_in*)&send_addr;
 			
-			IPX_STRING_ADDR(addr_s, packet->dest_net, packet->dest_node, packet->dest_socket);
+			IPX_STRING_ADDR(addr_s, addr32_in(packet->dest_net), addr48_in(packet->dest_node), packet->dest_socket);
 			
 			log_printf(LOG_DEBUG, "Sending packet to %s (%s)", addr_s, inet_ntoa(v4->sin_addr));
 		}

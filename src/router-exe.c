@@ -23,7 +23,7 @@
 #include "common.h"
 #include "config.h"
 
-struct reg_global global_conf;
+main_config_t main_config;
 
 #define APPWM_TRAY (WM_APP+1)
 #define MNU_EXIT 101
@@ -36,14 +36,7 @@ static void show_menu(HWND hwnd);
 int main(int argc, char **argv) {
 	log_open("ipxrouter.log");
 	
-	reg_open(KEY_QUERY_VALUE);
-		
-	if(reg_get_bin("global", &global_conf, sizeof(global_conf)) != sizeof(global_conf)) {
-		global_conf.udp_port = DEFAULT_PORT;
-		global_conf.w95_bug = 1;
-		global_conf.bcast_all = 0;
-		global_conf.filter = 1;
-	}
+	main_config = get_main_config();
 	
 	WSADATA wsdata;
 	int err = WSAStartup(MAKEWORD(2,0), &wsdata);
@@ -86,8 +79,6 @@ int main(int argc, char **argv) {
 	router_destroy(router);
 	
 	WSACleanup();
-	
-	reg_close();
 	
 	log_close();
 	

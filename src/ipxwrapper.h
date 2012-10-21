@@ -98,7 +98,7 @@ struct ipx_host {
 
 extern ipx_socket *sockets;
 extern SOCKET send_fd;
-extern struct reg_global global_conf;
+extern main_config_t main_config;
 extern struct rclient g_rclient;
 
 ipx_socket *get_socket(SOCKET fd);

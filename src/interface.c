@@ -22,75 +22,80 @@
 #include "common.h"
 #include "config.h"
 
-/* Get virtual IPX interfaces
- * Select a single interface by setting ifnum >= 0
+/* Fetch a list of network interfaces available on the system.
+ *
+ * Returns a linked list of IP_ADAPTER_INFO structures, all allocated within a
+ * single memory block beginning at the first node.
 */
-struct ipx_interface *get_interfaces(int ifnum) {
-	IP_ADAPTER_INFO *ifroot, tbuf;
-	ULONG bufsize = sizeof(IP_ADAPTER_INFO);
+IP_ADAPTER_INFO *get_sys_interfaces(void)
+{
+	IP_ADAPTER_INFO *ifroot = NULL, *ifptr;
+	ULONG bufsize = sizeof(IP_ADAPTER_INFO) * 8;
 	
-	int err = GetAdaptersInfo(&tbuf, &bufsize);
-	if(err == ERROR_NO_DATA) {
-		log_printf(LOG_WARNING, "No network interfaces detected!");
-		return NULL;
-	}else if(err != ERROR_SUCCESS && err != ERROR_BUFFER_OVERFLOW) {
-		log_printf(LOG_ERROR, "Error fetching network interfaces: %s", w32_error(err));
-		return NULL;
-	}
+	int err = ERROR_BUFFER_OVERFLOW;
 	
-	if(!(ifroot = malloc(bufsize))) {
-		log_printf(LOG_ERROR, "Out of memory! (Tried to allocate %u bytes)", (unsigned int)bufsize);
-		return NULL;
-	}
-	
-	err = GetAdaptersInfo(ifroot, &bufsize);
-	if(err != ERROR_SUCCESS) {
-		log_printf(LOG_ERROR, "Error fetching network interfaces: %s", w32_error(err));
+	while(err == ERROR_BUFFER_OVERFLOW)
+	{
+		if(!(ifptr = realloc(ifroot, bufsize)))
+		{
+			log_printf(LOG_ERROR, "Couldn't allocate IP_ADAPTER_INFO structures!");
+			break;
+		}
 		
+		ifroot = ifptr;
+		
+		err = GetAdaptersInfo(ifroot, &bufsize);
+		
+		if(err == ERROR_NO_DATA)
+		{
+			log_printf(LOG_WARNING, "No network interfaces detected!");
+			break;
+		}
+		else if(err != ERROR_SUCCESS && err != ERROR_BUFFER_OVERFLOW)
+		{
+			log_printf(LOG_ERROR, "Error fetching network interfaces: %s", w32_error(err));
+			break;
+		}
+	}
+	
+	if(err != ERROR_SUCCESS)
+	{
 		free(ifroot);
 		return NULL;
 	}
 	
-	struct ipx_interface *nics = NULL, *enic = NULL;
+	return ifroot;
+}
+
+/* Get virtual IPX interfaces
+ * Select a single interface by setting ifnum >= 0
+*/
+ipx_interface_t *get_interfaces(int ifnum)
+{
+	IP_ADAPTER_INFO *ifroot = get_sys_interfaces(), *ifptr;
 	
-	IP_ADAPTER_INFO *ifptr = ifroot;
+	addr48_t primary = get_primary_iface();
 	
-	while(ifptr) {
-		struct reg_value rv;
-		int got_rv = 0;
+	ipx_interface_t *nics = NULL;
+	
+	for(ifptr = ifroot; ifptr; ifptr = ifptr->Next)
+	{
+		addr48_t hwaddr = addr48_in(ifptr->Address);
 		
-		/* Format the hardware address as a hex string for fetching
-		 * settings from the registry.
-		*/
+		iface_config_t config = get_iface_config(hwaddr);
 		
-		char vname[18];
-		
-		sprintf(
-			vname,
-			
-			"%02X:%02X:%02X:%02X:%02X:%02X",
-			
-			(unsigned int)(unsigned char)(ifptr->Address[0]),
-			(unsigned int)(unsigned char)(ifptr->Address[1]),
-			(unsigned int)(unsigned char)(ifptr->Address[2]),
-			(unsigned int)(unsigned char)(ifptr->Address[3]),
-			(unsigned int)(unsigned char)(ifptr->Address[4]),
-			(unsigned int)(unsigned char)(ifptr->Address[5])
-		);
-		
-		if(reg_get_bin(vname, &rv, sizeof(rv)) == sizeof(rv)) {
-			got_rv = 1;
-		}
-		
-		if(got_rv && !rv.enabled) {
+		if(!config.enabled)
+		{
 			/* Interface has been disabled, don't add it */
+			
 			ifptr = ifptr->Next;
 			continue;
 		}
 		
 		struct ipx_interface *nnic = malloc(sizeof(struct ipx_interface));
-		if(!nnic) {
-			log_printf(LOG_ERROR, "Out of memory! (Tried to allocate %u bytes)", (unsigned int)sizeof(struct ipx_interface));
+		if(!nnic)
+		{
+			log_printf(LOG_ERROR, "Couldn't allocate ipx_interface!");
 			
 			free_interfaces(nics);
 			return NULL;
@@ -100,78 +105,64 @@ struct ipx_interface *get_interfaces(int ifnum) {
 		nnic->netmask = inet_addr(ifptr->IpAddressList.IpMask.String);
 		nnic->bcast = nnic->ipaddr | ~nnic->netmask;
 		
-		memcpy(nnic->hwaddr, ifptr->Address, 6);
+		nnic->hwaddr = hwaddr;
 		
-		if(got_rv) {
-			memcpy(nnic->ipx_net, rv.ipx_net, 4);
-			memcpy(nnic->ipx_node, rv.ipx_node, 6);
-		}else{
-			unsigned char net[] = {0,0,0,1};
-			
-			memcpy(nnic->ipx_net, net, 4);
-			memcpy(nnic->ipx_node, nnic->hwaddr, 6);
-		}
-		
-		nnic->next = NULL;
+		nnic->ipx_net  = config.netnum;
+		nnic->ipx_node = config.nodenum;
 		
 		/* Workaround for buggy versions of Hamachi that don't initialise
 		 * the interface hardware address correctly.
 		*/
 		
-		const unsigned char hamachi_bug[] = {0x7A, 0x79, 0x00, 0x00, 0x00, 0x00};
+		unsigned char hamachi_bug[] = {0x7A, 0x79, 0x00, 0x00, 0x00, 0x00};
 		
-		if(strcmp(ifptr->Description, "Hamachi Network Interface") == 0 && memcmp(nnic->ipx_node, hamachi_bug, 6) == 0) {
+		if(nnic->ipx_node == addr48_in(hamachi_bug))
+		{
 			log_printf(LOG_WARNING, "Invalid Hamachi interface detected, correcting node number");
-			memcpy(nnic->ipx_node + 2, &(nnic->ipaddr), 4);
-		}
-		
-		if(got_rv && rv.primary) {
-			/* Force primary flag set, insert at start of NIC list */
-			nnic->next = nics;
-			nics = nnic;
 			
-			if(!enic) {
-				enic = nnic;
-			}
-		}else if(enic) {
-			enic->next = nnic;
-			enic = nnic;
-		}else{
-			enic = nics = nnic;
+			addr32_out(hamachi_bug + 2, nnic->ipaddr);
+			nnic->ipx_node = addr48_in(hamachi_bug);
 		}
 		
-		ifptr = ifptr->Next;
+		if(nnic->hwaddr == primary)
+		{
+			/* Primary interface, insert at the start of the list */
+			DL_PREPEND(nics, nnic);
+		}
+		else{
+			DL_APPEND(nics, nnic);
+		}
 	}
 	
 	free(ifroot);
 	
 	/* Delete every entry in the NIC list except the requested one */
-	if(ifnum >= 0) {
+	
+	if(ifnum >= 0)
+	{
 		int this_ifnum = 0;
+		ipx_interface_t *iface, *tmp;
 		
-		while(nics && this_ifnum++ < ifnum) {
-			struct ipx_interface *dnic = nics;
-			nics = nics->next;
-			
-			free(dnic);
-		}
-		
-		while(nics && nics->next) {
-			struct ipx_interface *dnic = nics->next;
-			nics->next = nics->next->next;
-			
-			free(dnic);
+		DL_FOREACH_SAFE(nics, iface, tmp)
+		{
+			if(this_ifnum++ != ifnum)
+			{
+				DL_DELETE(nics, iface);
+				free(iface);
+			}
 		}
 	}
 	
 	return nics;
 }
 
-void free_interfaces(struct ipx_interface *iface) {
-	while(iface) {
-		struct ipx_interface *del = iface;
-		iface = iface->next;
-		
-		free(del);
+void free_interfaces(ipx_interface_t *list)
+{
+	ipx_interface_t *iface, *tmp;
+	
+	DL_FOREACH_SAFE(list, iface, tmp)
+	{
+		DL_DELETE(list, iface);
+		free(iface);
 	}
 }

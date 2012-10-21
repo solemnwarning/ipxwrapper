@@ -26,8 +26,8 @@
 #include "common.h"
 
 struct host_table_key {
-	netnum_t netnum;
-	nodenum_t nodenum;
+	addr32_t netnum;
+	addr48_t nodenum;
 };
 
 struct host_table {
@@ -63,13 +63,13 @@ static void host_table_unlock(void)
 /* Search the host table for a node with the given net/node pair.
  * Returns NULL on failure.
 */
-static host_table_t *host_table_find(const netnum_t net, const nodenum_t node)
+static host_table_t *host_table_find(addr32_t net, addr48_t node)
 {
 	host_table_key_t key;
 	memset(&key, 0, sizeof(key));
 	
-	memcpy(key.netnum, net, sizeof(netnum_t));
-	memcpy(key.nodenum, node, sizeof(nodenum_t));
+	key.netnum  = net;
+	key.nodenum = node;
 
 	host_table_t *host;
 	
@@ -118,7 +118,7 @@ void addr_cache_cleanup(void)
  * Writes a sockaddr structure and addrlen to the provided pointers. Returns
  * true if a cached address was found, false otherwise.
 */
-int addr_cache_get(SOCKADDR_STORAGE *addr, size_t *addrlen, netnum_t net, nodenum_t node, uint16_t sock)
+int addr_cache_get(SOCKADDR_STORAGE *addr, size_t *addrlen, addr32_t net, addr48_t node, uint16_t sock)
 {
 	host_table_lock();
 	
@@ -146,7 +146,7 @@ int addr_cache_get(SOCKADDR_STORAGE *addr, size_t *addrlen, netnum_t net, nodenu
  * The given sockaddr structure will be copied and may be deallocated as soon as
  * this function returns.
 */
-void addr_cache_set(const struct sockaddr *addr, size_t addrlen, netnum_t net, nodenum_t node, uint16_t sock)
+void addr_cache_set(const struct sockaddr *addr, size_t addrlen, addr32_t net, addr48_t node, uint16_t sock)
 {
 	host_table_lock();
 	
@@ -168,8 +168,8 @@ void addr_cache_set(const struct sockaddr *addr, size_t addrlen, netnum_t net, n
 		
 		memset(host, 0, sizeof(host_table_t));
 		
-		memcpy(host->key.netnum, net, sizeof(netnum_t));
-		memcpy(host->key.nodenum, node, sizeof(nodenum_t));
+		host->key.netnum  = net;
+		host->key.nodenum = node;
 		
 		HASH_ADD(hh, host_table, key, sizeof(host->key), host);
 	}

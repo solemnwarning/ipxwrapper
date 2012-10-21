@@ -26,7 +26,7 @@ CXXFLAGS := $(CFLAGS)
 VERSION := r$(shell svn info | grep Revision | sed -e 's/.*: //')
 
 IPXWRAPPER_DEPS := src/ipxwrapper.o src/winsock.o src/ipxwrapper_stubs.o src/log.o src/common.o \
-	src/interface.o src/router.o src/ipxwrapper.def src/addrcache.o
+	src/interface.o src/router.o src/ipxwrapper.def src/addrcache.o src/config.o src/addr.o
 
 BIN_FILES := changes.txt license.txt readme.txt ipxwrapper.dll mswsock.dll wsock32.dll ipxconfig.exe \
 	ipxrouter.exe dpwsockx.dll directplay-win32.reg directplay-win64.reg
@@ -69,7 +69,7 @@ ipxconfig.exe: src/ipxconfig.cpp icons/ipxconfig.o
 dpwsockx.dll: src/directplay.o src/log.o src/dpwsockx_stubs.o src/common.o
 	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -shared -o dpwsockx.dll src/directplay.o src/log.o src/common.o src/dpwsockx_stubs.o src/dpwsockx.def -lwsock32
 
-ipxrouter.exe: src/router-exe.o src/router.o src/interface.o src/common.o src/log.o icons/ipxrouter.o
+ipxrouter.exe: src/router-exe.o src/router.o src/interface.o src/common.o src/log.o icons/ipxrouter.o src/config.o src/addr.o
 	$(CC) $(CFLAGS) -static-libgcc -mwindows -o ipxrouter.exe $^ -lws2_32 -liphlpapi
 
 src/ipxwrapper_stubs.s: src/ipxwrapper_stubs.txt
