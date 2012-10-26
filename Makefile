@@ -30,7 +30,7 @@ export CFLAGS
 export CXX
 export CXXFLAGS
 
-VERSION := r$(shell svn info | grep Revision | sed -e 's/.*: //')
+VERSION := DEVELOPMENT BUILD
 
 IPXWRAPPER_DEPS := src/ipxwrapper.o src/winsock.o src/ipxwrapper_stubs.o src/log.o src/common.o \
 	src/interface.o src/router.o src/ipxwrapper.def src/addrcache.o src/config.o src/addr.o
