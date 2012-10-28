@@ -114,12 +114,48 @@ bool reg_get_bin(HKEY key, const char *name, void *buf, size_t size, const void 
 	return false;
 }
 
+bool reg_set_bin(HKEY key, const char *name, void *buf, size_t size)
+{
+	if(key != NULL)
+	{
+		int err = RegSetValueEx(key, name, 0, REG_BINARY, (BYTE*)buf, size);
+		
+		if(err == ERROR_SUCCESS)
+		{
+			return true;
+		}
+		else{
+			log_printf(LOG_ERROR, "Error writing registry value: %s", w32_error(err));
+		}
+	}
+	
+	return false;
+}
+
 DWORD reg_get_dword(HKEY key, const char *name, DWORD default_value)
 {
 	DWORD buf;
 	reg_get_bin(key, name, &buf, sizeof(buf), &default_value);
 	
 	return buf;
+}
+
+bool reg_set_dword(HKEY key, const char *name, DWORD value)
+{
+	if(key != NULL)
+	{
+		int err = RegSetValueEx(key, name, 0, REG_DWORD, (BYTE*)&value, sizeof(value));
+		
+		if(err == ERROR_SUCCESS)
+		{
+			return true;
+		}
+		else{
+			log_printf(LOG_ERROR, "Error writing registry value: %s", w32_error(err));
+		}
+	}
+	
+	return false;
 }
 
 void load_dll(unsigned int dllnum) {

@@ -37,6 +37,25 @@ main_config_t get_main_config(void)
 	HKEY reg      = reg_open_main(false);
 	DWORD version = reg_get_dword(reg, "config_version", 1);
 	
+	config.single_iface   = reg_get_dword(reg, "single_iface", true);
+	config.single_netnum  = reg_get_addr32(reg, "single_netnum", addr32_in((unsigned char[]){0x00, 0x00, 0x00, 0x01}));
+	config.single_nodenum = reg_get_addr48(reg, "single_nodenum", 0);
+	
+	if(config.single_nodenum == 0)
+	{
+		/* Generate a random node number and store it in the registry
+		 * for persistence.
+		*/
+		
+		config.single_nodenum = gen_random_mac();
+		
+		HKEY wreg = reg_open_main(true);
+		
+		reg_set_addr48(wreg, "single_nodenum", config.single_nodenum);
+		
+		reg_close(wreg);
+	}
+	
 	if(version == 1)
 	{
 		struct v1_global_config reg_config;
@@ -48,6 +67,8 @@ main_config_t get_main_config(void)
 			config.bcast_all  = reg_config.bcast_all;
 			config.src_filter = reg_config.filter;
 		}
+		
+		config.router_port = reg_get_dword(reg, "control_port", config.router_port);
 	}
 	else if(version == 2)
 	{

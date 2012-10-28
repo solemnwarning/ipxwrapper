@@ -95,10 +95,23 @@ bool addr32_from_string(addr32_t *dest, const char *src)
 */
 addr32_t reg_get_addr32(HKEY key, const char *name, addr32_t default_value)
 {
-	unsigned char buf[4];
-	reg_get_bin(key, name, buf, 4, &default_value);
+	unsigned char buf[4], default_buf[4];
+	
+	addr48_out(default_buf, default_value);
+	reg_get_bin(key, name, buf, 4, default_buf);
 	
 	return addr32_in(buf);
+}
+
+/* Store a 32-bit network address in the registry.
+ * Returns true on success, false on failure.
+*/
+bool reg_set_addr32(HKEY key, const char *name, addr32_t value)
+{
+	unsigned char buf[4];
+	addr32_out(buf, value);
+	
+	return reg_set_bin(key, name, buf, sizeof(buf));
 }
 
 addr48_t addr48_in(const void *src)
@@ -150,10 +163,23 @@ bool addr48_from_string(addr48_t *dest, const char *src)
 */
 addr48_t reg_get_addr48(HKEY key, const char *name, addr48_t default_value)
 {
-	unsigned char buf[6];
-	reg_get_bin(key, name, buf, 6, &default_value);
+	unsigned char buf[6], default_buf[6];
+	
+	addr48_out(default_buf, default_value);
+	reg_get_bin(key, name, buf, 6, default_buf);
 	
 	return addr48_in(buf);
+}
+
+/* Store a 48-bit network address in the registry.
+ * Returns true on success, false on failure.
+*/
+bool reg_set_addr48(HKEY key, const char *name, addr48_t value)
+{
+	unsigned char buf[6];
+	addr48_out(buf, value);
+	
+	return reg_set_bin(key, name, buf, sizeof(buf));
 }
 
 /* Format an IPX address as a string.
@@ -170,4 +196,28 @@ void ipx_to_string(char *buf, addr32_t net, addr48_t node, uint16_t sock)
 	buf[29] = '/';
 	
 	sprintf(buf + 30, "%hu", ntohs(sock));
+}
+
+/* Generate a (probably) unique locally-administered MAC address. */
+addr48_t gen_random_mac()
+{
+	static bool seeded = false;
+	
+	if(!seeded)
+	{
+		srand(GetTickCount());
+		seeded = true;
+	}
+	
+	unsigned char addr[6];
+	unsigned int i;
+	
+	for(i = 0; i < 6; i++)
+	{
+		addr[i] = (rand() % 0xFF);
+	}
+	
+	addr[0] |= 0x02;
+	
+	return addr48_in(addr);
 }

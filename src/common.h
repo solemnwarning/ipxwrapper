@@ -42,7 +42,10 @@ HKEY reg_open_subkey(HKEY parent, const char *path, bool readwrite);
 void reg_close(HKEY key);
 
 bool reg_get_bin(HKEY key, const char *name, void *buf, size_t size, const void *default_value);
+bool reg_set_bin(HKEY key, const char *name, void *buf, size_t size);
+
 DWORD reg_get_dword(HKEY key, const char *name, DWORD default_value);
+bool reg_set_dword(HKEY key, const char *name, DWORD value);
 
 void load_dll(unsigned int dllnum);
 void unload_dlls(void);
