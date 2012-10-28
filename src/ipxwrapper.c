@@ -82,6 +82,7 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 		}
 		
 		main_config = get_main_config();
+		min_log_level = main_config.log_level;
 		
 		addr_cache_init();
 		

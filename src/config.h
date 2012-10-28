@@ -23,6 +23,10 @@
 
 #include "common.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct main_config {
 	uint16_t udp_port;
 	uint16_t router_port;
@@ -30,6 +34,8 @@ typedef struct main_config {
 	bool w95_bug;
 	bool bcast_all;
 	bool src_filter;
+	
+	enum ipx_log_level log_level;
 	
 	unsigned int addr_cache_ttl;
 	unsigned int iface_ttl;
@@ -61,8 +67,15 @@ struct v1_iface_config {
 } __attribute__((__packed__));
 
 main_config_t get_main_config(void);
+bool set_main_config(const main_config_t *config);
 
 iface_config_t get_iface_config(addr48_t hwaddr);
+bool set_iface_config(addr48_t hwaddr, const iface_config_t *config);
+
 addr48_t get_primary_iface();
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* !IPX_CONFIG_H */

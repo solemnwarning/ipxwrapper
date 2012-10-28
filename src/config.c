@@ -69,6 +69,8 @@ main_config_t get_main_config(void)
 		}
 		
 		config.router_port = reg_get_dword(reg, "control_port", config.router_port);
+		
+		config.log_level   = reg_get_dword(reg, "min_log_level", LOG_INFO);
 	}
 	else if(version == 2)
 	{
@@ -77,11 +79,36 @@ main_config_t get_main_config(void)
 		config.w95_bug     = reg_get_dword(reg, "w95_bug", config.w95_bug);
 		config.bcast_all   = reg_get_dword(reg, "bcast_all", config.bcast_all);
 		config.src_filter  = reg_get_dword(reg, "src_filter", config.src_filter);
+		
+		config.log_level   = reg_get_dword(reg, "log_level", LOG_INFO);
 	}
 	
 	reg_close(reg);
 	
 	return config;
+}
+
+bool set_main_config(const main_config_t *config)
+{
+	HKEY reg = reg_open_main(true);
+	
+	bool ok = reg_set_dword(reg, "single_iface", config->single_iface)
+		&& reg_set_addr32(reg, "single_netnum", config->single_netnum)
+		&& reg_set_addr48(reg, "single_nodenum", config->single_nodenum)
+		
+		&& reg_set_dword(reg, "port", config->udp_port)
+		&& reg_set_dword(reg, "router_port", config->router_port)
+		&& reg_set_dword(reg, "w95_bug", config->w95_bug)
+		&& reg_set_dword(reg, "bcast_all", config->bcast_all)
+		&& reg_set_dword(reg, "src_filter", config->src_filter)
+		
+		&& reg_set_dword(reg, "log_level", config->log_level)
+		
+		&& reg_set_dword(reg, "version", 2);
+	
+	reg_close(reg);
+	
+	return ok;
 }
 
 iface_config_t get_iface_config(addr48_t hwaddr)
@@ -132,6 +159,24 @@ iface_config_t get_iface_config(addr48_t hwaddr)
 	reg_close(reg);
 	
 	return config;
+}
+
+bool set_iface_config(addr48_t hwaddr, const iface_config_t *config)
+{
+	char id[ADDR48_STRING_SIZE];
+	addr48_string(id, hwaddr);
+	
+	HKEY reg   = reg_open_main(false);
+	HKEY ifreg = reg_open_subkey(reg, id, true);
+	
+	bool ok = reg_set_addr32(ifreg, "net", config->netnum)
+		&& reg_set_addr32(ifreg, "node", config->nodenum)
+		&& reg_set_addr32(ifreg, "enabled", config->enabled);
+	
+	reg_close(ifreg);
+	reg_close(reg);
+	
+	return ok;
 }
 
 addr48_t get_primary_iface(void)
