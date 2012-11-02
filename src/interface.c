@@ -17,6 +17,7 @@
 
 #include <windows.h>
 #include <iphlpapi.h>
+#include <utlist.h>
 
 #include "interface.h"
 #include "common.h"
@@ -92,23 +93,55 @@ ipx_interface_t *get_interfaces(int ifnum)
 			continue;
 		}
 		
-		struct ipx_interface *nnic = malloc(sizeof(struct ipx_interface));
-		if(!nnic)
+		ipx_interface_t *iface = malloc(sizeof(ipx_interface_t));
+		if(!iface)
 		{
 			log_printf(LOG_ERROR, "Couldn't allocate ipx_interface!");
 			
-			free_interfaces(nics);
+			free_ipx_interfaces(&nics);
 			return NULL;
 		}
 		
-		nnic->ipaddr = inet_addr(ifptr->IpAddressList.IpAddress.String);
-		nnic->netmask = inet_addr(ifptr->IpAddressList.IpMask.String);
-		nnic->bcast = nnic->ipaddr | ~nnic->netmask;
+		iface->ipaddr = NULL;
 		
-		nnic->hwaddr = hwaddr;
+		IP_ADDR_STRING *ip_ptr = &(ifptr->IpAddressList);
 		
-		nnic->ipx_net  = config.netnum;
-		nnic->ipx_node = config.nodenum;
+		for(; ip_ptr; ip_ptr = ip_ptr->Next)
+		{
+			uint32_t ipaddr  = inet_addr(ip_ptr->IpAddress.String);
+			uint32_t netmask = inet_addr(ip_ptr->IpMask.String);
+			
+			if(ipaddr == 0)
+			{
+				/* No IP address.
+				 * Because an empty linked list would be silly.
+				*/
+				
+				continue;
+			}
+			
+			ipx_interface_ip_t *addr = malloc(sizeof(ipx_interface_ip_t));
+			if(!addr)
+			{
+				log_printf(LOG_ERROR, "Couldn't allocate ipx_interface_ip!");
+				
+				free_ipx_interface(iface);
+				free_ipx_interfaces(&nics);
+				
+				continue;
+			}
+			
+			addr->ipaddr  = ipaddr;
+			addr->netmask = netmask;
+			addr->bcast   = ipaddr | (~netmask);
+			
+			DL_APPEND(iface->ipaddr, addr);
+		}
+		
+		iface->hwaddr = hwaddr;
+		
+		iface->ipx_net  = config.netnum;
+		iface->ipx_node = config.nodenum;
 		
 		/* Workaround for buggy versions of Hamachi that don't initialise
 		 * the interface hardware address correctly.
@@ -116,27 +149,31 @@ ipx_interface_t *get_interfaces(int ifnum)
 		
 		unsigned char hamachi_bug[] = {0x7A, 0x79, 0x00, 0x00, 0x00, 0x00};
 		
-		if(nnic->ipx_node == addr48_in(hamachi_bug))
+		if(iface->ipx_node == addr48_in(hamachi_bug) && iface->ipaddr)
 		{
 			log_printf(LOG_WARNING, "Invalid Hamachi interface detected, correcting node number");
 			
-			addr32_out(hamachi_bug + 2, nnic->ipaddr);
-			nnic->ipx_node = addr48_in(hamachi_bug);
+			addr32_out(hamachi_bug + 2, iface->ipaddr->ipaddr);
+			iface->ipx_node = addr48_in(hamachi_bug);
 		}
 		
-		if(nnic->hwaddr == primary)
+		if(iface->hwaddr == primary)
 		{
 			/* Primary interface, insert at the start of the list */
-			DL_PREPEND(nics, nnic);
+			DL_PREPEND(nics, iface);
 		}
 		else{
-			DL_APPEND(nics, nnic);
+			DL_APPEND(nics, iface);
 		}
 	}
 	
 	free(ifroot);
 	
-	/* Delete every entry in the NIC list except the requested one */
+	/* Delete every entry in the NIC list except the requested one.
+	 *
+	 * This is done here rather than when building the list as the primary
+	 * interface may change the indexes if it isn't the first.
+	*/
 	
 	if(ifnum >= 0)
 	{
@@ -148,7 +185,7 @@ ipx_interface_t *get_interfaces(int ifnum)
 			if(this_ifnum++ != ifnum)
 			{
 				DL_DELETE(nics, iface);
-				free(iface);
+				free_ipx_interface(iface);
 			}
 		}
 	}
@@ -156,13 +193,28 @@ ipx_interface_t *get_interfaces(int ifnum)
 	return nics;
 }
 
-void free_interfaces(ipx_interface_t *list)
+/* Free an ipx_interface structure and any memory allocated within. */
+void free_ipx_interface(ipx_interface_t *iface)
+{
+	ipx_interface_ip_t *a, *a_tmp;
+	
+	DL_FOREACH_SAFE(iface->ipaddr, a, a_tmp)
+	{
+		DL_DELETE(iface->ipaddr, a);
+		free(a);
+	}
+	
+	free(iface);
+}
+
+/* Free a list of ipx_interface structures */
+void free_ipx_interfaces(ipx_interface_t **list)
 {
 	ipx_interface_t *iface, *tmp;
 	
-	DL_FOREACH_SAFE(list, iface, tmp)
+	DL_FOREACH_SAFE(*list, iface, tmp)
 	{
-		DL_DELETE(list, iface);
-		free(iface);
+		DL_DELETE(*list, iface);
+		free_ipx_interface(iface);
 	}
 }

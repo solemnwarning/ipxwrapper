@@ -196,20 +196,26 @@ BOOL ip_is_local(uint32_t ipaddr) {
 		struct ipx_interface *i = ifaces;
 		
 		while(i) {
+			/* TODO: Rewrite. */
+			if(!i->ipaddr)
+			{
+				continue;
+			}
+			
 			struct ipaddr_list *nn = malloc(sizeof(struct ipaddr_list));
 			if(!nn) {
 				log_printf(LOG_ERROR, "Out of memory! Can't allocate ipaddr_list structure!");
 				break;
 			}
 			
-			nn->ipaddr = i->ipaddr;
+			nn->ipaddr = i->ipaddr->ipaddr;
 			nn->next = local_addrs;
 			local_addrs = nn;
 			
 			i = i->next;
 		}
 		
-		free_interfaces(ifaces);
+		free_ipx_interfaces(&ifaces);
 		
 		local_updated = time(NULL);
 	}

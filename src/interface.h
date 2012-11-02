@@ -23,23 +23,44 @@
 
 #include "common.h"
 
-typedef struct ipx_interface ipx_interface_t;
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-struct ipx_interface {
+typedef struct ipx_interface_ip ipx_interface_ip_t;
+
+struct ipx_interface_ip {
 	uint32_t ipaddr;
 	uint32_t netmask;
 	uint32_t bcast;
 	
+	ipx_interface_ip_t *prev;
+	ipx_interface_ip_t *next;
+};
+
+typedef struct ipx_interface ipx_interface_t;
+
+struct ipx_interface {
 	addr48_t hwaddr;
 	
 	addr32_t ipx_net;
 	addr48_t ipx_node;
 	
+	ipx_interface_ip_t *ipaddr;
+	
 	ipx_interface_t *prev;
 	ipx_interface_t *next;
 };
 
+IP_ADAPTER_INFO *get_sys_interfaces(void);
+
 ipx_interface_t *get_interfaces(int ifnum);
-void free_interfaces(ipx_interface_t *iface);
+
+void free_ipx_interface(ipx_interface_t *iface);
+void free_ipx_interfaces(ipx_interface_t **list);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* !IPXWRAPPER_INTERFACE_H */

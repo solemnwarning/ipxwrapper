@@ -539,7 +539,7 @@ int WSAAPI getsockopt(SOCKET fd, int level, int optname, char FAR *optval, int F
 				ipxdata->maxpkt = MAX_DATA_SIZE;
 				ipxdata->linkspeed = 100000; /* 10MBps */
 				
-				free_interfaces(nic);
+				free_ipx_interface(nic);
 				
 				RETURN(0);
 			}
@@ -561,7 +561,7 @@ int WSAAPI getsockopt(SOCKET fd, int level, int optname, char FAR *optval, int F
 					nic = nic->next;
 				}
 				
-				free_interfaces(ifaces);
+				free_ipx_interfaces(&ifaces);
 				
 				RETURN(0);
 			}

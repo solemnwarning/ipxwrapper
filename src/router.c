@@ -345,6 +345,9 @@ static int router_bind(struct router_vars *router, SOCKET control, SOCKET sock, 
 		if(
 			(sa_netnum == iface->ipx_net || sa_netnum == 0)
 			&& (sa_nodenum == iface->ipx_node || sa_nodenum == 0)
+			
+			/* TODO: Remove this check. */
+			&& iface->ipaddr
 		) {
 			break;
 		}
@@ -353,7 +356,7 @@ static int router_bind(struct router_vars *router, SOCKET control, SOCKET sock, 
 	if(!iface) {
 		log_printf(LOG_ERROR, "bind failed: no such address");
 		
-		free_interfaces(ifaces);
+		free_ipx_interfaces(&ifaces);
 		
 		WSASetLastError(WSAEADDRNOTAVAIL);
 		return -1;
@@ -362,12 +365,14 @@ static int router_bind(struct router_vars *router, SOCKET control, SOCKET sock, 
 	addr32_out(addr->sa_netnum, iface->ipx_net);
 	addr48_out(addr->sa_nodenum, iface->ipx_node);
 	
-	*nic_bcast = iface->bcast;
+	/* TODO: Don't store the IP stuff here. */
 	
-	uint32_t iface_ipaddr = iface->ipaddr;
-	uint32_t iface_netmask = iface->netmask;
+	*nic_bcast = iface->ipaddr->bcast;
 	
-	free_interfaces(ifaces);
+	uint32_t iface_ipaddr  = iface->ipaddr->ipaddr;
+	uint32_t iface_netmask = iface->ipaddr->netmask;
+	
+	free_ipx_interfaces(&ifaces);
 	
 	EnterCriticalSection(&(router->crit_sec));
 	
