@@ -249,7 +249,7 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen) {
 			RETURN_WSA(WSAEINVAL, -1);
 		}
 		
-		if(!rclient_bind(&g_rclient, fd, &ipxaddr, &(ptr->nic_bcast), ptr->flags)) {
+		if(!rclient_bind(&g_rclient, fd, &ipxaddr, ptr->flags)) {
 			RETURN(-1);
 		}
 		
@@ -708,6 +708,28 @@ int WSAAPI setsockopt(SOCKET fd, int level, int optname, const char FAR *optval,
 	return r_setsockopt(fd, level, optname, optval, optlen);
 }
 
+/* Send an IPX packet to the specified address.
+ * Returns true on success, false on failure.
+*/
+static int send_packet(const ipx_packet *packet, int len, struct sockaddr *addr, int addrlen)
+{
+	if(min_log_level <= LOG_DEBUG && addr->sa_family == AF_INET)
+	{
+		struct sockaddr_in *v4 = (struct sockaddr_in*)(addr);
+		
+		IPX_STRING_ADDR(
+			addr_s,
+			addr32_in(packet->dest_net),
+			addr48_in(packet->dest_node),
+			packet->dest_socket
+		);
+		
+		log_printf(LOG_DEBUG, "Sending packet to %s (%s)", addr_s, inet_ntoa(v4->sin_addr));
+	}
+	
+	return (r_sendto(send_fd, (char*)packet, len, 0, addr, addrlen) == len);
+}
+
 int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct sockaddr *addr, int addrlen) {
 	struct sockaddr_ipx_ext *ipxaddr = (struct sockaddr_ipx_ext*)addr;
 	
@@ -780,36 +802,84 @@ int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct s
 		SOCKADDR_STORAGE send_addr;
 		size_t addrlen;
 		
-		if(!addr_cache_get(&send_addr, &addrlen, addr32_in(packet->dest_net), addr48_in(packet->dest_node), packet->dest_socket))
+		int success = 0;
+		
+		if(addr_cache_get(&send_addr, &addrlen, addr32_in(packet->dest_net), addr48_in(packet->dest_node), packet->dest_socket))
 		{
+			/* Address is cached. We can send to the real host. */
+			
+			success = send_packet(
+				packet,
+				psize,
+				(struct sockaddr*)(&send_addr),
+				addrlen
+			);
+		}
+		else{
 			/* No cached address. Send using broadcast. */
 			
-			struct sockaddr_in *bcast = (struct sockaddr_in*)&send_addr;
+			struct sockaddr_in bcast;
 			
-			bcast->sin_family = AF_INET;
-			bcast->sin_addr.s_addr = (main_config.bcast_all ? INADDR_BROADCAST : sockptr->nic_bcast);
-			bcast->sin_port = htons(main_config.udp_port);
+			bcast.sin_family = AF_INET;
+			bcast.sin_port   = htons(main_config.udp_port);
 			
-			addrlen = sizeof(*bcast);
-		}
-		
-		if(min_log_level <= LOG_DEBUG) {
-			/* TODO: Generic address display */
-			
-			struct sockaddr_in *v4 = (struct sockaddr_in*)&send_addr;
-			
-			IPX_STRING_ADDR(addr_s, addr32_in(packet->dest_net), addr48_in(packet->dest_node), packet->dest_socket);
-			
-			log_printf(LOG_DEBUG, "Sending packet to %s (%s)", addr_s, inet_ntoa(v4->sin_addr));
-		}
-		
-		int sval = r_sendto(send_fd, (char*)packet, psize, 0, (struct sockaddr*)&send_addr, addrlen);
-		if(sval == -1) {
-			len = -1;
+			if(main_config.bcast_all)
+			{
+				/* Broadcast on all interfaces. */
+				
+				bcast.sin_addr.s_addr = htonl(INADDR_BROADCAST);
+				
+				success = send_packet(
+					packet,
+					psize,
+					(struct sockaddr*)(&bcast),
+					sizeof(bcast)
+				);
+			}
+			else{
+				/* Broadcast on associated interfaces. */
+				
+				ipx_interface_t *iface = ipx_interface_by_addr(
+					addr32_in(packet->src_net),
+					addr48_in(packet->src_node)
+				);
+				
+				if(iface && iface->ipaddr)
+				{
+					/* Iterate over all the IPs associated
+					 * with this interface and return
+					 * success if the packet makes it out
+					 * through any of them.
+					*/
+					
+					ipx_interface_ip_t* ip;
+					
+					DL_FOREACH(iface->ipaddr, ip)
+					{
+						bcast.sin_addr.s_addr = ip->bcast;
+						
+						success |= send_packet(
+							packet,
+							psize,
+							(struct sockaddr*)(&bcast),
+							sizeof(bcast)
+						);
+					}
+				}
+				else{
+					/* No IP addresses. */
+					
+					WSASetLastError(WSAENETDOWN);
+					success = 0;
+				}
+				
+				free_ipx_interface(iface);
+			}
 		}
 		
 		free(packet);
-		RETURN(len);
+		
+		RETURN(success ? len : -1);
 	}else{
 		return r_sendto(fd, buf, len, flags, addr, addrlen);
 	}

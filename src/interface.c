@@ -220,6 +220,11 @@ ipx_interface_t *copy_ipx_interface(const ipx_interface_t *src)
 /* Free an ipx_interface structure and any memory allocated within. */
 void free_ipx_interface(ipx_interface_t *iface)
 {
+	if(iface == NULL)
+	{
+		return;
+	}
+	
 	ipx_interface_ip_t *a, *a_tmp;
 	
 	DL_FOREACH_SAFE(iface->ipaddr, a, a_tmp)

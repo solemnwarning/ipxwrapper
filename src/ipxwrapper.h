@@ -63,7 +63,6 @@ struct ipx_socket {
 	
 	/* The following values are undefined when IPX_BOUND is not set */
 	struct sockaddr_ipx addr;
-	uint32_t nic_bcast;
 	
 	/* Address used with connect call, only set when IPX_CONNECTED is */
 	struct sockaddr_ipx remote_addr;

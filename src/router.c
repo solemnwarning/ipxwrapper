@@ -322,7 +322,7 @@ DWORD router_main(void *arg) {
 	return 0;
 }
 
-static int router_bind(struct router_vars *router, SOCKET control, SOCKET sock, struct sockaddr_ipx *addr, uint32_t *nic_bcast, int flags) {
+static int router_bind(struct router_vars *router, SOCKET control, SOCKET sock, struct sockaddr_ipx *addr, int flags) {
 	/* Network number 00:00:00:00 is specified as the "current" network, this code
 	 * treats it as a wildcard when used for the network OR node numbers.
 	 *
@@ -366,8 +366,6 @@ static int router_bind(struct router_vars *router, SOCKET control, SOCKET sock, 
 	addr48_out(addr->sa_nodenum, iface->ipx_node);
 	
 	/* TODO: Don't store the IP stuff here. */
-	
-	*nic_bcast = iface->ipaddr->bcast;
 	
 	uint32_t iface_ipaddr  = iface->ipaddr->ipaddr;
 	uint32_t iface_netmask = iface->ipaddr->netmask;
@@ -575,7 +573,7 @@ static BOOL router_handle_call(struct router_vars *router, int sock, struct rout
 		case rc_bind: {
 			ret.ret_addr = call->arg_addr;
 			
-			if(router_bind(router, sock, call->sock, &(ret.ret_addr), &(ret.ret_u32), call->arg_int) == -1) {
+			if(router_bind(router, sock, call->sock, &(ret.ret_addr), call->arg_int) == -1) {
 				ret.err_code = WSAGetLastError();
 			}
 			
@@ -787,7 +785,7 @@ static BOOL rclient_do(struct rclient *rclient, struct router_call *call, struct
 	return TRUE;
 }
 
-BOOL rclient_bind(struct rclient *rclient, SOCKET sock, struct sockaddr_ipx *addr, uint32_t *nic_bcast, BOOL reuse) {
+BOOL rclient_bind(struct rclient *rclient, SOCKET sock, struct sockaddr_ipx *addr, BOOL reuse) {
 	if(rclient->sock != -1) {
 		struct router_call call;
 		struct router_ret ret;
@@ -803,7 +801,6 @@ BOOL rclient_bind(struct rclient *rclient, SOCKET sock, struct sockaddr_ipx *add
 		
 		if(ret.err_code == ERROR_SUCCESS) {
 			*addr = ret.ret_addr;
-			*nic_bcast = ret.ret_u32;
 			
 			return TRUE;
 		}else{
@@ -811,7 +808,7 @@ BOOL rclient_bind(struct rclient *rclient, SOCKET sock, struct sockaddr_ipx *add
 			return FALSE;
 		}
 	}else if(rclient->router) {
-		return router_bind(rclient->router, 0, sock, addr, nic_bcast, reuse) == 0 ? TRUE: FALSE;
+		return router_bind(rclient->router, 0, sock, addr, reuse) == 0 ? TRUE: FALSE;
 	}
 	
 	log_printf(LOG_ERROR, "rclient_bind: No router?!");
