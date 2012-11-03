@@ -35,7 +35,8 @@ main_config_t get_main_config(void)
 	HKEY reg      = reg_open_main(false);
 	DWORD version = reg_get_dword(reg, "config_version", 1);
 	
-	config.single_iface   = reg_get_dword(reg, "single_iface", true);
+	config.iface_mode     = reg_get_dword(reg, "iface_mode", IFACE_MODE_ALL);
+	
 	config.single_netnum  = reg_get_addr32(reg, "single_netnum", addr32_in((unsigned char[]){0x00, 0x00, 0x00, 0x01}));
 	config.single_nodenum = reg_get_addr48(reg, "single_nodenum", 0);
 	
@@ -90,7 +91,7 @@ bool set_main_config(const main_config_t *config)
 {
 	HKEY reg = reg_open_main(true);
 	
-	bool ok = reg_set_dword(reg, "single_iface", config->single_iface)
+	bool ok = reg_set_dword(reg, "iface_mode", config->iface_mode)
 		&& reg_set_addr32(reg, "single_netnum", config->single_netnum)
 		&& reg_set_addr48(reg, "single_nodenum", config->single_nodenum)
 		
