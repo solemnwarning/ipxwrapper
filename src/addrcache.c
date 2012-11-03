@@ -26,6 +26,8 @@
 #include "common.h"
 #include "ipxwrapper.h"
 
+#define ADDR_CACHE_TTL 30
+
 struct host_table_key {
 	addr32_t netnum;
 	addr48_t nodenum;
@@ -123,7 +125,7 @@ int addr_cache_get(SOCKADDR_STORAGE *addr, size_t *addrlen, addr32_t net, addr48
 	
 	host_table_t *host = host_table_find(net, node);
 	
-	if(host && time(NULL) < host->time + main_config.addr_cache_ttl)
+	if(host && time(NULL) < host->time + ADDR_CACHE_TTL)
 	{
 		memcpy(addr, &(host->addr), host->addrlen);
 		*addrlen = host->addrlen;

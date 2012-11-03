@@ -37,9 +37,6 @@ typedef struct main_config {
 	
 	enum ipx_log_level log_level;
 	
-	unsigned int addr_cache_ttl;
-	unsigned int iface_ttl;
-	
 	bool single_iface;
 	addr32_t single_netnum;
 	addr48_t single_nodenum;
