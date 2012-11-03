@@ -393,7 +393,19 @@ static int recv_packet(ipx_socket *sockptr, char *buf, int bufsize, int flags, s
 					addr->sa_flags |= 0x01;
 				}
 				
-				if(ip_is_local(rp_header->src_ipaddr)) {
+				/* Attempt to get an IPX interface using the
+				 * source address to test if the packet claims
+				 * to be from one of our interfaces.
+				*/
+				
+				ipx_interface_t *src_iface = ipx_interface_by_addr(
+					addr32_in(packet->src_net),
+					addr48_in(packet->src_node)
+				);
+				
+				if(src_iface)
+				{
+					free_ipx_interface(src_iface);
 					addr->sa_flags |= 0x02;
 				}
 			}else{

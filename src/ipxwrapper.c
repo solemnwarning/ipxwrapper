@@ -47,11 +47,6 @@ main_config_t main_config;
 struct rclient g_rclient;
 
 static CRITICAL_SECTION sockets_cs;
-static CRITICAL_SECTION addrs_cs;
-
-/* List of local IP addresses with associated IPX interfaces */
-static struct ipaddr_list *local_addrs = NULL;
-static time_t local_updated = 0;
 
 static void init_cs(CRITICAL_SECTION *cs)
 {
@@ -61,8 +56,6 @@ static void init_cs(CRITICAL_SECTION *cs)
 		abort();
 	}
 }
-
-static void free_local_ips(void);
 
 BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 	if(why == DLL_PROCESS_ATTACH) {
@@ -93,7 +86,6 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 		}
 		
 		init_cs(&sockets_cs);
-		init_cs(&addrs_cs);
 		
 		WSADATA wsdata;
 		int err = WSAStartup(MAKEWORD(1,1), &wsdata);
@@ -135,11 +127,8 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 		
 		rclient_stop(&g_rclient);
 		
-		free_local_ips();
-		
 		WSACleanup();
 		
-		DeleteCriticalSection(&addrs_cs);
 		DeleteCriticalSection(&sockets_cs);
 		
 		ipx_interfaces_cleanup();
@@ -187,68 +176,4 @@ void lock_sockets(void) {
 /* Unlock the mutex */
 void unlock_sockets(void) {
 	LeaveCriticalSection(&sockets_cs);
-}
-
-/* Check if supplied IP (network byte order) is a local address */
-BOOL ip_is_local(uint32_t ipaddr) {
-	EnterCriticalSection(&addrs_cs);
-	
-	if(local_updated + main_config.iface_ttl < time(NULL)) {
-		/* TODO: Use all local IPs rather than just the ones with associated IPX addresses? */
-		
-		struct ipx_interface *ifaces = get_ipx_interfaces();
-		struct ipx_interface *i = ifaces;
-		
-		while(i) {
-			/* TODO: Rewrite. */
-			if(!i->ipaddr)
-			{
-				continue;
-			}
-			
-			struct ipaddr_list *nn = malloc(sizeof(struct ipaddr_list));
-			if(!nn) {
-				log_printf(LOG_ERROR, "Out of memory! Can't allocate ipaddr_list structure!");
-				break;
-			}
-			
-			nn->ipaddr = i->ipaddr->ipaddr;
-			nn->next = local_addrs;
-			local_addrs = nn;
-			
-			i = i->next;
-		}
-		
-		free_ipx_interface_list(&ifaces);
-		
-		local_updated = time(NULL);
-	}
-	
-	struct ipaddr_list *p = local_addrs;
-	
-	while(p) {
-		if(p->ipaddr == ipaddr) {
-			LeaveCriticalSection(&addrs_cs);
-			return TRUE;
-		}
-		
-		p = p->next;
-	}
-	
-	LeaveCriticalSection(&addrs_cs);
-	return FALSE;
-}
-
-/* Free local IP address list */
-static void free_local_ips(void) {
-	struct ipaddr_list *p = local_addrs, *d;
-	
-	while(p) {
-		d = p;
-		p = p->next;
-		
-		free(d);
-	}
-	
-	local_addrs = NULL;
 }
