@@ -86,6 +86,8 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 		
 		addr_cache_init();
 		
+		ipx_interfaces_init();
+		
 		if(!rclient_init(&g_rclient)) {
 			return FALSE;
 		}
@@ -140,6 +142,8 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 		DeleteCriticalSection(&addrs_cs);
 		DeleteCriticalSection(&sockets_cs);
 		
+		ipx_interfaces_cleanup();
+		
 		addr_cache_cleanup();
 		
 		unload_dlls();
@@ -192,7 +196,7 @@ BOOL ip_is_local(uint32_t ipaddr) {
 	if(local_updated + main_config.iface_ttl < time(NULL)) {
 		/* TODO: Use all local IPs rather than just the ones with associated IPX addresses? */
 		
-		struct ipx_interface *ifaces = get_interfaces(-1);
+		struct ipx_interface *ifaces = get_ipx_interfaces();
 		struct ipx_interface *i = ifaces;
 		
 		while(i) {
@@ -215,7 +219,7 @@ BOOL ip_is_local(uint32_t ipaddr) {
 			i = i->next;
 		}
 		
-		free_ipx_interfaces(&ifaces);
+		free_ipx_interface_list(&ifaces);
 		
 		local_updated = time(NULL);
 	}

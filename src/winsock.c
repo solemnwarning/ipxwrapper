@@ -524,7 +524,7 @@ int WSAAPI getsockopt(SOCKET fd, int level, int optname, char FAR *optval, int F
 				
 				IPX_ADDRESS_DATA *ipxdata = (IPX_ADDRESS_DATA*)optval;
 				
-				struct ipx_interface *nic = get_interfaces(ipxdata->adapternum);
+				struct ipx_interface *nic = ipx_interface_by_index(ipxdata->adapternum);
 				
 				if(!nic) {
 					RETURN_WSA(ERROR_NO_DATA, -1);
@@ -552,16 +552,7 @@ int WSAAPI getsockopt(SOCKET fd, int level, int optname, char FAR *optval, int F
 			if(optname == IPX_MAX_ADAPTER_NUM) {
 				CHECK_OPTLEN(sizeof(int));
 				
-				*intval = 0;
-				
-				struct ipx_interface *ifaces = get_interfaces(-1), *nic;
-				
-				for(nic = ifaces; nic;) {
-					(*intval)++;
-					nic = nic->next;
-				}
-				
-				free_ipx_interfaces(&ifaces);
+				*intval = ipx_interface_count();
 				
 				RETURN(0);
 			}

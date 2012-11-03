@@ -52,12 +52,22 @@ struct ipx_interface {
 	ipx_interface_t *next;
 };
 
-IP_ADAPTER_INFO *get_sys_interfaces(void);
+IP_ADAPTER_INFO *load_sys_interfaces(void);
+ipx_interface_t *load_ipx_interfaces(void);
 
-ipx_interface_t *get_interfaces(int ifnum);
-
+ipx_interface_t *copy_ipx_interface(const ipx_interface_t *src);
 void free_ipx_interface(ipx_interface_t *iface);
-void free_ipx_interfaces(ipx_interface_t **list);
+
+ipx_interface_t *copy_ipx_interface_list(const ipx_interface_t *src);
+void free_ipx_interface_list(ipx_interface_t **list);
+
+void ipx_interfaces_init(void);
+void ipx_interfaces_cleanup(void);
+
+ipx_interface_t *get_ipx_interfaces(void);
+ipx_interface_t *ipx_interface_by_addr(addr32_t net, addr48_t node);
+ipx_interface_t *ipx_interface_by_index(int index);
+int ipx_interface_count(void);
 
 #ifdef __cplusplus
 }
