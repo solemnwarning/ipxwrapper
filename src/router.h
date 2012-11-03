@@ -58,10 +58,6 @@ struct router_addr {
 	int filter_ptype;	/* Packet type filter, negative to disable */
 	int flags;
 	
-	/* Address of IP interface */
-	uint32_t ipaddr;
-	uint32_t netmask;
-	
 	/* Only accept packets from this address (any if AF_UNSPEC) */
 	struct sockaddr_ipx remote_addr;
 	
