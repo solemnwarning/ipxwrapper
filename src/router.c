@@ -289,7 +289,8 @@ DWORD router_main(void *arg) {
 		
 		struct router_addr *ra = router->addrs;
 		
-		while(ra) {
+		for(; ra; ra = ra->next)
+		{
 			if(
 				ra->local_port &&
 				(ra->filter_ptype < 0 || ra->filter_ptype == packet->ptype) &&
@@ -297,23 +298,72 @@ DWORD router_main(void *arg) {
 				(memcmp(packet->dest_node, ra->addr.sa_nodenum, 6) == 0 || (memcmp(packet->dest_node, f6, 6) == 0 && (ra->flags & IPX_BROADCAST || !main_config.w95_bug) && ra->flags & IPX_RECV_BCAST)) &&
 				packet->dest_socket == ra->addr.sa_socket &&
 				
-				/* Check source IP is within correct subnet */
-				((ra->ipaddr & ra->netmask) == (addr.sin_addr.s_addr & ra->netmask) || !main_config.src_filter) &&
-				
 				/* Check source address matches remote_addr if set */
 				(ra->remote_addr.sa_family == AF_UNSPEC || (memcmp(ra->remote_addr.sa_netnum, packet->src_net, 4) == 0 && memcmp(ra->remote_addr.sa_nodenum, packet->src_node, 6) == 0))
 			) {
+				addr32_t ra_net  = addr32_in(ra->addr.sa_netnum);
+				addr48_t ra_node = addr48_in(ra->addr.sa_nodenum);
+				
+				/* Check source address */
+				
+				if(main_config.iface_mode != IFACE_MODE_ALL)
+				{
+					/* Fetch the interface this socket is bound to. */
+					
+					ipx_interface_t *iface = ipx_interface_by_addr(ra_net, ra_node);
+					
+					if(!iface)
+					{
+						char net_s[ADDR32_STRING_SIZE], node_s[ADDR48_STRING_SIZE];
+						
+						addr32_string(net_s, ra_net);
+						addr48_string(node_s, ra_node);
+						
+						log_printf(LOG_WARNING, "No iface for %s/%s! Stale bind?", net_s, node_s);
+						
+						continue;
+					}
+					
+					/* Iterate over the subnets and compare
+					 * to the packet source address.
+					*/
+					
+					ipx_interface_ip_t *ip;
+					
+					int source_ok = 0;
+					
+					DL_FOREACH(iface->ipaddr, ip)
+					{
+						if((ip->ipaddr & ip->netmask) == (addr.sin_addr.s_addr & ip->netmask))
+						{
+							source_ok = 1;
+							break;
+						}
+					}
+					
+					free_ipx_interface(iface);
+					
+					if(!source_ok)
+					{
+						/* Source matching failed. */
+						
+						continue;
+					}
+				}
+				
 				log_printf(LOG_DEBUG, "Relaying packet to local port %hu", ntohs(ra->local_port));
 				
-				addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-				addr.sin_port = ra->local_port;
+				struct sockaddr_in send_addr;
 				
-				if(sendto(router->udp_sock, (char*)rp_header, sizeof(*rp_header) + len, 0, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
+				send_addr.sin_family      = AF_INET;
+				send_addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+				send_addr.sin_port        = ra->local_port;
+				
+				if(sendto(router->udp_sock, (char*)rp_header, sizeof(*rp_header) + len, 0, (struct sockaddr*)&send_addr, sizeof(send_addr)) == -1)
+				{
 					log_printf(LOG_ERROR, "Error relaying packet: %s", w32_error(WSAGetLastError()));
 				}
 			}
-			
-			ra = ra->next;
 		}
 		
 		LeaveCriticalSection(&(router->crit_sec));
