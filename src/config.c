@@ -30,13 +30,9 @@ main_config_t get_main_config(void)
 	config.udp_port       = DEFAULT_PORT;
 	config.router_port    = DEFAULT_ROUTER_PORT;
 	config.w95_bug        = true;
-	config.bcast_all      = false;
-	config.src_filter     = true;
 	
 	HKEY reg      = reg_open_main(false);
 	DWORD version = reg_get_dword(reg, "config_version", 1);
-	
-	config.iface_mode     = reg_get_dword(reg, "iface_mode", IFACE_MODE_ALL);
 	
 	if(version == 1)
 	{
@@ -46,8 +42,6 @@ main_config_t get_main_config(void)
 		{
 			config.udp_port   = reg_config.udp_port;
 			config.w95_bug    = reg_config.w95_bug;
-			config.bcast_all  = reg_config.bcast_all;
-			config.src_filter = reg_config.filter;
 		}
 		
 		config.router_port = reg_get_dword(reg, "control_port", config.router_port);
@@ -59,8 +53,6 @@ main_config_t get_main_config(void)
 		config.udp_port    = reg_get_dword(reg, "port", config.udp_port);
 		config.router_port = reg_get_dword(reg, "router_port", config.router_port);
 		config.w95_bug     = reg_get_dword(reg, "w95_bug", config.w95_bug);
-		config.bcast_all   = reg_get_dword(reg, "bcast_all", config.bcast_all);
-		config.src_filter  = reg_get_dword(reg, "src_filter", config.src_filter);
 		
 		config.log_level   = reg_get_dword(reg, "log_level", LOG_INFO);
 	}
@@ -74,13 +66,9 @@ bool set_main_config(const main_config_t *config)
 {
 	HKEY reg = reg_open_main(true);
 	
-	bool ok = reg_set_dword(reg, "iface_mode", config->iface_mode)
-		
-		&& reg_set_dword(reg, "port", config->udp_port)
+	bool ok = reg_set_dword(reg, "port", config->udp_port)
 		&& reg_set_dword(reg, "router_port", config->router_port)
 		&& reg_set_dword(reg, "w95_bug", config->w95_bug)
-		&& reg_set_dword(reg, "bcast_all", config->bcast_all)
-		&& reg_set_dword(reg, "src_filter", config->src_filter)
 		
 		&& reg_set_dword(reg, "log_level", config->log_level)
 		

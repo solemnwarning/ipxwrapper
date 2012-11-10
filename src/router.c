@@ -304,51 +304,48 @@ DWORD router_main(void *arg) {
 				addr32_t ra_net  = addr32_in(ra->addr.sa_netnum);
 				addr48_t ra_node = addr48_in(ra->addr.sa_nodenum);
 				
-				/* Check source address */
+				/* Fetch the interface this socket is bound to. */
 				
-				if(main_config.iface_mode != IFACE_MODE_ALL)
+				ipx_interface_t *iface = ipx_interface_by_addr(ra_net, ra_node);
+				
+				if(!iface)
 				{
-					/* Fetch the interface this socket is bound to. */
+					char net_s[ADDR32_STRING_SIZE], node_s[ADDR48_STRING_SIZE];
 					
-					ipx_interface_t *iface = ipx_interface_by_addr(ra_net, ra_node);
+					addr32_string(net_s, ra_net);
+					addr48_string(node_s, ra_node);
 					
-					if(!iface)
+					log_printf(LOG_WARNING, "No iface for %s/%s! Stale bind?", net_s, node_s);
+					
+					continue;
+				}
+				
+				/* Iterate over the subnets and compare to the
+				 * packet source IP address.
+				*/
+				
+				ipx_interface_ip_t *ip;
+				
+				int source_ok = 0;
+				
+				DL_FOREACH(iface->ipaddr, ip)
+				{
+					if((ip->ipaddr & ip->netmask) == (addr.sin_addr.s_addr & ip->netmask))
 					{
-						char net_s[ADDR32_STRING_SIZE], node_s[ADDR48_STRING_SIZE];
-						
-						addr32_string(net_s, ra_net);
-						addr48_string(node_s, ra_node);
-						
-						log_printf(LOG_WARNING, "No iface for %s/%s! Stale bind?", net_s, node_s);
-						
-						continue;
+						source_ok = 1;
+						break;
 					}
-					
-					/* Iterate over the subnets and compare
-					 * to the packet source address.
+				}
+				
+				free_ipx_interface(iface);
+				
+				if(!source_ok)
+				{
+					/* Packet did not originate from an
+					 * associated network.
 					*/
 					
-					ipx_interface_ip_t *ip;
-					
-					int source_ok = 0;
-					
-					DL_FOREACH(iface->ipaddr, ip)
-					{
-						if((ip->ipaddr & ip->netmask) == (addr.sin_addr.s_addr & ip->netmask))
-						{
-							source_ok = 1;
-							break;
-						}
-					}
-					
-					free_ipx_interface(iface);
-					
-					if(!source_ok)
-					{
-						/* Source matching failed. */
-						
-						continue;
-					}
+					continue;
 				}
 				
 				log_printf(LOG_DEBUG, "Relaying packet to local port %hu", ntohs(ra->local_port));

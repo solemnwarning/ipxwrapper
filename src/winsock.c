@@ -724,7 +724,7 @@ static int send_packet(const ipx_packet *packet, int len, struct sockaddr *addr,
 			packet->dest_socket
 		);
 		
-		log_printf(LOG_DEBUG, "Sending packet to %s (%s)", addr_s, inet_ntoa(v4->sin_addr));
+		log_printf(LOG_DEBUG, "Sending packet to %s (%s:%hu)", addr_s, inet_ntoa(v4->sin_addr), ntohs(v4->sin_port));
 	}
 	
 	return (r_sendto(send_fd, (char*)packet, len, 0, addr, addrlen) == len);
@@ -818,63 +818,45 @@ int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct s
 		else{
 			/* No cached address. Send using broadcast. */
 			
-			struct sockaddr_in bcast;
+			ipx_interface_t *iface = ipx_interface_by_addr(
+				addr32_in(packet->src_net),
+				addr48_in(packet->src_node)
+			);
 			
-			bcast.sin_family = AF_INET;
-			bcast.sin_port   = htons(main_config.udp_port);
-			
-			if(main_config.bcast_all)
+			if(iface && iface->ipaddr)
 			{
-				/* Broadcast on all interfaces. */
+				/* Iterate over all the IPs associated
+				 * with this interface and return
+				 * success if the packet makes it out
+				 * through any of them.
+				*/
 				
-				bcast.sin_addr.s_addr = htonl(INADDR_BROADCAST);
+				ipx_interface_ip_t* ip;
 				
-				success = send_packet(
-					packet,
-					psize,
-					(struct sockaddr*)(&bcast),
-					sizeof(bcast)
-				);
+				DL_FOREACH(iface->ipaddr, ip)
+				{
+					struct sockaddr_in bcast;
+					
+					bcast.sin_family      = AF_INET;
+					bcast.sin_port        = htons(main_config.udp_port);
+					bcast.sin_addr.s_addr = ip->bcast;
+					
+					success |= send_packet(
+						packet,
+						psize,
+						(struct sockaddr*)(&bcast),
+						sizeof(bcast)
+					);
+				}
 			}
 			else{
-				/* Broadcast on associated interfaces. */
+				/* No IP addresses. */
 				
-				ipx_interface_t *iface = ipx_interface_by_addr(
-					addr32_in(packet->src_net),
-					addr48_in(packet->src_node)
-				);
-				
-				if(iface && iface->ipaddr)
-				{
-					/* Iterate over all the IPs associated
-					 * with this interface and return
-					 * success if the packet makes it out
-					 * through any of them.
-					*/
-					
-					ipx_interface_ip_t* ip;
-					
-					DL_FOREACH(iface->ipaddr, ip)
-					{
-						bcast.sin_addr.s_addr = ip->bcast;
-						
-						success |= send_packet(
-							packet,
-							psize,
-							(struct sockaddr*)(&bcast),
-							sizeof(bcast)
-						);
-					}
-				}
-				else{
-					/* No IP addresses. */
-					
-					WSASetLastError(WSAENETDOWN);
-					success = 0;
-				}
-				
-				free_ipx_interface(iface);
+				WSASetLastError(WSAENETDOWN);
+				success = 0;
 			}
+			
+			free_ipx_interface(iface);
 		}
 		
 		free(packet);

@@ -21,26 +21,6 @@
 #define DEFAULT_PORT 54792
 #define DEFAULT_ROUTER_PORT 54793
 
-/* IFACE_MODE_ALL
- * 
- * Packets are sent/received on all interfaces and no source address filtering
- * is performed. A single IPX interface is presented.
- * 
- * IFACE_MODE_SINGLE
- * 
- * Packets are sent/received on user-chosen interfaces. A single IPX interface
- * is presented.
- * 
- * IFACE_MODE_MULTI
- * 
- * An IPX interface is presented for each (enabled) real interface and packets
- * are sent or received on the single underlying interface of the IPX one.
-*/
-
-#define IFACE_MODE_ALL    1
-#define IFACE_MODE_SINGLE 2
-#define IFACE_MODE_MULTI  3
-
 #include "common.h"
 
 #ifdef __cplusplus
@@ -52,12 +32,8 @@ typedef struct main_config {
 	uint16_t router_port;
 	
 	bool w95_bug;
-	bool bcast_all;
-	bool src_filter;
 	
 	enum ipx_log_level log_level;
-	
-	int iface_mode;
 } main_config_t;
 
 struct v1_global_config {
