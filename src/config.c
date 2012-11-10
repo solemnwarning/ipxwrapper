@@ -19,6 +19,7 @@
 
 #include "config.h"
 #include "common.h"
+#include "interface.h"
 
 main_config_t get_main_config(void)
 {
@@ -36,24 +37,6 @@ main_config_t get_main_config(void)
 	DWORD version = reg_get_dword(reg, "config_version", 1);
 	
 	config.iface_mode     = reg_get_dword(reg, "iface_mode", IFACE_MODE_ALL);
-	
-	config.single_netnum  = reg_get_addr32(reg, "single_netnum", addr32_in((unsigned char[]){0x00, 0x00, 0x00, 0x01}));
-	config.single_nodenum = reg_get_addr48(reg, "single_nodenum", 0);
-	
-	if(config.single_nodenum == 0)
-	{
-		/* Generate a random node number and store it in the registry
-		 * for persistence.
-		*/
-		
-		config.single_nodenum = gen_random_mac();
-		
-		HKEY wreg = reg_open_main(true);
-		
-		reg_set_addr48(wreg, "single_nodenum", config.single_nodenum);
-		
-		reg_close(wreg);
-	}
 	
 	if(version == 1)
 	{
@@ -92,8 +75,6 @@ bool set_main_config(const main_config_t *config)
 	HKEY reg = reg_open_main(true);
 	
 	bool ok = reg_set_dword(reg, "iface_mode", config->iface_mode)
-		&& reg_set_addr32(reg, "single_netnum", config->single_netnum)
-		&& reg_set_addr48(reg, "single_nodenum", config->single_nodenum)
 		
 		&& reg_set_dword(reg, "port", config->udp_port)
 		&& reg_set_dword(reg, "router_port", config->router_port)
@@ -115,15 +96,23 @@ iface_config_t get_iface_config(addr48_t hwaddr)
 	char id[18];
 	addr48_string(id, hwaddr);
 	
-	addr32_t default_net = addr32_in((unsigned char[]){0x00, 0x00, 0x00, 0x01});
+	iface_config_t config = {
+		.netnum  = addr32_in((unsigned char[]){0x00, 0x00, 0x00, 0x01}),
+		.nodenum = hwaddr,
+		
+		.enabled = true
+	};
 	
-	iface_config_t config;
+	HKEY reg   = reg_open_main(false);
+	HKEY ifreg = reg_open_subkey(reg, id, false);
 	
-	HKEY reg      = reg_open_main(false);
-	DWORD version = reg_get_dword(reg, "config_version", 1);
-	
-	if(version == 1)
+	if(ifreg)
 	{
+		config.netnum  = reg_get_addr32(ifreg, "net", config.netnum);
+		config.nodenum = reg_get_addr48(ifreg, "node", config.nodenum);
+		config.enabled = reg_get_dword(ifreg, "enabled", config.enabled);
+	}
+	else{
 		struct v1_iface_config reg_config;
 		
 		if(reg_get_bin(reg, id, &reg_config, sizeof(reg_config), NULL))
@@ -131,30 +120,21 @@ iface_config_t get_iface_config(addr48_t hwaddr)
 			config.netnum  = addr32_in(reg_config.ipx_net);
 			config.nodenum = addr48_in(reg_config.ipx_node);
 			config.enabled = reg_config.enabled;
-			
-			reg_close(reg);
-			
-			return config;
 		}
 	}
-	else if(version == 2)
+	
+	if(hwaddr == WILDCARD_IFACE_HWADDR && config.nodenum == hwaddr)
 	{
-		HKEY iface_reg = reg_open_subkey(reg, id, false);
+		/* Generate a random node number for the wildcard interface and
+		 * store it in the registry for persistence.
+		*/
 		
-		config.netnum  = reg_get_addr32(iface_reg, "net", default_net);
-		config.nodenum = reg_get_addr48(iface_reg, "node", hwaddr);
-		config.enabled = reg_get_dword(iface_reg, "enabled", true);
+		config.nodenum = gen_random_mac();
 		
-		reg_close(iface_reg);
-		reg_close(reg);
-		
-		return config;
+		set_iface_config(hwaddr, &config);
 	}
 	
-	config.netnum  = default_net;
-	config.nodenum = hwaddr;
-	config.enabled = true;
-	
+	reg_close(ifreg);
 	reg_close(reg);
 	
 	return config;
@@ -169,8 +149,8 @@ bool set_iface_config(addr48_t hwaddr, const iface_config_t *config)
 	HKEY ifreg = reg_open_subkey(reg, id, true);
 	
 	bool ok = reg_set_addr32(ifreg, "net", config->netnum)
-		&& reg_set_addr32(ifreg, "node", config->nodenum)
-		&& reg_set_addr32(ifreg, "enabled", config->enabled);
+		&& reg_set_addr48(ifreg, "node", config->nodenum)
+		&& reg_set_dword(ifreg, "enabled", config->enabled);
 	
 	reg_close(ifreg);
 	reg_close(reg);

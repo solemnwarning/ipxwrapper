@@ -76,6 +76,46 @@ IP_ADAPTER_INFO *load_sys_interfaces(void)
 	return ifroot;
 }
 
+/* Allocate and initialise a new ipx_interface structure.
+ * Returns NULL on malloc failure.
+*/
+static ipx_interface_t *_new_iface(addr32_t net, addr48_t node)
+{
+	ipx_interface_t *iface = malloc(sizeof(ipx_interface_t));
+	if(!iface)
+	{
+		log_printf(LOG_ERROR, "Cannot allocate ipx_interface!");
+	}
+	
+	memset(iface, 0, sizeof(*iface));
+	
+	iface->ipx_net  = net;
+	iface->ipx_node = node;
+	
+	return iface;
+}
+
+/* Add an IP address to an ipx_interface structure.
+ * Returns false on malloc failure.
+*/
+static bool _push_addr(ipx_interface_t *iface, uint32_t ipaddr, uint32_t netmask)
+{
+	ipx_interface_ip_t *addr = malloc(sizeof(ipx_interface_ip_t));
+	if(!addr)
+	{
+		log_printf(LOG_ERROR, "Couldn't allocate ipx_interface_ip!");
+		return false;
+	}
+	
+	addr->ipaddr  = ipaddr;
+	addr->netmask = netmask;
+	addr->bcast   = ipaddr | (~netmask);
+	
+	DL_APPEND(iface->ipaddr, addr);
+	
+	return true;
+}
+
 /* Load a list of virtual IPX interfaces. */
 ipx_interface_t *load_ipx_interfaces(void)
 {
@@ -84,6 +124,32 @@ ipx_interface_t *load_ipx_interfaces(void)
 	addr48_t primary = get_primary_iface();
 	
 	ipx_interface_t *nics = NULL;
+	
+	iface_config_t wc_config = get_iface_config(WILDCARD_IFACE_HWADDR);
+	
+	if(wc_config.enabled)
+	{
+		/* Initialise wildcard interface. */
+		
+		ipx_interface_t *wc_iface = _new_iface(wc_config.netnum, wc_config.nodenum);
+		if(!wc_iface)
+		{
+			return NULL;
+		}
+		
+		/* Use 0.0.0.0/0 as the IP/network of the wildcard interface
+		 * to broadcast to 255.255.255.255 and match packets from any
+		 * address.
+		*/
+		
+		if(!_push_addr(wc_iface, 0, 0))
+		{
+			free_ipx_interface(wc_iface);
+			return NULL;
+		}
+		
+		DL_APPEND(nics, wc_iface);
+	}
 	
 	for(ifptr = ifroot; ifptr; ifptr = ifptr->Next)
 	{
@@ -99,16 +165,16 @@ ipx_interface_t *load_ipx_interfaces(void)
 			continue;
 		}
 		
-		ipx_interface_t *iface = malloc(sizeof(ipx_interface_t));
+		ipx_interface_t *iface = _new_iface(config.netnum, config.nodenum);
 		if(!iface)
 		{
-			log_printf(LOG_ERROR, "Couldn't allocate ipx_interface!");
-			
 			free_ipx_interface_list(&nics);
 			return NULL;
 		}
 		
-		iface->ipaddr = NULL;
+		/* Iterate over the interface IP address list and add them to
+		 * the ipx_interface structure.
+		*/
 		
 		IP_ADDR_STRING *ip_ptr = &(ifptr->IpAddressList);
 		
@@ -126,28 +192,14 @@ ipx_interface_t *load_ipx_interfaces(void)
 				continue;
 			}
 			
-			ipx_interface_ip_t *addr = malloc(sizeof(ipx_interface_ip_t));
-			if(!addr)
+			if(!_push_addr(iface, ipaddr, netmask))
 			{
-				log_printf(LOG_ERROR, "Couldn't allocate ipx_interface_ip!");
-				
 				free_ipx_interface(iface);
 				free_ipx_interface_list(&nics);
 				
-				continue;
+				return NULL;
 			}
-			
-			addr->ipaddr  = ipaddr;
-			addr->netmask = netmask;
-			addr->bcast   = ipaddr | (~netmask);
-			
-			DL_APPEND(iface->ipaddr, addr);
 		}
-		
-		iface->hwaddr = hwaddr;
-		
-		iface->ipx_net  = config.netnum;
-		iface->ipx_node = config.nodenum;
 		
 		/* Workaround for buggy versions of Hamachi that don't initialise
 		 * the interface hardware address correctly.
@@ -163,7 +215,7 @@ ipx_interface_t *load_ipx_interfaces(void)
 			iface->ipx_node = addr48_in(hamachi_bug);
 		}
 		
-		if(iface->hwaddr == primary)
+		if(hwaddr == primary)
 		{
 			/* Primary interface, insert at the start of the list */
 			DL_PREPEND(nics, iface);

@@ -18,6 +18,7 @@
 #ifndef IPXWRAPPER_INTERFACE_H
 #define IPXWRAPPER_INTERFACE_H
 
+#include <iphlpapi.h>
 #include <stdint.h>
 #include <utlist.h>
 
@@ -26,6 +27,8 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#define WILDCARD_IFACE_HWADDR addr48_in((unsigned char[]){0x00,0x00,0x00,0x00,0x00,0x00})
 
 typedef struct ipx_interface_ip ipx_interface_ip_t;
 
@@ -41,8 +44,6 @@ struct ipx_interface_ip {
 typedef struct ipx_interface ipx_interface_t;
 
 struct ipx_interface {
-	addr48_t hwaddr;
-	
 	addr32_t ipx_net;
 	addr48_t ipx_node;
 	

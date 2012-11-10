@@ -97,7 +97,7 @@ addr32_t reg_get_addr32(HKEY key, const char *name, addr32_t default_value)
 {
 	unsigned char buf[4], default_buf[4];
 	
-	addr48_out(default_buf, default_value);
+	addr32_out(default_buf, default_value);
 	reg_get_bin(key, name, buf, 4, default_buf);
 	
 	return addr32_in(buf);

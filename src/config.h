@@ -58,9 +58,6 @@ typedef struct main_config {
 	enum ipx_log_level log_level;
 	
 	int iface_mode;
-	
-	addr32_t single_netnum;
-	addr48_t single_nodenum;
 } main_config_t;
 
 struct v1_global_config {
