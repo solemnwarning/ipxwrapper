@@ -190,9 +190,9 @@ bool reg_set_addr48(HKEY key, const char *name, addr48_t value)
 void ipx_to_string(char *buf, addr32_t net, addr48_t node, uint16_t sock)
 {
 	addr32_string(buf, net);
-	buf[17] = '/';
+	buf[11] = '/';
 	
-	addr48_string(buf + 18, node);
+	addr48_string(buf + 12, node);
 	buf[29] = '/';
 	
 	sprintf(buf + 30, "%hu", ntohs(sock));
