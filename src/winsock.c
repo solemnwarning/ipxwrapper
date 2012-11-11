@@ -154,19 +154,22 @@ INT WINAPI WSHEnumProtocols(LPINT protocols, LPWSTR ign, LPVOID buf, LPDWORD bsp
 	return do_EnumProtocols(protocols, buf, bsptr, FALSE);
 }
 
-SOCKET WSAAPI socket(int af, int type, int protocol) {
+SOCKET WSAAPI socket(int af, int type, int protocol)
+{
 	log_printf(LOG_DEBUG, "socket(%d, %d, %d)", af, type, protocol);
 	
-	if(af == AF_IPX) {
+	if(af == AF_IPX)
+	{
 		ipx_socket *nsock = malloc(sizeof(ipx_socket));
-		if(!nsock) {
+		if(!nsock)
+		{
 			WSASetLastError(ERROR_OUTOFMEMORY);
 			return -1;
 		}
 		
-		nsock->fd = r_socket(AF_INET, SOCK_DGRAM, 0);
-		if(nsock->fd == -1) {
-			log_printf(LOG_ERROR, "Creating fake socket failed: %s", w32_error(WSAGetLastError()));
+		if((nsock->fd = r_socket(AF_INET, SOCK_DGRAM, 0)) == -1)
+		{
+			log_printf(LOG_ERROR, "Cannot create UDP socket: %s", w32_error(WSAGetLastError()));
 			
 			free(nsock);
 			return -1;
@@ -175,59 +178,49 @@ SOCKET WSAAPI socket(int af, int type, int protocol) {
 		nsock->flags = IPX_SEND | IPX_RECV | IPX_RECV_BCAST;
 		nsock->s_ptype = (protocol ? NSPROTO_IPX - protocol : 0);
 		
-		lock_sockets();
-		
-		nsock->next = sockets;
-		sockets = nsock;
-		
 		log_printf(LOG_INFO, "IPX socket created (fd = %d)", nsock->fd);
 		
-		RETURN(nsock->fd);
-	}else{
+		lock_sockets();
+		HASH_ADD_INT(sockets, fd, nsock);
+		unlock_sockets();
+		
+		return nsock->fd;
+	}
+	else{
 		return r_socket(af, type, protocol);
 	}
 }
 
-int WSAAPI closesocket(SOCKET fd) {
-	int ret = r_closesocket(fd);
+int WSAAPI closesocket(SOCKET sockfd)
+{
+	int ret = r_closesocket(sockfd);
 	
-	ipx_socket *ptr = get_socket(fd);
-	ipx_socket *pptr = sockets;
-	
-	if(!ptr) {
+	ipx_socket *sock = get_socket(sockfd);
+	if(!sock)
+	{
 		/* Not an IPX socket */
 		return ret;
 	}
 	
-	if(ret == SOCKET_ERROR) {
-		log_printf(LOG_ERROR, "closesocket(%d) failed: %s", fd, w32_error(WSAGetLastError()));
+	if(ret == SOCKET_ERROR)
+	{
+		log_printf(LOG_ERROR, "closesocket(%d): %s", sockfd, w32_error(WSAGetLastError()));
 		RETURN(SOCKET_ERROR);
 	}
 	
-	log_printf(LOG_INFO, "IPX socket closed (fd = %d)", fd);
+	log_printf(LOG_INFO, "IPX socket closed (fd = %d)", sockfd);
 	
-	if(ptr->flags & IPX_BOUND)
+	if(sock->flags & IPX_BOUND)
 	{
-		addr_table_remove(ptr->port);
+		addr_table_remove(sock->port);
 	}
 	
-	if(ptr == sockets) {
-		sockets = ptr->next;
-		free(ptr);
-	}else{
-		while(ptr && pptr->next) {
-			if(ptr == pptr->next) {
-				pptr->next = ptr->next;
-				free(ptr);
-				
-				break;
-			}
-			
-			pptr = pptr->next;
-		}
-	}
+	HASH_DEL(sockets, sock);
+	free(sock);
 	
-	RETURN(0);
+	unlock_sockets();
+	
+	return 0;
 }
 
 static bool _complete_bind_address(struct sockaddr_ipx *addr)

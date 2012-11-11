@@ -23,6 +23,7 @@
 #include <wsipx.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <uthash.h>
 
 #include "config.h"
 #include "router.h"
@@ -71,7 +72,7 @@ struct ipx_socket {
 	/* Address used with connect call, only set when IPX_CONNECTED is */
 	struct sockaddr_ipx remote_addr;
 	
-	ipx_socket *next;
+	UT_hash_handle hh;
 };
 
 struct ipx_packet {
@@ -92,7 +93,7 @@ struct ipx_packet {
 extern ipx_socket *sockets;
 extern main_config_t main_config;
 
-ipx_socket *get_socket(SOCKET fd);
+ipx_socket *get_socket(SOCKET sockfd);
 void lock_sockets(void);
 void unlock_sockets(void);
 

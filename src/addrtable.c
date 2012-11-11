@@ -21,6 +21,7 @@
 
 #include <windows.h>
 #include <winsock2.h>
+#include <uthash.h>
 
 #include "addrtable.h"
 #include "ipxwrapper.h"
@@ -176,9 +177,9 @@ bool addr_table_check(const struct sockaddr_ipx *addr, bool reuse)
 		
 		lock_sockets();
 		
-		ipx_socket *s = sockets;
+		ipx_socket *s, *tmp;
 		
-		for(; s; s = s->next)
+		HASH_ITER(hh, sockets, s, tmp)
 		{
 			if(memcmp(&(s->addr), addr, sizeof(struct sockaddr_ipx)) == 0 && (!(s->flags & IPX_REUSE) || !reuse))
 			{
@@ -236,9 +237,9 @@ uint16_t addr_table_auto_socket(void)
 	else{
 		lock_sockets();
 		
-		ipx_socket *s = sockets;
+		ipx_socket *s, *tmp;
 		
-		while(s)
+		HASH_ITER(hh, sockets, s, tmp)
 		{
 			if((s->flags & IPX_BOUND) && ntohs(sock) == s->addr.sa_socket)
 			{
@@ -253,8 +254,6 @@ uint16_t addr_table_auto_socket(void)
 				s = sockets;
 				continue;
 			}
-			
-			s = s->next;
 		}
 		
 		unlock_sockets();
@@ -367,8 +366,6 @@ void addr_table_update(void)
 	
 	addr_table_lock();
 	
-	ipx_socket *sock = sockets;
-	
 	/* Remove any expired entries. */
 	
 	addr_table_entry_t *entry = addr_table_base;
@@ -393,7 +390,9 @@ void addr_table_update(void)
 	
 	/* This is really, really efficient. */
 	
-	for(; sock; sock = sock->next)
+	ipx_socket *sock, *tmp;
+	
+	HASH_ITER(hh, sockets, sock, tmp)
 	{
 		if(sock->flags & IPX_BOUND)
 		{

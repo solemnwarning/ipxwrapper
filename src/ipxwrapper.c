@@ -113,37 +113,34 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res)
 	return TRUE;
 }
 
-/* Lock the mutex and search the sockets list for an ipx_socket structure with
- * the requested fd, if no matching fd is found, unlock the mutex
- *
- * TODO: Change this behaviour. It is almost as bad as the BKL.
+/* Lock the sockets table and search for one by file descriptor.
+ * 
+ * Returns an ipx_socket pointer on success, unlocks the sockets table and
+ * returns NULL if no match is found.
 */
-ipx_socket *get_socket(SOCKET fd) {
+ipx_socket *get_socket(SOCKET sockfd)
+{
 	lock_sockets();
 	
-	ipx_socket *ptr = sockets;
+	ipx_socket *sock;
+	HASH_FIND_INT(sockets, &sockfd, sock);
 	
-	while(ptr) {
-		if(ptr->fd == fd) {
-			break;
-		}
-		
-		ptr = ptr->next;
-	}
-	
-	if(!ptr) {
+	if(!sock)
+	{
 		unlock_sockets();
 	}
 	
-	return ptr;
+	return sock;
 }
 
 /* Lock the mutex */
-void lock_sockets(void) {
+void lock_sockets(void)
+{
 	EnterCriticalSection(&sockets_cs);
 }
 
 /* Unlock the mutex */
-void unlock_sockets(void) {
+void unlock_sockets(void)
+{
 	LeaveCriticalSection(&sockets_cs);
 }

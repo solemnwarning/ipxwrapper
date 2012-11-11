@@ -17,6 +17,7 @@
 
 #include <windows.h>
 #include <winsock2.h>
+#include <uthash.h>
 
 #include "router.h"
 #include "common.h"
@@ -205,9 +206,9 @@ static bool handle_recv(int fd)
 	
 	lock_sockets();
 	
-	ipx_socket *sock = sockets;
+	ipx_socket *sock, *tmp;
 	
-	for(; sock; sock = sock->next)
+	HASH_ITER(hh, sockets, sock, tmp)
 	{
 		if(
 			/* Socket is bound and not shutdown for recv. */
