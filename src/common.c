@@ -68,7 +68,11 @@ HKEY reg_open_subkey(HKEY parent, const char *path, bool readwrite)
 	
 	if(err != ERROR_SUCCESS)
 	{
-		log_printf(LOG_ERROR, "Could not open registry: %s", w32_error(err));
+		if(err != ERROR_FILE_NOT_FOUND)
+		{
+			log_printf(LOG_ERROR, "Could not open registry: %s", w32_error(err));
+		}
+		
 		return NULL;
 	}
 	

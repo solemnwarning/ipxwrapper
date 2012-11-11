@@ -27,6 +27,7 @@
 #include "interface.h"
 #include "router.h"
 #include "addrcache.h"
+#include "addrtable.h"
 
 typedef struct _PROTOCOL_INFO {
 	DWORD dwServiceFlags ;
@@ -205,8 +206,9 @@ int WSAAPI closesocket(SOCKET fd) {
 	
 	log_printf(LOG_INFO, "IPX socket closed (fd = %d)", fd);
 	
-	if(ptr->flags & IPX_BOUND) {
-		rclient_unbind(&g_rclient, fd);
+	if(ptr->flags & IPX_BOUND)
+	{
+		addr_table_remove(ptr->port);
 	}
 	
 	if(ptr == sockets) {
@@ -228,13 +230,76 @@ int WSAAPI closesocket(SOCKET fd) {
 	RETURN(0);
 }
 
-int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen) {
-	ipx_socket *ptr = get_socket(fd);
+static bool _complete_bind_address(struct sockaddr_ipx *addr)
+{
+	/* Network number 00:00:00:00 is specified as the "current" network, this code
+	 * treats it as a wildcard when used for the network OR node numbers.
+	 *
+	 * According to MSDN 6, IPX socket numbers are unique to systems rather than
+	 * interfaces and as such, the same socket number cannot be bound to more than
+	 * one interface.
+	 *
+	 * If you know the above information about IPX socket numbers to be incorrect,
+	 * PLEASE email me with corrections!
+	*/
 	
-	if(ptr) {
+	/* Iterate over the interfaces list, stop at the first match. */
+	
+	struct ipx_interface *ifaces = get_ipx_interfaces(), *iface;
+	
+	addr32_t netnum  = addr32_in(addr->sa_netnum);
+	addr48_t nodenum = addr48_in(addr->sa_nodenum);
+	
+	for(iface = ifaces; iface; iface = iface->next)
+	{
+		if(
+			(netnum == iface->ipx_net || netnum == 0)
+			&& (nodenum == iface->ipx_node || nodenum == 0)
+		) {
+			break;
+		}
+	}
+	
+	if(!iface)
+	{
+		log_printf(LOG_ERROR, "bind failed: no such address");
+		
+		free_ipx_interface_list(&ifaces);
+		
+		WSASetLastError(WSAEADDRNOTAVAIL);
+		return false;
+	}
+	
+	addr32_out(addr->sa_netnum, iface->ipx_net);
+	addr48_out(addr->sa_nodenum, iface->ipx_node);
+	
+	free_ipx_interface_list(&ifaces);
+	
+	/* Socket zero signifies automatic allocation. */
+	
+	if(addr->sa_socket == 0 && (addr->sa_socket = addr_table_auto_socket()) == 0)
+	{
+		/* Hmmm. We appear to have ran out of sockets?! */
+		
+		log_printf(LOG_ERROR, "bind failed: out of sockets?!");
+		
+		WSASetLastError(WSAEADDRNOTAVAIL);
+		return false;
+	}
+	
+	return true;
+}
+
+int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen)
+{
+	ipx_socket *sock = get_socket(fd);
+	
+	if(sock)
+	{
 		struct sockaddr_ipx ipxaddr;
 		
-		if(addrlen < sizeof(ipxaddr)) {
+		if(addrlen < sizeof(ipxaddr) || addr->sa_family != AF_IPX)
+		{
 			RETURN_WSA(WSAEFAULT, -1);
 		}
 		
@@ -244,52 +309,108 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen) {
 		
 		log_printf(LOG_INFO, "bind(%d, %s)", fd, req_addr_s);
 		
-		if(ptr->flags & IPX_BOUND) {
+		if(sock->flags & IPX_BOUND)
+		{
 			log_printf(LOG_ERROR, "bind failed: socket already bound");
-			RETURN_WSA(WSAEINVAL, -1);
+			
+			unlock_sockets();
+			
+			WSASetLastError(WSAEINVAL);
+			return -1;
 		}
 		
-		if(!rclient_bind(&g_rclient, fd, &ipxaddr, ptr->flags)) {
-			RETURN(-1);
+		addr_table_lock();
+		
+		/* Resolve any wildcards in the requested address. */
+		
+		if(!_complete_bind_address(&ipxaddr))
+		{
+			addr_table_unlock();
+			unlock_sockets();
+			
+			return -1;
 		}
 		
 		IPX_STRING_ADDR(got_addr_s, addr32_in(ipxaddr.sa_netnum), addr48_in(ipxaddr.sa_nodenum), ipxaddr.sa_socket);
 		
 		log_printf(LOG_INFO, "bind address: %s", got_addr_s);
 		
-		struct sockaddr_in bind_addr;
-		bind_addr.sin_family = AF_INET;
-		bind_addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-		bind_addr.sin_port = 0;
+		/* Check that the address is free. */
 		
-		if(r_bind(fd, (struct sockaddr*)&bind_addr, sizeof(bind_addr)) == -1) {
-			log_printf(LOG_ERROR, "Binding local UDP socket failed: %s", w32_error(WSAGetLastError()));
+		if(!addr_table_check(&ipxaddr, !!(sock->flags & IPX_REUSE)))
+		{
+			/* Address has already been bound. */
 			
-			rclient_unbind(&g_rclient, fd);
-			RETURN(-1);
+			addr_table_unlock();
+			unlock_sockets();
+			
+			WSASetLastError(WSAEADDRINUSE);
+			return -1;
 		}
+		
+		/* Bind the fake (UDP) socket. */
+		
+		struct sockaddr_in bind_addr;
+		
+		bind_addr.sin_family      = AF_INET;
+		bind_addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+		bind_addr.sin_port        = 0;
+		
+		if(r_bind(fd, (struct sockaddr*)&bind_addr, sizeof(bind_addr)) == -1)
+		{
+			log_printf(
+				LOG_ERROR,
+				"Binding local UDP socket failed: %s",
+				w32_error(WSAGetLastError())
+			);
+			
+			addr_table_unlock();
+			unlock_sockets();
+			
+			return -1;
+		}
+		
+		/* Find out what port we got allocated. */
 		
 		int al = sizeof(bind_addr);
 		
-		if(r_getsockname(fd, (struct sockaddr*)&bind_addr, &al) == -1) {
-			log_printf(LOG_ERROR, "getsockname failed: %s", w32_error(WSAGetLastError()));
+		if(r_getsockname(fd, (struct sockaddr*)&bind_addr, &al) == -1)
+		{
+			/* Socket state is now inconsistent as the underlying
+			 * UDP socket has been bound, but the IPX socket failed
+			 * to bind.
+			 * 
+			 * We also don't know what port number the socket is
+			 * bound to and can't unbind, so future bind attempts
+			 * will fail.
+			*/
 			
-			rclient_unbind(&g_rclient, fd);
-			RETURN(-1);
+			log_printf(LOG_ERROR, "getsockname: %s", w32_error(WSAGetLastError()));
+			log_printf(LOG_WARNING, "SOCKET STATE IS NOW INCONSISTENT!");
+			
+			addr_table_unlock();
+			unlock_sockets();
+			
+			return -1;
 		}
 		
-		log_printf(LOG_DEBUG, "Bound to local UDP port %hu", ntohs(bind_addr.sin_port));
+		sock->port = bind_addr.sin_port;
 		
-		memcpy(&(ptr->addr), &ipxaddr, sizeof(ipxaddr));
-		ptr->flags |= IPX_BOUND;
+		log_printf(LOG_DEBUG, "Bound to local UDP port %hu", ntohs(sock->port));
 		
-		if(ptr->flags & IPX_RECV) {
-			rclient_set_port(&g_rclient, fd, bind_addr.sin_port);
-		}
+		/* Add to the address table. */
 		
-		rclient_set_filter(&g_rclient, fd, ptr->flags & IPX_FILTER ? ptr->f_ptype : -1);
+		addr_table_add(&ipxaddr, sock->port, !!(sock->flags & IPX_REUSE));
 		
-		RETURN(0);
+		/* Mark the IPX socket as bound. */
+		
+		memcpy(&(sock->addr), &ipxaddr, sizeof(ipxaddr));
+		sock->flags |= IPX_BOUND;
+		
+		addr_table_unlock();
+		unlock_sockets();
+		
+		return 0;
 	}else{
 		return r_bind(fd, addr, addrlen);
 	}
@@ -317,8 +438,6 @@ int WSAAPI getsockname(SOCKET fd, struct sockaddr *addr, int *addrlen) {
 	}
 }
 
-#define RECVBUF_SIZE (sizeof(struct rpacket_header) + MAX_PKT_SIZE)
-
 /* Recieve a packet from an IPX socket
  * addr must be NULL or a region of memory big enough for a sockaddr_ipx
  *
@@ -337,22 +456,22 @@ static int recv_packet(ipx_socket *sockptr, char *buf, int bufsize, int flags, s
 		return -1;
 	}
 	
-	char *recvbuf = malloc(RECVBUF_SIZE);
+	char *recvbuf = malloc(MAX_PKT_SIZE);
 	if(!recvbuf) {
 		WSASetLastError(ERROR_OUTOFMEMORY);
 		return -1;
 	}
 	
-	struct rpacket_header *rp_header = (struct rpacket_header*)recvbuf;
-	struct ipx_packet *packet = (struct ipx_packet*)(recvbuf + sizeof(*rp_header));
+	struct ipx_packet *packet = (struct ipx_packet*)(recvbuf);
 	
-	int rval = r_recv(fd, recvbuf, RECVBUF_SIZE, flags);
+	int rval = r_recv(fd, recvbuf, MAX_PKT_SIZE, flags);
 	if(rval == -1) {
 		free(recvbuf);
 		return -1;
 	}
 	
-	if(rval < sizeof(*rp_header) + sizeof(ipx_packet) - 1 || rval != sizeof(*rp_header) + packet->size + sizeof(ipx_packet) - 1) {
+	if(rval < sizeof(ipx_packet) - 1 || rval != packet->size + sizeof(ipx_packet) - 1)
+	{
 		log_printf(LOG_ERROR, "Invalid packet received on loopback port!");
 		
 		free(recvbuf);
@@ -366,15 +485,6 @@ static int recv_packet(ipx_socket *sockptr, char *buf, int bufsize, int flags, s
 		
 		log_printf(LOG_DEBUG, "Received packet from %s", addr_s);
 	}
-	
-	/* TODO: Move full sockaddr into rp_header? */
-	
-	struct sockaddr_in real_addr;
-	real_addr.sin_family = AF_INET;
-	real_addr.sin_addr.s_addr = rp_header->src_ipaddr;
-	real_addr.sin_port = htons(main_config.udp_port);
-	
-	addr_cache_set((struct sockaddr*)&real_addr, sizeof(real_addr), addr32_in(packet->src_net), addr48_in(packet->src_node), 0);
 	
 	if(addr) {
 		addr->sa_family = AF_IPX;
@@ -611,11 +721,6 @@ int WSAAPI getsockopt(SOCKET fd, int level, int optname, char FAR *optval, int F
 		sockptr->flags &= ~(flag); \
 	}
 
-#define RC_SET_FLAG(flag, state) \
-	if(sockptr->flags & IPX_BOUND && !rclient_set_flags(&g_rclient, fd, (sockptr->flags & ~(flag)) | ((state) ? (flag) : 0))) { \
-		RETURN(-1); \
-	}
-
 int WSAAPI setsockopt(SOCKET fd, int level, int optname, const char FAR *optval, int optlen) {
 	int *intval = (int*)optval;
 	BOOL *bval = (BOOL*)optval;
@@ -649,10 +754,6 @@ int WSAAPI setsockopt(SOCKET fd, int level, int optname, const char FAR *optval,
 			}
 			
 			if(optname == IPX_FILTERPTYPE) {
-				if(sockptr->flags & IPX_BOUND && !rclient_set_filter(&g_rclient, fd, *intval)) {
-					RETURN(-1);
-				}
-				
 				sockptr->f_ptype = *intval;
 				sockptr->flags |= IPX_FILTER;
 				
@@ -660,17 +761,12 @@ int WSAAPI setsockopt(SOCKET fd, int level, int optname, const char FAR *optval,
 			}
 			
 			if(optname == IPX_STOPFILTERPTYPE) {
-				if(sockptr->flags & IPX_BOUND && !rclient_set_filter(&g_rclient, fd, -1)) {
-					RETURN(-1);
-				}
-				
 				sockptr->flags &= ~IPX_FILTER;
 				
 				RETURN(0);
 			}
 			
 			if(optname == IPX_RECEIVE_BROADCAST) {
-				RC_SET_FLAG(IPX_RECV_BCAST, *bval);
 				SET_FLAG(IPX_RECV_BCAST, *bval);
 				
 				RETURN(0);
@@ -688,14 +784,12 @@ int WSAAPI setsockopt(SOCKET fd, int level, int optname, const char FAR *optval,
 		
 		if(level == SOL_SOCKET) {
 			if(optname == SO_BROADCAST) {
-				RC_SET_FLAG(IPX_BROADCAST, *bval);
 				SET_FLAG(IPX_BROADCAST, *bval);
 				
 				RETURN(0);
 			}
 			
 			if(optname == SO_REUSEADDR) {
-				RC_SET_FLAG(IPX_REUSE, *bval);
 				SET_FLAG(IPX_REUSE, *bval);
 				
 				RETURN(0);
@@ -727,7 +821,7 @@ static int send_packet(const ipx_packet *packet, int len, struct sockaddr *addr,
 		log_printf(LOG_DEBUG, "Sending packet to %s (%s:%hu)", addr_s, inet_ntoa(v4->sin_addr), ntohs(v4->sin_port));
 	}
 	
-	return (r_sendto(send_fd, (char*)packet, len, 0, addr, addrlen) == len);
+	return (r_sendto(private_socket, (char*)packet, len, 0, addr, addrlen) == len);
 }
 
 int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct sockaddr *addr, int addrlen) {
@@ -872,10 +966,6 @@ int PASCAL shutdown(SOCKET fd, int cmd) {
 	
 	if(sockptr) {
 		if(cmd == SD_RECEIVE || cmd == SD_BOTH) {
-			if(sockptr->flags & IPX_BOUND && !rclient_set_port(&g_rclient, fd, 0)) {
-				RETURN(-1);
-			}
-			
 			sockptr->flags &= ~IPX_RECV;
 		}
 		
@@ -945,10 +1035,6 @@ int PASCAL connect(SOCKET fd, const struct sockaddr *addr, int addrlen) {
 			struct sockaddr_ipx dc_addr;
 			dc_addr.sa_family = AF_UNSPEC;
 			
-			if(!rclient_set_remote(&g_rclient, fd, &dc_addr)) {
-				RETURN(-1);
-			}
-			
 			sockptr->flags &= ~IPX_CONNECTED;
 			
 			RETURN(0);
@@ -971,10 +1057,6 @@ int PASCAL connect(SOCKET fd, const struct sockaddr *addr, int addrlen) {
 			if(bind(fd, (struct sockaddr*)&bind_addr, sizeof(bind_addr)) == -1) {
 				RETURN(-1);
 			}
-		}
-		
-		if(!rclient_set_remote(&g_rclient, fd, ipxaddr)) {
-			RETURN(-1);
 		}
 		
 		memcpy(&(sockptr->remote_addr), addr, sizeof(*ipxaddr));

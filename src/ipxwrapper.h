@@ -52,10 +52,14 @@
 
 typedef struct ipx_socket ipx_socket;
 typedef struct ipx_packet ipx_packet;
-typedef struct ipx_host ipx_host;
 
 struct ipx_socket {
 	SOCKET fd;
+	
+	/* Locally bound UDP port number (Network byte order).
+	 * Undefined before IPX bind() call.
+	*/
+	uint16_t port;
 	
 	int flags;
 	uint8_t s_ptype;
@@ -85,20 +89,8 @@ struct ipx_packet {
 	char data[1];
 } __attribute__((__packed__));
 
-struct ipx_host {
-	unsigned char ipx_net[4];
-	unsigned char ipx_node[6];
-	
-	uint32_t ipaddr;
-	time_t last_packet;
-	
-	ipx_host *next;
-};
-
 extern ipx_socket *sockets;
-extern SOCKET send_fd;
 extern main_config_t main_config;
-extern struct rclient g_rclient;
 
 ipx_socket *get_socket(SOCKET fd);
 void lock_sockets(void);
