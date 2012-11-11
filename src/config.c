@@ -128,7 +128,7 @@ bool set_iface_config(addr48_t hwaddr, const iface_config_t *config)
 	char id[ADDR48_STRING_SIZE];
 	addr48_string(id, hwaddr);
 	
-	HKEY reg   = reg_open_main(false);
+	HKEY reg   = reg_open_main(true);
 	HKEY ifreg = reg_open_subkey(reg, id, true);
 	
 	bool ok = reg_set_addr32(ifreg, "net", config->netnum)
