@@ -25,6 +25,10 @@
 
 #include "addr.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 enum ipx_log_level {
 	LOG_CALL = 1,
 	LOG_DEBUG,
@@ -55,5 +59,9 @@ void __stdcall log_call(unsigned int dllnum, const char *symbol);
 void log_open(const char *file);
 void log_close();
 void log_printf(enum ipx_log_level level, const char *fmt, ...);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* !IPXWRAPPER_COMMON_H */

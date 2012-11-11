@@ -26,6 +26,8 @@
 #include <ctype.h>
 
 #include "config.h"
+#include "interface.h"
+#include "addr.h"
 
 #define ID_PRI_LIST 1
 
@@ -36,38 +38,27 @@
 
 #define ID_OPT_PORT 21
 #define ID_OPT_W95 22
-#define ID_OPT_BCAST 23
-#define ID_OPT_FILTER 24
-#define ID_OPT_LOG 25
-#define ID_OPT_CPORT 26
+#define ID_OPT_LOG_DEBUG 25
+#define ID_OPT_LOG_TRACE 26
 
 #define ID_OK 31
 #define ID_CANCEL 32
 #define ID_APPLY 33
 
 struct iface {
-	/* C style strings used so they can be passed directly to the listview */
-	char name[MAX_ADAPTER_DESCRIPTION_LENGTH+4];
-	char hwaddr[18];
+	/* C style string so it can be passed directly to the listview */
+	char name[MAX_ADAPTER_DESCRIPTION_LENGTH + 4];
 	
-	char ipx_net[12];
-	char ipx_node[18];
+	addr48_t hwaddr;
 	
-	bool enabled;
-	bool primary;
-	
-	int pri_index;
+	iface_config_t config;
 };
 
 typedef std::vector<iface> iface_list;
 
 static void get_nics();
-static bool reg_write(const char *name, void *value, size_t size, DWORD type = REG_BINARY);
-static size_t reg_read(const char *name, void *buf, size_t max_size);
 static bool save_config();
 static bool store_nic();
-static bool saddr_to_bin(unsigned char *bin, const char *str, int nbytes);
-static void baddr_to_str(char *str, const unsigned char *bin, int nbytes);
 static void init_windows();
 static void update_nic_conf();
 static void init_pri_list();
@@ -79,13 +70,10 @@ static RECT get_window_rect(HWND hwnd);
 static std::string w32_errmsg(DWORD errnum);
 static void die(std::string msg);
 
-typedef struct v1_global_config reg_global;
-typedef struct v1_iface_config reg_value;
-
 static iface_list nics;
-static reg_global global_conf;
-static HKEY regkey = NULL;
-static unsigned char log_calls;
+
+static main_config_t main_config = get_main_config();
+static addr48_t primary_iface    = get_primary_iface();
 
 static std::string inv_error;
 static HWND inv_window = NULL;
@@ -108,14 +96,13 @@ static struct {
 	HWND nic_node;
 	
 	HWND opt_group;
-	HWND opt_w95;
-	HWND opt_bcast;
-	HWND opt_filter;
-	HWND opt_log;
+	
 	HWND opt_port_lbl;
 	HWND opt_port;
-	HWND opt_cport_lbl;
-	HWND opt_cport;
+	
+	HWND opt_w95;
+	HWND opt_log_debug;
+	HWND opt_log_trace;
 	
 	HWND ok_btn;
 	HWND can_btn;
@@ -164,11 +151,16 @@ static LRESULT CALLBACK main_wproc(HWND window, UINT msg, WPARAM wp, LPARAM lp) 
 				switch(LOWORD(wp)) {
 					case ID_NIC_ENABLED: {
 						int nic = ListView_GetNextItem(windows.nic_list, (LPARAM)-1, LVNI_FOCUSED);
-						nics[nic].enabled = Button_GetCheck(windows.nic_enabled) == BST_CHECKED;
+						nics[nic].config.enabled = Button_GetCheck(windows.nic_enabled) == BST_CHECKED;
 						
 						init_pri_list();
 						update_nic_conf();
 						
+						break;
+					}
+					
+					case ID_OPT_LOG_DEBUG: {
+						EnableWindow(windows.opt_log_trace, Button_GetCheck(windows.opt_log_debug) == BST_CHECKED);
 						break;
 					}
 					
@@ -192,13 +184,6 @@ static LRESULT CALLBACK main_wproc(HWND window, UINT msg, WPARAM wp, LPARAM lp) 
 					
 					default:
 						break;
-				}
-			}else if(HIWORD(wp) == CBN_SELCHANGE && LOWORD(wp) == ID_PRI_LIST) {
-				int nic = ComboBox_GetCurSel(windows.primary);
-				int this_nic = 1;
-				
-				for(iface_list::iterator i = nics.begin(); i != nics.end(); i++) {
-					i->primary = (i->enabled && this_nic++ == nic);
 				}
 			}
 			
@@ -228,10 +213,10 @@ static LRESULT CALLBACK main_wproc(HWND window, UINT msg, WPARAM wp, LPARAM lp) 
 			
 			/* Options groupbox */
 			
-			int lbl_w = get_text_width(windows.nic_net_lbl, "Control port number");
+			int lbl_w = get_text_width(windows.nic_net_lbl, "Network number");
 			int edit_w = get_text_width(windows.nic_node, "000000");
 			
-			int opt_h = 5 * text_h + 2 * edit_h + 18;
+			int opt_h = 4 * text_h + edit_h + 16;
 			
 			MoveWindow(windows.opt_group, 0, height - opt_h - btn_h - 12, width, opt_h, TRUE);
 			
@@ -240,19 +225,13 @@ static LRESULT CALLBACK main_wproc(HWND window, UINT msg, WPARAM wp, LPARAM lp) 
 			MoveWindow(windows.opt_port_lbl, 10, y + edge, lbl_w, text_h, TRUE);
 			MoveWindow(windows.opt_port, 15 + lbl_w, y, edit_w, edit_h, TRUE);
 			
-			y += edit_h + 2;
-			
-			MoveWindow(windows.opt_cport_lbl, 10, y + edge, lbl_w, text_h, TRUE);
-			MoveWindow(windows.opt_cport, 15 + lbl_w, y, edit_w, edit_h, TRUE);
-			
-			MoveWindow(windows.opt_filter, 10, y += edit_h + 2, width - 20, text_h, TRUE);
-			MoveWindow(windows.opt_bcast, 10, y += text_h + 2, width - 20, text_h, TRUE);
-			MoveWindow(windows.opt_w95, 10, y += text_h + 2, width - 20, text_h, TRUE);
-			MoveWindow(windows.opt_log, 10, y += text_h + 2, width - 20, text_h, TRUE);
+			MoveWindow(windows.opt_w95, 10, y += edit_h + 4, width - 20, text_h, TRUE);
+			MoveWindow(windows.opt_log_debug, 10, y += text_h + 2, width - 20, text_h, TRUE);
+			MoveWindow(windows.opt_log_trace, 10, y += text_h + 2, width - 20, text_h, TRUE);
 			
 			/* NIC groupbox */
 			
-			lbl_w = get_text_width(windows.nic_net_lbl, "Network number");
+			// lbl_w = get_text_width(windows.nic_net_lbl, "Network number");
 			edit_w = get_text_width(windows.nic_node, "00:00:00:00:00:00");
 			
 			int net_h = height - pri_h - opt_h - btn_h - 12;
@@ -299,38 +278,8 @@ static LRESULT CALLBACK groupbox_wproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
 	}
 }
 
-int main() {
-	int err = RegOpenKeyEx(
-		HKEY_CURRENT_USER,
-		"Software\\IPXWrapper",
-		0,
-		KEY_QUERY_VALUE | KEY_SET_VALUE,
-		&regkey
-	);
-	
-	if(err != ERROR_SUCCESS) {
-		if(err != ERROR_FILE_NOT_FOUND) {
-			die("Error opening registry key: " + w32_errmsg(err));
-		}
-		
-		regkey = NULL;
-	}
-	
-	if(reg_read("global", &global_conf, sizeof(global_conf)) != sizeof(global_conf)) {
-		global_conf.udp_port = DEFAULT_PORT;
-		global_conf.w95_bug = 1;
-		global_conf.bcast_all = 0;
-		global_conf.filter = 1;
-	}
-	
-	DWORD min_log_level;
-	
-	if(reg_read("min_log_level", &min_log_level, sizeof(DWORD)) != sizeof(DWORD) || min_log_level >= 4) {
-		log_calls = 0;
-	}else{
-		log_calls = 1;
-	}
-	
+int main()
+{
 	get_nics();
 	
 	init_windows();
@@ -356,118 +305,64 @@ int main() {
 		}
 	}
 	
-	RegCloseKey(regkey);
-	
 	return msg.wParam;
 }
 
-static void get_nics() {
-	IP_ADAPTER_INFO tbuf;
-	ULONG bufsize = sizeof(IP_ADAPTER_INFO);
+static void _add_nic(addr48_t hwaddr, const char *name)
+{
+	iface iface;
 	
-	int rval = GetAdaptersInfo(&tbuf, &bufsize);
-	if(rval != ERROR_SUCCESS && rval != ERROR_BUFFER_OVERFLOW) {
-		die("Error getting network interfaces: " + w32_errmsg(rval));
-	}
+	strcpy(iface.name, name);
 	
-	IP_ADAPTER_INFO *buf = new IP_ADAPTER_INFO[bufsize / sizeof(tbuf)];
+	iface.hwaddr = hwaddr;
+	iface.config = get_iface_config(hwaddr);
 	
-	rval = GetAdaptersInfo(buf, &bufsize);
-	if(rval != ERROR_SUCCESS) {
-		die("Error getting network interfaces: " + w32_errmsg(rval));
-	}
+	nics.push_back(iface);
+}
+
+static void get_nics()
+{
+	_add_nic(WILDCARD_IFACE_HWADDR, "Wildcard interface");
 	
-	for(IP_ADAPTER_INFO *ptr = buf; ptr; ptr = ptr->Next) {
-		if(ptr->AddressLength != 6) {
+	IP_ADAPTER_INFO *ifroot = load_sys_interfaces(), *ifptr;
+	
+	for(ifptr = ifroot; ifptr; ifptr = ifptr->Next)
+	{
+		if(ifptr->AddressLength != 6)
+		{
 			continue;
 		}
 		
-		iface new_if;
-		
-		strcpy(new_if.name, ptr->Description);
-		
-		baddr_to_str(new_if.hwaddr, ptr->Address, 6);
-		
-		strcpy(new_if.ipx_net, "00:00:00:01");
-		strcpy(new_if.ipx_node, new_if.hwaddr);
-		
-		new_if.enabled = true;
-		new_if.primary = false;
-		
-		reg_value regval;
-		
-		if(reg_read(new_if.hwaddr, &regval, sizeof(regval)) == sizeof(regval)) {
-			baddr_to_str(new_if.ipx_net, regval.ipx_net, 4);
-			baddr_to_str(new_if.ipx_node, regval.ipx_node, 6);
-			
-			new_if.enabled = regval.enabled;
-			new_if.primary = regval.primary;
-		}
-		
-		nics.push_back(new_if);
+		_add_nic(addr48_in(ifptr->Address), ifptr->Description);
 	}
 	
-	delete buf;
+	free(ifroot);
 }
 
-static bool reg_write(const char *name, void *value, size_t size, DWORD type) {
-	if(!regkey) {
-		int err = RegCreateKeyEx(
-			HKEY_CURRENT_USER,
-			"Software\\IPXWrapper",
-			0,
-			NULL,
-			0,
-			KEY_QUERY_VALUE | KEY_SET_VALUE,
-			NULL,
-			&regkey,
-			NULL
-		);
-		
-		if(err != ERROR_SUCCESS) {
-			std::string msg = "Error creating registry key: " + w32_errmsg(err);
-			MessageBox(NULL, msg.c_str(), "Error", MB_OK | MB_TASKMODAL | MB_ICONERROR);
-			
-			regkey = NULL;
-			
-			return false;
-		}
-	}
-	
-	int err = RegSetValueEx(regkey, name, 0, type, (BYTE*)value, size);
-	if(err != ERROR_SUCCESS) {
-		std::string msg = "Error writing value to registry: " + w32_errmsg(err);
-		MessageBox(NULL, msg.c_str(), "Error", MB_OK | MB_TASKMODAL | MB_ICONERROR);
-		
+static bool save_config()
+{
+	if(!store_nic())
+	{
 		return false;
 	}
 	
-	return true;
-}
-
-static size_t reg_read(const char *name, void *buf, size_t max_size) {
-	if(!regkey) {
-		return 0;
+	int pri_index = ComboBox_GetCurSel(windows.primary);
+	
+	if(pri_index == 0)
+	{
+		primary_iface = addr48_in((unsigned char[]){0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF});
 	}
-	
-	DWORD size = max_size;
-	
-	int err = RegQueryValueEx(regkey, name, NULL, NULL, (BYTE*)buf, &size);
-	if(err != ERROR_SUCCESS) {
-		if(err != ERROR_MORE_DATA && err != ERROR_FILE_NOT_FOUND) {
-			std::string msg = "Error reading value from registry: " + w32_errmsg(err);
-			MessageBox(NULL, msg.c_str(), "Error", MB_OK | MB_TASKMODAL | MB_ICONERROR);
-		}
+	else{
+		int this_nic = 1;
 		
-		return 0;
-	}
-	
-	return size;
-}
-
-static bool save_config() {
-	if(!store_nic()) {
-		return false;
+		for(iface_list::iterator i = nics.begin(); i != nics.end(); i++)
+		{
+			if(i->config.enabled && this_nic++ == pri_index)
+			{
+				primary_iface = i->hwaddr;
+				break;
+			}
+		}
 	}
 	
 	char port_s[32], *endptr;
@@ -484,48 +379,29 @@ static bool save_config() {
 		return false;
 	}
 	
-	GetWindowText(windows.opt_cport, port_s, 32);
-	int control_port = strtol(port_s, &endptr, 10);
+	main_config.udp_port  = port;
+	main_config.w95_bug   = Button_GetCheck(windows.opt_w95) == BST_CHECKED;
+	main_config.log_level = LOG_INFO;
 	
-	if(port < 1 || port > 65535 || *endptr) {
-		MessageBox(windows.main, "Invalid port number.\nPort number must be an integer in the range 1 - 65535", "Error", MB_OK);
+	if(Button_GetCheck(windows.opt_log_debug) == BST_CHECKED)
+	{
+		main_config.log_level = LOG_DEBUG;
 		
-		SetFocus(windows.opt_cport);
-		Edit_SetSel(windows.opt_cport, 0, Edit_GetTextLength(windows.opt_cport));
-		
-		return false;
+		if(Button_GetCheck(windows.opt_log_trace) == BST_CHECKED)
+		{
+			main_config.log_level = LOG_CALL;
+		}
 	}
 	
-	global_conf.udp_port = port;
-	global_conf.w95_bug = Button_GetCheck(windows.opt_w95) == BST_CHECKED;
-	global_conf.bcast_all = Button_GetCheck(windows.opt_bcast) == BST_CHECKED;
-	global_conf.filter = Button_GetCheck(windows.opt_filter) == BST_CHECKED;
-	log_calls = Button_GetCheck(windows.opt_log) == BST_CHECKED;
-	
-	for(iface_list::iterator i = nics.begin(); i != nics.end(); i++) {
-		reg_value rval;
-		
-		saddr_to_bin(rval.ipx_net, i->ipx_net, 4);
-		saddr_to_bin(rval.ipx_node, i->ipx_node, 6);
-		rval.enabled = i->enabled;
-		rval.primary = i->primary;
-		
-		if(!reg_write(i->hwaddr, &rval, sizeof(rval))) {
+	for(iface_list::iterator i = nics.begin(); i != nics.end(); i++)
+	{
+		if(!set_iface_config(i->hwaddr, &(i->config)))
+		{
 			return false;
 		}
 	}
 	
-	DWORD min_log_level = log_calls ? 1 : 4;
-	
-	if(!reg_write("global", &global_conf, sizeof(global_conf)) || !reg_write("min_log_level", &min_log_level, sizeof(DWORD))) {
-		return false;
-	}
-	
-	if(!reg_write("control_port", &control_port, sizeof(control_port), REG_DWORD)) {
-		return false;
-	}
-	
-	return true;
+	return set_main_config(&main_config);
 }
 
 /* Fetch NIC settings from UI and store in NIC list */
@@ -542,57 +418,23 @@ static bool store_nic() {
 	GetWindowText(windows.nic_net, net, 32);
 	GetWindowText(windows.nic_node, node, 32);
 	
-	if(!saddr_to_bin(NULL, net, 4)) {
-		inv_error = "Network number is invalid.\nValid numbers are in the format XX:XX:XX:XX";
+	if(!addr32_from_string(&(nics[selected_nic].config.netnum), net))
+	{
+		inv_error  = "Network number is invalid.\nValid numbers are in the format XX:XX:XX:XX";
 		inv_window = windows.nic_net;
 		
 		return false;
 	}
 	
-	if(!saddr_to_bin(NULL, node, 6)) {
-		inv_error = "Node number is invalid.\nValid numbers are in the format XX:XX:XX:XX:XX:XX";
+	if(!addr48_from_string(&(nics[selected_nic].config.nodenum), node))
+	{
+		inv_error  = "Node number is invalid.\nValid numbers are in the format XX:XX:XX:XX:XX:XX";
 		inv_window = windows.nic_node;
 		
 		return false;
 	}
 	
-	strcpy(nics[selected_nic].ipx_net, net);
-	strcpy(nics[selected_nic].ipx_node, node);
-	
 	return true;
-}
-
-/* Convert string format address to binary
- * Returns true on success or false if the string is invalid
-*/
-static bool saddr_to_bin(unsigned char *bin, const char *str, int nbytes) {
-	for(int i = 0; i < nbytes; i++) {
-		char term = (i+1 == nbytes ? '\0' : ':');
-		
-		if(isxdigit(str[0]) && (str[1] == term || (isxdigit(str[1]) && str[2] == term))) {
-			if(bin) {
-				bin[i] = strtoul(str, NULL, 16);
-			}
-			
-			str += strcspn(str, ":");
-			str += strspn(str, ":");
-		}else{
-			return false;
-		}
-	}
-	
-	return true;
-}
-
-/* Convert binary format address to string */
-static void baddr_to_str(char *str, const unsigned char *bin, int nbytes) {
-	for(int i = 0; i < nbytes; i++) {
-		sprintf(str+(i*3), "%02X", bin[i]);
-		
-		if(i+1 < nbytes) {
-			strcat(str, ":");
-		}
-	}
 }
 
 static void init_windows() {
@@ -688,34 +530,23 @@ static void init_windows() {
 	{
 		windows.opt_group = create_group(windows.main, 0, 0, 0, 0, "Options");
 		
-		windows.opt_port_lbl = create_child(windows.opt_group, 0, 0, 0, 0, "STATIC", "UDP port number", SS_RIGHT);
+		windows.opt_port_lbl = create_child(windows.opt_group, 0, 0, 0, 0, "STATIC", "Broadcast port", SS_RIGHT);
 		windows.opt_port = create_child(windows.opt_group, 0, 0, 0, 0, "EDIT", "", WS_TABSTOP, WS_EX_CLIENTEDGE, ID_OPT_PORT);
-		
-		windows.opt_cport_lbl = create_child(windows.opt_group, 0, 0, 0, 0, "STATIC", "Control port number", SS_RIGHT);
-		windows.opt_cport = create_child(windows.opt_group, 0, 0, 0, 0, "EDIT", "", WS_TABSTOP, WS_EX_CLIENTEDGE, ID_OPT_CPORT);
 		
 		char port_s[8];
 		
-		sprintf(port_s, "%hu", global_conf.udp_port);
+		sprintf(port_s, "%hu", main_config.udp_port);
 		SetWindowText(windows.opt_port, port_s);
 		
-		DWORD port_buf;
-		if(reg_read("control_port", &port_buf, sizeof(DWORD)) != sizeof(DWORD) || port_buf > 65535) {
-			port_buf = DEFAULT_ROUTER_PORT;
-		}
+		windows.opt_w95       = create_child(windows.opt_group, 0, 0, 0, 0, "BUTTON", "Enable Windows 95 SO_BROADCAST bug", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_OPT_W95);
+		windows.opt_log_debug = create_child(windows.opt_group, 0, 0, 0, 0, "BUTTON", "Log debugging messages", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_OPT_LOG_DEBUG);
+		windows.opt_log_trace = create_child(windows.opt_group, 0, 0, 0, 0, "BUTTON", "Log WinSock API calls", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_OPT_LOG_TRACE);
 		
-		sprintf(port_s, "%hu", (uint16_t)port_buf);
-		SetWindowText(windows.opt_cport, port_s);
+		Button_SetCheck(windows.opt_w95, main_config.w95_bug ? BST_CHECKED : BST_UNCHECKED);
+		Button_SetCheck(windows.opt_log_debug, main_config.log_level <= LOG_DEBUG ? BST_CHECKED : BST_UNCHECKED);
+		Button_SetCheck(windows.opt_log_trace, main_config.log_level <= LOG_CALL ? BST_CHECKED : BST_UNCHECKED);
 		
-		windows.opt_w95 = create_child(windows.opt_group, 0, 0, 0, 0, "BUTTON", "Enable Windows 95 SO_BROADCAST bug", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_OPT_W95);
-		windows.opt_bcast = create_child(windows.opt_group, 0, 0, 0, 0, "BUTTON", "Send broadcast packets to all subnets", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_OPT_BCAST);
-		windows.opt_filter = create_child(windows.opt_group, 0, 0, 0, 0, "BUTTON", "Filter receieved packets by subnet", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_OPT_FILTER);
-		windows.opt_log = create_child(windows.opt_group, 0, 0, 0, 0, "BUTTON", "Enable verbose logging", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_OPT_LOG);
-		
-		Button_SetCheck(windows.opt_w95, global_conf.w95_bug ? BST_CHECKED : BST_UNCHECKED);
-		Button_SetCheck(windows.opt_bcast, global_conf.bcast_all ? BST_CHECKED : BST_UNCHECKED);
-		Button_SetCheck(windows.opt_filter, global_conf.filter ? BST_CHECKED : BST_UNCHECKED);
-		Button_SetCheck(windows.opt_log, log_calls ? BST_CHECKED : BST_UNCHECKED);
+		EnableWindow(windows.opt_log_trace, Button_GetCheck(windows.opt_log_debug) == BST_CHECKED);
 	}
 	
 	/* TODO: Size buttons dynamically */
@@ -732,16 +563,24 @@ static void init_windows() {
 
 static void update_nic_conf() {
 	int selected_nic = ListView_GetNextItem(windows.nic_list, (LPARAM)-1, LVNI_FOCUSED);
-	bool enabled = selected_nic >= 0 ? nics[selected_nic].enabled : false;
+	bool enabled     = selected_nic >= 0 ? nics[selected_nic].config.enabled : false;
 	
 	EnableWindow(windows.nic_net, enabled);
 	EnableWindow(windows.nic_node, enabled);
 	EnableWindow(windows.nic_enabled, selected_nic >= 0);
 	
-	if(selected_nic >= 0) {
-		Button_SetCheck(windows.nic_enabled, nics[selected_nic].enabled ? BST_CHECKED : BST_UNCHECKED);
-		SetWindowText(windows.nic_net, nics[selected_nic].ipx_net);
-		SetWindowText(windows.nic_node, nics[selected_nic].ipx_node);
+	if(selected_nic >= 0)
+	{
+		Button_SetCheck(windows.nic_enabled, enabled ? BST_CHECKED : BST_UNCHECKED);
+		
+		char net_s[ADDR32_STRING_SIZE];
+		addr32_string(net_s, nics[selected_nic].config.netnum);
+		
+		char node_s[ADDR48_STRING_SIZE];
+		addr48_string(node_s, nics[selected_nic].config.nodenum);
+		
+		SetWindowText(windows.nic_net, net_s);
+		SetWindowText(windows.nic_node, node_s);
 	}
 }
 
@@ -751,15 +590,16 @@ static void init_pri_list() {
 	ComboBox_AddString(windows.primary, "Default");
 	ComboBox_SetCurSel(windows.primary, 0);
 	
-	for(iface_list::iterator i = nics.begin(); i != nics.end(); i++) {
-		if(i->enabled) {
-			i->pri_index = ComboBox_AddString(windows.primary, i->name);
+	for(iface_list::iterator i = nics.begin(); i != nics.end(); i++)
+	{
+		if(i->config.enabled)
+		{
+			int index = ComboBox_AddString(windows.primary, i->name);
 			
-			if(i->primary) {
-				ComboBox_SetCurSel(windows.primary, i->pri_index);
+			if(i->hwaddr == primary_iface)
+			{
+				ComboBox_SetCurSel(windows.primary, index);
 			}
-		}else{
-			i->pri_index = 0;
 		}
 	}
 }
@@ -849,4 +689,34 @@ static std::string w32_errmsg(DWORD errnum) {
 static void die(std::string msg) {
 	MessageBox(NULL, msg.c_str(), "Fatal error", MB_OK | MB_TASKMODAL | MB_ICONERROR);
 	exit(1);
+}
+
+/* Used to display errors from shared functions. */
+extern "C" void log_printf(enum ipx_log_level level, const char *fmt, ...)
+{
+	int icon = 0;
+	const char *title = NULL;
+	
+	if(level >= LOG_ERROR)
+	{
+		icon  = MB_ICONERROR;
+		title = "Error";
+	}
+	else if(level >= LOG_WARNING)
+	{
+		icon  = MB_ICONWARNING;
+		title = "Warning";
+	}
+	else{
+		return;
+	}
+	
+	va_list argv;
+	char msg[1024];
+	
+	va_start(argv, fmt);
+	vsnprintf(msg, 1024, fmt, argv);
+	va_end(argv);
+	
+	MessageBox(NULL, msg, title, MB_OK | MB_TASKMODAL | icon);
 }
