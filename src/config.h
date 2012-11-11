@@ -19,7 +19,6 @@
 #define IPX_CONFIG_H
 
 #define DEFAULT_PORT 54792
-#define DEFAULT_ROUTER_PORT 54793
 
 #include "common.h"
 
@@ -29,7 +28,6 @@ extern "C" {
 
 typedef struct main_config {
 	uint16_t udp_port;
-	uint16_t router_port;
 	
 	bool w95_bug;
 	

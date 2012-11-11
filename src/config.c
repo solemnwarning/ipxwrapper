@@ -28,7 +28,6 @@ main_config_t get_main_config(void)
 	main_config_t config;
 	
 	config.udp_port       = DEFAULT_PORT;
-	config.router_port    = DEFAULT_ROUTER_PORT;
 	config.w95_bug        = true;
 	
 	HKEY reg      = reg_open_main(false);
@@ -44,15 +43,12 @@ main_config_t get_main_config(void)
 			config.w95_bug    = reg_config.w95_bug;
 		}
 		
-		config.router_port = reg_get_dword(reg, "control_port", config.router_port);
-		
 		config.log_level   = reg_get_dword(reg, "min_log_level", LOG_INFO);
 	}
 	else if(version == 2)
 	{
-		config.udp_port    = reg_get_dword(reg, "port", config.udp_port);
-		config.router_port = reg_get_dword(reg, "router_port", config.router_port);
-		config.w95_bug     = reg_get_dword(reg, "w95_bug", config.w95_bug);
+		config.udp_port = reg_get_dword(reg, "port", config.udp_port);
+		config.w95_bug  = reg_get_dword(reg, "w95_bug", config.w95_bug);
 		
 		config.log_level   = reg_get_dword(reg, "log_level", LOG_INFO);
 	}
@@ -67,7 +63,6 @@ bool set_main_config(const main_config_t *config)
 	HKEY reg = reg_open_main(true);
 	
 	bool ok = reg_set_dword(reg, "port", config->udp_port)
-		&& reg_set_dword(reg, "router_port", config->router_port)
 		&& reg_set_dword(reg, "w95_bug", config->w95_bug)
 		
 		&& reg_set_dword(reg, "log_level", config->log_level)
