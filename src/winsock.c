@@ -205,7 +205,9 @@ int WSAAPI closesocket(SOCKET sockfd)
 	if(ret == SOCKET_ERROR)
 	{
 		log_printf(LOG_ERROR, "closesocket(%d): %s", sockfd, w32_error(WSAGetLastError()));
-		RETURN(SOCKET_ERROR);
+		
+		unlock_sockets();
+		return -1;
 	}
 	
 	log_printf(LOG_INFO, "IPX socket closed (fd = %d)", sockfd);
@@ -293,7 +295,10 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen)
 		
 		if(addrlen < sizeof(ipxaddr) || addr->sa_family != AF_IPX)
 		{
-			RETURN_WSA(WSAEFAULT, -1);
+			WSASetLastError(WSAEFAULT);
+			
+			unlock_sockets();
+			return -1;
 		}
 		
 		memcpy(&ipxaddr, addr, sizeof(ipxaddr));
@@ -334,10 +339,13 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen)
 		{
 			/* Address has already been bound. */
 			
+			log_printf(LOG_ERROR, "bind failed: address already in use");
+			
+			WSASetLastError(WSAEADDRINUSE);
+			
 			addr_table_unlock();
 			unlock_sockets();
 			
-			WSASetLastError(WSAEADDRINUSE);
 			return -1;
 		}
 		
@@ -409,24 +417,38 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen)
 	}
 }
 
-int WSAAPI getsockname(SOCKET fd, struct sockaddr *addr, int *addrlen) {
-	ipx_socket *ptr = get_socket(fd);
+int WSAAPI getsockname(SOCKET fd, struct sockaddr *addr, int *addrlen)
+{
+	ipx_socket *sock = get_socket(fd);
 	
-	if(ptr) {
-		if(ptr->flags & IPX_BOUND) {
-			if(*addrlen < sizeof(struct sockaddr_ipx)) {
+	if(sock)
+	{
+		if(sock->flags & IPX_BOUND)
+		{
+			if(*addrlen < sizeof(struct sockaddr_ipx))
+			{
 				*addrlen = sizeof(struct sockaddr_ipx);
-				RETURN_WSA(WSAEFAULT, -1);
+				
+				WSASetLastError(WSAEFAULT);
+				
+				unlock_sockets();
+				return -1;
 			}
 			
-			memcpy(addr, &(ptr->addr), sizeof(ptr->addr));
+			memcpy(addr, &(sock->addr), sizeof(sock->addr));
 			*addrlen = sizeof(struct sockaddr_ipx);
 			
-			RETURN(0);
-		}else{
-			RETURN_WSA(WSAEINVAL, -1);
+			unlock_sockets();
+			return 0;
 		}
-	}else{
+		else{
+			WSASetLastError(WSAEINVAL);
+			
+			unlock_sockets();
+			return -1;
+		}
+	}
+	else{
 		return r_getsockname(fd, addr, addrlen);
 	}
 }
@@ -598,106 +620,111 @@ int PASCAL WSARecvEx(SOCKET fd, char *buf, int len, int *flags) {
 	}
 }
 
-#define CHECK_OPTLEN(size) \
-	if(*optlen < size) {\
+#define GETSOCKOPT_OPTLEN(size) \
+	if(*optlen < size) \
+	{\
 		*optlen = size;\
-		RETURN_WSA(WSAEFAULT, -1);\
+		WSASetLastError(WSAEFAULT); \
+		unlock_sockets(); \
+		return -1; \
 	}\
 	*optlen = size;
 
-int WSAAPI getsockopt(SOCKET fd, int level, int optname, char FAR *optval, int FAR *optlen) {
-	int* intval = (int*)optval;
-	BOOL *bval = (BOOL*)optval;
+#define RETURN_INT_OPT(val) \
+	GETSOCKOPT_OPTLEN(sizeof(int)); \
+	*((int*)(optval)) = (val); \
+	unlock_sockets(); \
+	return 0;
+
+#define RETURN_BOOL_OPT(val) \
+	GETSOCKOPT_OPTLEN(sizeof(BOOL)); \
+	*((BOOL*)(optval)) = (val) ? TRUE : FALSE; \
+	unlock_sockets(); \
+	return 0;
+
+int WSAAPI getsockopt(SOCKET fd, int level, int optname, char FAR *optval, int FAR *optlen)
+{
+	ipx_socket *sock = get_socket(fd);
 	
-	ipx_socket *ptr = get_socket(fd);
-	
-	if(ptr) {
-		if(level == NSPROTO_IPX) {
-			if(optname == IPX_PTYPE) {
-				CHECK_OPTLEN(sizeof(int));
-				*intval = ptr->s_ptype;
-				
-				RETURN(0);
+	if(sock)
+	{
+		if(level == NSPROTO_IPX)
+		{
+			if(optname == IPX_PTYPE)
+			{
+				RETURN_INT_OPT(sock->s_ptype);
 			}
-			
-			if(optname == IPX_FILTERPTYPE) {
-				CHECK_OPTLEN(sizeof(int));
-				*intval = ptr->f_ptype;
-				
-				RETURN(0);
+			else if(optname == IPX_FILTERPTYPE)
+			{
+				RETURN_INT_OPT(sock->f_ptype);
 			}
-			
-			if(optname == IPX_MAXSIZE) {
-				CHECK_OPTLEN(sizeof(int));
-				*intval = MAX_DATA_SIZE;
-				
-				RETURN(0);
+			else if(optname == IPX_MAXSIZE)
+			{
+				RETURN_INT_OPT(MAX_DATA_SIZE);
 			}
-			
-			if(optname == IPX_ADDRESS) {
-				CHECK_OPTLEN(sizeof(IPX_ADDRESS_DATA));
+			else if(optname == IPX_ADDRESS)
+			{
+				GETSOCKOPT_OPTLEN(sizeof(IPX_ADDRESS_DATA));
 				
-				IPX_ADDRESS_DATA *ipxdata = (IPX_ADDRESS_DATA*)optval;
+				IPX_ADDRESS_DATA *ipxdata = (IPX_ADDRESS_DATA*)(optval);
 				
 				struct ipx_interface *nic = ipx_interface_by_index(ipxdata->adapternum);
 				
-				if(!nic) {
-					RETURN_WSA(ERROR_NO_DATA, -1);
+				if(!nic)
+				{
+					WSASetLastError(ERROR_NO_DATA);
+					
+					unlock_sockets();
+					return -1;
 				}
 				
 				addr32_out(ipxdata->netnum, nic->ipx_net);
 				addr48_out(ipxdata->nodenum, nic->ipx_node);
 				
-				/* TODO: LAN/WAN detection, link speed detection */
-				ipxdata->wan = FALSE;
-				ipxdata->status = FALSE;
-				ipxdata->maxpkt = MAX_DATA_SIZE;
+				ipxdata->wan       = FALSE;
+				ipxdata->status    = FALSE;
+				ipxdata->maxpkt    = MAX_DATA_SIZE;
 				ipxdata->linkspeed = 100000; /* 10MBps */
 				
 				free_ipx_interface(nic);
 				
-				RETURN(0);
+				unlock_sockets();
+				return 0;
 			}
-			
-			/* NOTE: IPX_MAX_ADAPTER_NUM implies it may be the maximum index
-			 * for referencing an IPX interface. This behaviour makes no sense
-			 * and a code example in MSDN implies it should be the number of
-			 * IPX interfaces, this code follows the latter.
-			*/
-			if(optname == IPX_MAX_ADAPTER_NUM) {
-				CHECK_OPTLEN(sizeof(int));
+			else if(optname == IPX_MAX_ADAPTER_NUM)
+			{
+				/* NOTE: IPX_MAX_ADAPTER_NUM implies it may be
+				 * the maximum index for referencing an IPX
+				 * interface. This behaviour makes no sense and
+				 * a code example in MSDN implies it should be
+				 * the number of IPX interfaces, this code
+				 * follows the latter behaviour.
+				*/
 				
-				*intval = ipx_interface_count();
-				
-				RETURN(0);
+				RETURN_INT_OPT(ipx_interface_count());
 			}
-			
-			if(optname == IPX_EXTENDED_ADDRESS) {
-				CHECK_OPTLEN(sizeof(BOOL));
-				
-				*bval = (ptr->flags & IPX_EXT_ADDR ? TRUE : FALSE);
-				
-				RETURN(0);
+			else if(optname == IPX_EXTENDED_ADDRESS)
+			{
+				RETURN_BOOL_OPT(sock->flags & IPX_EXT_ADDR);
 			}
-			
-			log_printf(LOG_ERROR, "Unknown NSPROTO_IPX socket option passed to getsockopt: %d", optname);
-			
-			RETURN_WSA(WSAENOPROTOOPT, -1);
+			else{
+				log_printf(LOG_ERROR, "Unknown NSPROTO_IPX socket option passed to getsockopt: %d", optname);
+				
+				WSASetLastError(WSAENOPROTOOPT);
+				
+				unlock_sockets();
+				return -1;
+			}
 		}
-		
-		if(level == SOL_SOCKET) {
-			if(optname == SO_BROADCAST) {
-				CHECK_OPTLEN(sizeof(BOOL));
-				
-				*bval = ptr->flags & IPX_BROADCAST ? TRUE : FALSE;
-				RETURN(0);
+		else if(level == SOL_SOCKET)
+		{
+			if(optname == SO_BROADCAST)
+			{
+				RETURN_BOOL_OPT(sock->flags & IPX_BROADCAST);
 			}
-			
-			if(optname == SO_REUSEADDR) {
-				CHECK_OPTLEN(sizeof(BOOL));
-				
-				*bval = ptr->flags & IPX_REUSE ? TRUE : FALSE;
-				RETURN(0);
+			else if(optname == SO_REUSEADDR)
+			{
+				RETURN_BOOL_OPT(sock->flags & IPX_REUSE);
 			}
 		}
 		
@@ -707,21 +734,36 @@ int WSAAPI getsockopt(SOCKET fd, int level, int optname, char FAR *optval, int F
 	return r_getsockopt(fd, level, optname, optval, optlen);
 }
 
-#define SET_FLAG(flag, state) \
-	if(state) { \
-		sockptr->flags |= (flag); \
-	}else{ \
-		sockptr->flags &= ~(flag); \
+#define SETSOCKOPT_OPTLEN(s) \
+	if(optlen < s) \
+	{ \
+		WSASetLastError(WSAEFAULT); \
+		unlock_sockets(); \
+		return -1; \
 	}
 
-int WSAAPI setsockopt(SOCKET fd, int level, int optname, const char FAR *optval, int optlen) {
-	int *intval = (int*)optval;
-	BOOL *bval = (BOOL*)optval;
+#define SET_FLAG(flag) \
+	SETSOCKOPT_OPTLEN(sizeof(BOOL)); \
+	if(*((BOOL*)(optval))) \
+	{ \
+		sock->flags |= (flag); \
+	} \
+	else{ \
+		sock->flags &= ~(flag); \
+	} \
+	unlock_sockets(); \
+	return 0;
+
+int WSAAPI setsockopt(SOCKET fd, int level, int optname, const char FAR *optval, int optlen)
+{
+	int *intval = (int*)(optval);
 	
-	ipx_socket *sockptr = get_socket(fd);
+	ipx_socket *sock = get_socket(fd);
 	
-	if(sockptr) {
-		if(min_log_level <= LOG_DEBUG) {
+	if(sock)
+	{
+		if(min_log_level <= LOG_DEBUG)
+		{
 			char opt_s[24] = "";
 			
 			int i;
@@ -740,52 +782,60 @@ int WSAAPI setsockopt(SOCKET fd, int level, int optname, const char FAR *optval,
 			}
 		}
 		
-		if(level == NSPROTO_IPX) {
-			if(optname == IPX_PTYPE) {
-				sockptr->s_ptype = *intval;
-				RETURN(0);
-			}
-			
-			if(optname == IPX_FILTERPTYPE) {
-				sockptr->f_ptype = *intval;
-				sockptr->flags |= IPX_FILTER;
+		if(level == NSPROTO_IPX)
+		{
+			if(optname == IPX_PTYPE)
+			{
+				SETSOCKOPT_OPTLEN(sizeof(int));
 				
-				RETURN(0);
-			}
-			
-			if(optname == IPX_STOPFILTERPTYPE) {
-				sockptr->flags &= ~IPX_FILTER;
+				sock->s_ptype = *intval;
 				
-				RETURN(0);
+				unlock_sockets();
+				return 0;
 			}
-			
-			if(optname == IPX_RECEIVE_BROADCAST) {
-				SET_FLAG(IPX_RECV_BCAST, *bval);
+			else if(optname == IPX_FILTERPTYPE)
+			{
+				SETSOCKOPT_OPTLEN(sizeof(int));
 				
-				RETURN(0);
+				sock->f_ptype = *intval;
+				sock->flags |= IPX_FILTER;
+				
+				unlock_sockets();
+				return 0;
 			}
-			
-			if(optname == IPX_EXTENDED_ADDRESS) {
-				SET_FLAG(IPX_EXT_ADDR, *bval);
-				RETURN(0);
+			else if(optname == IPX_STOPFILTERPTYPE)
+			{
+				sock->flags &= ~IPX_FILTER;
+				
+				unlock_sockets();
+				return 0;
 			}
-			
-			log_printf(LOG_ERROR, "Unknown NSPROTO_IPX socket option passed to setsockopt: %d", optname);
-			
-			RETURN_WSA(WSAENOPROTOOPT, -1);
+			else if(optname == IPX_RECEIVE_BROADCAST)
+			{
+				SET_FLAG(IPX_RECV_BCAST);
+			}
+			else if(optname == IPX_EXTENDED_ADDRESS)
+			{
+				SET_FLAG(IPX_EXT_ADDR);
+			}
+			else{
+				log_printf(LOG_ERROR, "Unknown NSPROTO_IPX socket option passed to setsockopt: %d", optname);
+				
+				WSASetLastError(WSAENOPROTOOPT);
+				
+				unlock_sockets();
+				return -1;
+			}
 		}
-		
-		if(level == SOL_SOCKET) {
-			if(optname == SO_BROADCAST) {
-				SET_FLAG(IPX_BROADCAST, *bval);
-				
-				RETURN(0);
+		else if(level == SOL_SOCKET)
+		{
+			if(optname == SO_BROADCAST)
+			{
+				SET_FLAG(IPX_BROADCAST);
 			}
-			
-			if(optname == SO_REUSEADDR) {
-				SET_FLAG(IPX_REUSE, *bval);
-				
-				RETURN(0);
+			else if(optname == SO_REUSEADDR)
+			{
+				SET_FLAG(IPX_REUSE);
 			}
 		}
 		
@@ -817,21 +867,46 @@ static int send_packet(const ipx_packet *packet, int len, struct sockaddr *addr,
 	return (r_sendto(private_socket, (char*)packet, len, 0, addr, addrlen) == len);
 }
 
-int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct sockaddr *addr, int addrlen) {
+int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct sockaddr *addr, int addrlen)
+{
 	struct sockaddr_ipx_ext *ipxaddr = (struct sockaddr_ipx_ext*)addr;
 	
-	ipx_socket *sockptr = get_socket(fd);
+	ipx_socket *sock = get_socket(fd);
 	
-	if(sockptr) {
-		if(!addr || addrlen < sizeof(struct sockaddr_ipx)) {
-			RETURN_WSA(WSAEDESTADDRREQ, -1);
+	if(sock)
+	{
+		if(!addr)
+		{
+			/* Destination address required. */
+			
+			WSASetLastError(WSAEDESTADDRREQ);
+			
+			unlock_sockets();
+			return -1;
 		}
 		
-		if(!(sockptr->flags & IPX_SEND)) {
-			RETURN_WSA(WSAESHUTDOWN, -1);
+		if(addrlen < sizeof(struct sockaddr_ipx))
+		{
+			/* Destination address too small. */
+			
+			WSASetLastError(WSAEFAULT);
+			
+			unlock_sockets();
+			return -1;
 		}
 		
-		if(!(sockptr->flags & IPX_BOUND)) {
+		if(!(sock->flags & IPX_SEND))
+		{
+			/* Socket has been shut down for sending. */
+			
+			WSASetLastError(WSAESHUTDOWN);
+			
+			unlock_sockets();
+			return -1;
+		}
+		
+		if(!(sock->flags & IPX_BOUND))
+		{
 			log_printf(LOG_WARNING, "sendto() on unbound socket, attempting implicit bind");
 			
 			struct sockaddr_ipx bind_addr;
@@ -841,29 +916,42 @@ int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct s
 			memset(bind_addr.sa_nodenum, 0, 6);
 			bind_addr.sa_socket = 0;
 			
-			if(bind(fd, (struct sockaddr*)&bind_addr, sizeof(bind_addr)) == -1) {
-				RETURN(-1);
+			if(bind(fd, (struct sockaddr*)&bind_addr, sizeof(bind_addr)) == -1)
+			{
+				unlock_sockets();
+				return -1;
 			}
 		}
 		
-		if(len > MAX_DATA_SIZE) {
-			RETURN_WSA(WSAEMSGSIZE, -1);
+		if(len > MAX_DATA_SIZE)
+		{
+			WSASetLastError(WSAEMSGSIZE);
+			
+			unlock_sockets();
+			return -1;
 		}
 		
 		int psize = sizeof(ipx_packet)+len-1;
 		
 		ipx_packet *packet = malloc(psize);
-		if(!packet) {
-			RETURN_WSA(ERROR_OUTOFMEMORY, -1);
+		if(!packet)
+		{
+			WSASetLastError(ERROR_OUTOFMEMORY);
+			
+			unlock_sockets();
+			return -1;
 		}
 		
-		packet->ptype = sockptr->s_ptype;
+		packet->ptype = sock->s_ptype;
 		
-		if(sockptr->flags & IPX_EXT_ADDR) {
-			if(addrlen >= 15) {
+		if(sock->flags & IPX_EXT_ADDR)
+		{
+			if(addrlen >= 15)
+			{
 				packet->ptype = ipxaddr->sa_ptype;
-			}else{
-				log_printf(LOG_ERROR, "IPX_EXTENDED_ADDRESS enabled, but sendto() called with addrlen %d", addrlen);
+			}
+			else{
+				log_printf(LOG_DEBUG, "IPX_EXTENDED_ADDRESS enabled, sendto called with addrlen %d", addrlen);
 			}
 		}
 		
@@ -873,13 +961,14 @@ int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct s
 		
 		unsigned char z6[] = {0,0,0,0,0,0};
 		
-		if(memcmp(packet->dest_net, z6, 4) == 0) {
-			memcpy(packet->dest_net, sockptr->addr.sa_netnum, 4);
+		if(memcmp(packet->dest_net, z6, 4) == 0)
+		{
+			memcpy(packet->dest_net, sock->addr.sa_netnum, 4);
 		}
 		
-		memcpy(packet->src_net, sockptr->addr.sa_netnum, 4);
-		memcpy(packet->src_node, sockptr->addr.sa_nodenum, 6);
-		packet->src_socket = sockptr->addr.sa_socket;
+		memcpy(packet->src_net, sock->addr.sa_netnum, 4);
+		memcpy(packet->src_node, sock->addr.sa_nodenum, 6);
+		packet->src_socket = sock->addr.sa_socket;
 		
 		packet->size = htons(len);
 		memcpy(packet->data, buf, len);
@@ -948,96 +1037,130 @@ int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct s
 		
 		free(packet);
 		
-		RETURN(success ? len : -1);
-	}else{
+		unlock_sockets();
+		return (success ? len : -1);
+	}
+	else{
 		return r_sendto(fd, buf, len, flags, addr, addrlen);
 	}
 }
 
-int PASCAL shutdown(SOCKET fd, int cmd) {
-	ipx_socket *sockptr = get_socket(fd);
+int PASCAL shutdown(SOCKET fd, int cmd)
+{
+	ipx_socket *sock = get_socket(fd);
 	
-	if(sockptr) {
-		if(cmd == SD_RECEIVE || cmd == SD_BOTH) {
-			sockptr->flags &= ~IPX_RECV;
+	if(sock)
+	{
+		if(cmd == SD_RECEIVE || cmd == SD_BOTH)
+		{
+			sock->flags &= ~IPX_RECV;
 		}
 		
-		if(cmd == SD_SEND || cmd == SD_BOTH) {
-			sockptr->flags &= ~IPX_SEND;
+		if(cmd == SD_SEND || cmd == SD_BOTH)
+		{
+			sock->flags &= ~IPX_SEND;
 		}
 		
-		RETURN(0);
-	}else{
+		unlock_sockets();
+		return 0;
+	}
+	else{
 		return r_shutdown(fd, cmd);
 	}
 }
 
-int PASCAL ioctlsocket(SOCKET fd, long cmd, u_long *argp) {
-	ipx_socket *sockptr = get_socket(fd);
+int PASCAL ioctlsocket(SOCKET fd, long cmd, u_long *argp)
+{
+	ipx_socket *sock = get_socket(fd);
 	
-	if(sockptr && cmd == FIONREAD) {
-		fd_set fdset;
-		struct timeval tv = {0,0};
-		
-		FD_ZERO(&fdset);
-		FD_SET(sockptr->fd, &fdset);
-		
-		int r = select(1, &fdset, NULL, NULL, &tv);
-		if(r == -1) {
-			RETURN(-1);
-		}else if(r == 0) {
-			*(unsigned long*)argp = 0;
-			RETURN(0);
-		}
-		
-		char tmp_buf;
-		
-		if((r = recv_packet(sockptr, &tmp_buf, 1, MSG_PEEK, NULL, 0)) == -1) {
-			return -1;
-		}
-		
-		*(unsigned long*)argp = r;
-		return 0;
-	}
-	
-	if(sockptr) {
+	if(sock)
+	{
 		log_printf(LOG_DEBUG, "ioctlsocket(%d, %d)", fd, cmd);
+		
+		if(cmd == FIONREAD)
+		{
+			/* Test to see if data is waiting. */
+			
+			fd_set fdset;
+			struct timeval tv = {0,0};
+			
+			FD_ZERO(&fdset);
+			FD_SET(sock->fd, &fdset);
+			
+			int r = select(1, &fdset, NULL, NULL, &tv);
+			
+			if(r == -1)
+			{
+				unlock_sockets();
+				return -1;
+			}
+			else if(r == 0)
+			{
+				*(unsigned long*)(argp) = 0;
+				
+				unlock_sockets();
+				return -1;
+			}
+			
+			/* Get the size of the packet. */
+			
+			char tmp_buf;
+			
+			if((r = recv_packet(sock, &tmp_buf, 1, MSG_PEEK, NULL, 0)) == -1)
+			{
+				return -1;
+			}
+			
+			*(unsigned long*)(argp) = r;
+			return 0;
+		}
+		
 		unlock_sockets();
 	}
 	
 	return r_ioctlsocket(fd, cmd, argp);
 }
 
-int PASCAL connect(SOCKET fd, const struct sockaddr *addr, int addrlen) {
-	ipx_socket *sockptr = get_socket(fd);
+int PASCAL connect(SOCKET fd, const struct sockaddr *addr, int addrlen)
+{
+	ipx_socket *sock = get_socket(fd);
 	
-	if(sockptr) {
-		if(addrlen < sizeof(struct sockaddr_ipx)) {
-			RETURN_WSA(WSAEFAULT, -1);
+	if(sock)
+	{
+		if(addrlen < sizeof(struct sockaddr_ipx))
+		{
+			WSASetLastError(WSAEFAULT);
+			
+			unlock_sockets();
+			return -1;
 		}
 		
 		struct sockaddr_ipx *ipxaddr = (struct sockaddr_ipx*)addr;
 		
-		const unsigned char z6[] = {0,0,0,0,0,0};
+		const unsigned char z6[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 		
-		if(ipxaddr->sa_family == AF_UNSPEC || (ipxaddr->sa_family == AF_IPX && memcmp(ipxaddr->sa_nodenum, z6, 6) == 0)) {
-			if(!(sockptr->flags & IPX_CONNECTED)) {
-				RETURN(0);
-			}
+		if(ipxaddr->sa_family == AF_UNSPEC || (ipxaddr->sa_family == AF_IPX && memcmp(ipxaddr->sa_nodenum, z6, 6) == 0))
+		{
+			/* Disconnect. */
 			
-			struct sockaddr_ipx dc_addr;
-			dc_addr.sa_family = AF_UNSPEC;
+			sock->flags &= ~IPX_CONNECTED;
 			
-			sockptr->flags &= ~IPX_CONNECTED;
-			
-			RETURN(0);
+			unlock_sockets();
+			return 0;
 		}
 		
-		if(ipxaddr->sa_family != AF_IPX) {
-			RETURN_WSA(WSAEAFNOSUPPORT, -1);
+		if(ipxaddr->sa_family != AF_IPX)
+		{
+			/* Invalid address family. */
+			
+			WSASetLastError(WSAEAFNOSUPPORT);
+			
+			unlock_sockets();
+			return -1;
 		}
 		
-		if(!(sockptr->flags & IPX_BOUND)) {
+		if(!(sock->flags & IPX_BOUND))
+		{
 			log_printf(LOG_WARNING, "connect() on unbound socket, attempting implicit bind");
 			
 			struct sockaddr_ipx bind_addr;
@@ -1047,52 +1170,77 @@ int PASCAL connect(SOCKET fd, const struct sockaddr *addr, int addrlen) {
 			memset(bind_addr.sa_nodenum, 0, 6);
 			bind_addr.sa_socket = 0;
 			
-			if(bind(fd, (struct sockaddr*)&bind_addr, sizeof(bind_addr)) == -1) {
-				RETURN(-1);
+			if(bind(fd, (struct sockaddr*)&bind_addr, sizeof(bind_addr)) == -1)
+			{
+				unlock_sockets();
+				return -1;
 			}
 		}
 		
-		memcpy(&(sockptr->remote_addr), addr, sizeof(*ipxaddr));
-		sockptr->flags |= IPX_CONNECTED;
+		memcpy(&(sock->remote_addr), addr, sizeof(*ipxaddr));
+		sock->flags |= IPX_CONNECTED;
 		
-		RETURN(0);
-	}else{
+		unlock_sockets();
+		return 0;
+	}
+	else{
 		return r_connect(fd, addr, addrlen);
 	}
 }
 
-int PASCAL send(SOCKET fd, const char *buf, int len, int flags) {
-	ipx_socket *sockptr = get_socket(fd);
+int PASCAL send(SOCKET fd, const char *buf, int len, int flags)
+{
+	ipx_socket *sock = get_socket(fd);
 	
-	if(sockptr) {
-		if(!(sockptr->flags & IPX_CONNECTED)) {
-			RETURN_WSA(WSAENOTCONN, -1);
+	if(sock)
+	{
+		if(!(sock->flags & IPX_CONNECTED))
+		{
+			WSASetLastError(WSAENOTCONN);
+			
+			unlock_sockets();
+			return -1;
 		}
 		
-		int ret = sendto(fd, buf, len, 0, (struct sockaddr*)&(sockptr->remote_addr), sizeof(struct sockaddr_ipx));
-		RETURN(ret);
-	}else{
+		int ret = sendto(fd, buf, len, 0, (struct sockaddr*)&(sock->remote_addr), sizeof(struct sockaddr_ipx));
+		
+		unlock_sockets();
+		return ret;
+	}
+	else{
 		return r_send(fd, buf, len, flags);
 	}
 }
 
-int PASCAL getpeername(SOCKET fd, struct sockaddr *addr, int *addrlen) {
-	ipx_socket *sockptr = get_socket(fd);
+int PASCAL getpeername(SOCKET fd, struct sockaddr *addr, int *addrlen)
+{
+	ipx_socket *sock = get_socket(fd);
 	
-	if(sockptr) {
-		if(!(sockptr->flags & IPX_CONNECTED)) {
-			RETURN_WSA(WSAENOTCONN, -1);
+	if(sock)
+	{
+		if(!(sock->flags & IPX_CONNECTED))
+		{
+			WSASetLastError(WSAENOTCONN);
+			
+			unlock_sockets();
+			return -1;
 		}
 		
-		if(*addrlen < sizeof(struct sockaddr_ipx)) {
-			RETURN_WSA(WSAEFAULT, -1);
+		if(*addrlen < sizeof(struct sockaddr_ipx))
+		{
+			WSASetLastError(WSAEFAULT);
+			
+			unlock_sockets();
+			return -1;
 		}
 		
-		memcpy(addr, &(sockptr->remote_addr), sizeof(struct sockaddr_ipx));
+		memcpy(addr, &(sock->remote_addr), sizeof(struct sockaddr_ipx));
 		*addrlen = sizeof(struct sockaddr_ipx);
 		
-		RETURN(0);
-	}else{
+		unlock_sockets();
+		return 0;
+	}
+	else{
 		return r_getpeername(fd, addr, addrlen);
 	}
 }

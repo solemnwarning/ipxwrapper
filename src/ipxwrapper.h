@@ -42,15 +42,6 @@
 #define IPX_RECV_BCAST	(int)(1<<8)
 #define IPX_EXT_ADDR	(int)(1<<9)
 
-#define RETURN(...) \
-	unlock_sockets();\
-	return __VA_ARGS__;
-
-#define RETURN_WSA(errnum, ...) \
-	unlock_sockets();\
-	WSASetLastError(errnum);\
-	return __VA_ARGS__;
-
 typedef struct ipx_socket ipx_socket;
 typedef struct ipx_packet ipx_packet;
 
