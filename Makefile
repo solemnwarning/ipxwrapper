@@ -46,10 +46,10 @@ SRC_FILES := changes.txt license.txt Makefile mkstubs.pl readme.txt src/config.h
 	include/dplay.h include/dplaysp.h include/dplobby.h include/wsnwlink.h directplay-win32.reg \
 	directplay-win64.reg
 
-all: ipxwrapper.dll wsock32.dll mswsock.dll ipxconfig.exe dpwsockx.dll ipxrouter.exe
+all: ipxwrapper.dll wsock32.dll mswsock.dll ipxconfig.exe dpwsockx.dll
 
 clean:
-	rm -f ipxwrapper.dll wsock32.dll mswsock.dll ipxconfig.exe dpwsockx.dll ipxrouter.exe
+	rm -f ipxwrapper.dll wsock32.dll mswsock.dll ipxconfig.exe dpwsockx.dll
 	rm -f src/*.o src/*_stubs.s version.o Makefile.dep
 
 dist: all
@@ -82,9 +82,6 @@ ipxconfig.exe: src/ipxconfig.cpp icons/ipxconfig.o
 
 dpwsockx.dll: src/directplay.o src/log.o src/dpwsockx_stubs.o src/common.o
 	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -shared -o dpwsockx.dll src/directplay.o src/log.o src/common.o src/dpwsockx_stubs.o src/dpwsockx.def -lwsock32
-
-ipxrouter.exe: src/router-exe.o src/router.o src/interface.o src/common.o src/log.o icons/ipxrouter.o src/config.o src/addr.o
-	$(CC) $(CFLAGS) -static-libgcc -mwindows -o ipxrouter.exe $^ -lws2_32 -liphlpapi
 
 src/ipxwrapper_stubs.s: src/ipxwrapper_stubs.txt
 	perl mkstubs.pl src/ipxwrapper_stubs.txt src/ipxwrapper_stubs.s 0
