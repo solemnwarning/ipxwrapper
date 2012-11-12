@@ -62,6 +62,7 @@ iface_config_t get_iface_config(addr48_t hwaddr);
 bool set_iface_config(addr48_t hwaddr, const iface_config_t *config);
 
 addr48_t get_primary_iface();
+bool set_primary_iface(addr48_t primary);
 
 #ifdef __cplusplus
 }

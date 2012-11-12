@@ -27,31 +27,29 @@ main_config_t get_main_config(void)
 	
 	main_config_t config;
 	
-	config.udp_port       = DEFAULT_PORT;
-	config.w95_bug        = true;
+	config.udp_port  = DEFAULT_PORT;
+	config.w95_bug   = true;
+	config.log_level = LOG_INFO;
 	
-	HKEY reg      = reg_open_main(false);
-	DWORD version = reg_get_dword(reg, "config_version", 1);
+	HKEY reg = reg_open_main(false);
 	
-	if(version == 1)
+	/* Load pre-0.4.x "global" config structure and values. */
+	
+	struct v1_global_config reg_config;
+	
+	if(reg_get_bin(reg, "global", &reg_config, sizeof(reg_config), NULL))
 	{
-		struct v1_global_config reg_config;
-		
-		if(reg_get_bin(reg, "global", &reg_config, sizeof(reg_config), NULL))
-		{
-			config.udp_port   = reg_config.udp_port;
-			config.w95_bug    = reg_config.w95_bug;
-		}
-		
-		config.log_level   = reg_get_dword(reg, "min_log_level", LOG_INFO);
+		config.udp_port = reg_config.udp_port;
+		config.w95_bug  = reg_config.w95_bug;
 	}
-	else if(version == 2)
-	{
-		config.udp_port = reg_get_dword(reg, "port", config.udp_port);
-		config.w95_bug  = reg_get_dword(reg, "w95_bug", config.w95_bug);
-		
-		config.log_level   = reg_get_dword(reg, "log_level", LOG_INFO);
-	}
+	
+	config.log_level = reg_get_dword(reg, "min_log_level", config.log_level);
+	
+	/* Overlay with any 0.4.x config values. */
+	
+	config.udp_port  = reg_get_dword(reg, "port", config.udp_port);
+	config.w95_bug   = reg_get_dword(reg, "w95_bug", config.w95_bug);
+	config.log_level = reg_get_dword(reg, "log_level", config.log_level);
 	
 	reg_close(reg);
 	
@@ -64,10 +62,7 @@ bool set_main_config(const main_config_t *config)
 	
 	bool ok = reg_set_dword(reg, "port", config->udp_port)
 		&& reg_set_dword(reg, "w95_bug", config->w95_bug)
-		
-		&& reg_set_dword(reg, "log_level", config->log_level)
-		
-		&& reg_set_dword(reg, "version", 2);
+		&& reg_set_dword(reg, "log_level", config->log_level);
 	
 	reg_close(reg);
 	
@@ -145,19 +140,67 @@ addr48_t get_primary_iface(void)
 {
 	addr48_t primary = addr48_in((unsigned char[]){ 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF });
 	
-	HKEY reg      = reg_open_main(false);
-	DWORD version = reg_get_dword(reg, "config_version", 1);
+	HKEY reg = reg_open_main(false);
 	
-	if(version == 1)
+	if(reg_check_value(reg, "primary"))
 	{
-		/* TODO: Iterate... */
-	}
-	else if(version == 2)
-	{
+		/* Post-0.4.x */
+		
 		primary = reg_get_addr48(reg, "primary", primary);
+	}
+	else if(reg)
+	{
+		/* Iterate over any pre-0.4.x interface config values and return
+		 * the node number of the first one with the primary flag set.
+		*/
+		
+		int index = 0;
+		
+		while(1)
+		{
+			char name[24];
+			DWORD name_size = sizeof(name);
+			
+			struct v1_iface_config config;
+			DWORD config_size = sizeof(config);
+			
+			int err = RegEnumValue(reg, index++, name, &name_size, NULL, NULL, (BYTE*)&config, &config_size);
+			
+			if(err == ERROR_SUCCESS)
+			{
+				addr48_t tmp;
+				
+				if(
+					config_size == sizeof(config)
+					&& config.primary
+					&& addr48_from_string(&tmp, name)
+				) {
+					primary = addr48_in(config.ipx_node);
+					break;
+				}
+			}
+			else if(err == ERROR_NO_MORE_ITEMS)
+			{
+				break;
+			}
+			else{
+				log_printf(LOG_ERROR, "Error enumerating registry value: %s", w32_error(err));
+			}
+		}
 	}
 	
 	reg_close(reg);
 	
 	return primary;
+}
+
+bool set_primary_iface(addr48_t primary)
+{
+	HKEY reg = reg_open_main(true);
+	
+	bool ok = reg_set_addr48(reg, "primary", primary);
+	
+	reg_close(reg);
+	
+	return ok;
 }

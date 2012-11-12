@@ -401,7 +401,7 @@ static bool save_config()
 		}
 	}
 	
-	return set_main_config(&main_config);
+	return set_main_config(&main_config) && set_primary_iface(primary_iface);
 }
 
 /* Fetch NIC settings from UI and store in NIC list */
