@@ -45,6 +45,8 @@ HKEY reg_open_main(bool readwrite);
 HKEY reg_open_subkey(HKEY parent, const char *path, bool readwrite);
 void reg_close(HKEY key);
 
+bool reg_check_value(HKEY key, const char *name);
+
 bool reg_get_bin(HKEY key, const char *name, void *buf, size_t size, const void *default_value);
 bool reg_set_bin(HKEY key, const char *name, void *buf, size_t size);
 

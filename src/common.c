@@ -87,6 +87,19 @@ void reg_close(HKEY key)
 	}
 }
 
+/* Check if a value exists.
+ * Returns true on success, false on failure.
+*/
+bool reg_check_value(HKEY key, const char *name)
+{
+	if(key != NULL && RegQueryValueEx(key, name, NULL, NULL, NULL, NULL) == ERROR_SUCCESS)
+	{
+		return true;
+	}
+	
+	return false;
+}
+
 bool reg_get_bin(HKEY key, const char *name, void *buf, size_t size, const void *default_value)
 {
 	if(key != NULL)
