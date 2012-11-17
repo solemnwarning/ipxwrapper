@@ -1,3 +1,59 @@
+Version 0.4.0:
+	Bugfix: Fixed a crash in closesocket.
+	
+	Bugfix: Properly handle interface indexes when some are disabled.
+	
+	Bugfix: Fixed a deadlock caused by getsockopt.
+	
+	Update: Implemented new address cache which stores the full sockaddr structure
+	for each remote socket.
+	
+	Cleanup: Integer types for storing 32 and 48-bit addresses and functions for
+	manipulating them.
+	
+	Cleanup: Rewrote registry access code.
+	
+	Cleanup: Implemented library functions for loading and saving configuration.
+	
+	Cleanup: Configuration data written to registry in more sensible format.
+	
+	Bugfix: Always use correct DLL names when logging calls in stub DLLs.
+	
+	Bugfix: Properly handle interfaces without an IP address set.
+	
+	Feature: Support interfaces with multiple assigned IP addresses.
+	
+	Update: Periodically reload the interfaces and cache the result so the list can
+	be used in more contexts without a performance hit.
+	
+	Cleanup: Check if packets were sent from us by using the source IPX address and
+	local interface list rather than maintaining a list of local IP addresses.
+	
+	Feature: Wildcard interface at index 0 to send/recv packets on all interfaces.
+	
+	Update: Removed options to disable source IP address filtering and selective
+	broadcasting.
+	
+	Update: Removed ipxrouter program, no longer needed.
+	
+	Cleanup: Removed out-of-process router support, multiple instances now keep a
+	list of bound addresses in shared memory.
+	
+	Cleanup: Update the address cache in the router main loop rather than including
+	the source IP in a header prefixed to the relayed packet.
+	
+	Update: Each instance of IPXWrapper binds to a random UDP port for sending and
+	receiving packets. The "normal" port is shared for receiving broadcasts only.
+	
+	Bugfix: Check source socket number before relaying to a connected socket.
+	
+	Update: Store IPX sockets in a hash table rather than a linked list.
+	
+	Cleanup: Removed RETURN and RETURN_WSA macros used by the WinSock code.
+	
+	Cleanup: Use some IPXWrapper library code for interface and registry handling
+	in ipxconfig.
+
 Version 0.3.4:
 	Feature: Added workaround for games that unset SystemRoot in the environment
 	such as Carmageddon II.
