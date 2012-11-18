@@ -31,6 +31,7 @@
 #include "interface.h"
 #include "router.h"
 #include "addrcache.h"
+#include "addrtable.h"
 
 extern const char *version_string;
 extern const char *compile_time;
@@ -91,11 +92,15 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res)
 			return FALSE;
 		}
 		
+		addr_table_init();
+		
 		router_init();
 	}
 	else if(why == DLL_PROCESS_DETACH)
 	{
 		router_cleanup();
+		
+		addr_table_cleanup();
 		
 		WSACleanup();
 		

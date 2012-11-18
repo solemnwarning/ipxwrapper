@@ -81,6 +81,8 @@ void addr_table_init(void)
 		return;
 	}
 	
+	addr_table_base = (addr_table_entry_t*)(addr_table_header + 1);
+	
 	if(new_table)
 	{
 		/* Initialise the address table. */
@@ -96,6 +98,8 @@ void addr_table_init(void)
 		
 		return;
 	}
+	
+	addr_table_unlock();
 }
 
 /* Release all handles to the address table and associated objects. */
