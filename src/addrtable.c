@@ -46,6 +46,22 @@ static void _init_fail(void)
 	addr_table_cleanup();
 }
 
+/* Find the last entry in the address table.
+ * Returns addr_table_base if there are none.
+*/
+static addr_table_entry_t *_last_entry()
+{
+	addr_table_entry_t *last = addr_table_base, *next = addr_table_base + 1;
+	addr_table_entry_t *end  = addr_table_base + ADDR_TABLE_MAX_ENTRIES;
+	
+	while(next < end && next->flags & ADDR_TABLE_ENTRY_VALID)
+	{
+		last = next++;
+	}
+	
+	return last;
+}
+
 void addr_table_init(void)
 {
 	/* Mutex used to protect the address table. */
@@ -102,9 +118,25 @@ void addr_table_init(void)
 	addr_table_unlock();
 }
 
-/* Release all handles to the address table and associated objects. */
 void addr_table_cleanup(void)
 {
+	/* Release any remaining addresses bound by this process. */
+	
+	if(addr_table_base)
+	{
+		ipx_socket *s, *tmp;
+		
+		HASH_ITER(hh, sockets, s, tmp)
+		{
+			if(s->flags & IPX_BOUND)
+			{
+				addr_table_remove(s->port);
+			}
+		}
+	}
+	
+	/* Close handles to the address table. */
+	
 	if(addr_table_header)
 	{
 		UnmapViewOfFile(addr_table_header);
@@ -335,14 +367,7 @@ void addr_table_remove(uint16_t port)
 		entry++;
 	}
 	
-	/* Continue iteration until we find the last entry... */
-	
-	addr_table_entry_t *last = entry;
-	
-	while(last < end && (last->flags & ADDR_TABLE_ENTRY_VALID))
-	{
-		last++;
-	}
+	addr_table_entry_t *last = _last_entry();
 	
 	/* Replace entry with the last entry and mark the latter as invalid. */
 	
@@ -373,19 +398,14 @@ void addr_table_update(void)
 	/* Remove any expired entries. */
 	
 	addr_table_entry_t *entry = addr_table_base;
-	addr_table_entry_t *last  = addr_table_base;
+	addr_table_entry_t *last  = _last_entry();
 	addr_table_entry_t *end   = addr_table_base + ADDR_TABLE_MAX_ENTRIES;
-	
-	while(last < end && (last->flags & ADDR_TABLE_ENTRY_VALID))
-	{
-		last++;
-	}
 	
 	for(; entry < end && (entry->flags & ADDR_TABLE_ENTRY_VALID); entry++)
 	{
 		if(entry->time + ADDR_TABLE_ENTRY_TIMEOUT <= time(NULL))
 		{
-			*end = *last;
+			*entry = *last;
 			
 			last->flags &= ~ADDR_TABLE_ENTRY_VALID;
 			last--;

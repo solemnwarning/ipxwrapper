@@ -18,12 +18,14 @@
 #include <windows.h>
 #include <winsock2.h>
 #include <uthash.h>
+#include <time.h>
 
 #include "router.h"
 #include "common.h"
 #include "ipxwrapper.h"
 #include "interface.h"
 #include "addrcache.h"
+#include "addrtable.h"
 
 static bool router_running   = false;
 static WSAEVENT router_event = WSA_INVALID_EVENT;
@@ -310,15 +312,23 @@ static bool handle_recv(int fd)
 
 static DWORD router_main(void *arg)
 {
+	time_t last_at_update = 0;
+	
 	while(1)
 	{
-		WaitForSingleObject(router_event, INFINITE);
+		WaitForSingleObject(router_event, 1000);
 		
 		WSAResetEvent(router_event);
 		
 		if(!router_running)
 		{
 			return 0;
+		}
+		
+		if(last_at_update != time(NULL))
+		{
+			addr_table_update();
+			last_at_update = time(NULL);
 		}
 		
 		if(!handle_recv(shared_socket) || !handle_recv(private_socket))
