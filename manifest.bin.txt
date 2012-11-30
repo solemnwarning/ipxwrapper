@@ -1,0 +1,12 @@
+changes.txt
+license.txt
+readme.txt
+
+ipxwrapper.dll
+mswsock.dll
+wsock32.dll
+dpwsockx.dll
+ipxconfig.exe
+
+directplay-win32.reg
+directplay-win64.reg

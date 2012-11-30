@@ -30,22 +30,14 @@ export CFLAGS
 export CXX
 export CXXFLAGS
 
-VERSION := DEVELOPMENT BUILD
+VERSION := git
 
 IPXWRAPPER_DEPS := src/ipxwrapper.o src/winsock.o src/ipxwrapper_stubs.o src/log.o src/common.o \
 	src/interface.o src/router.o src/ipxwrapper.def src/addrcache.o src/config.o src/addr.o \
 	src/addrtable.o
 
-BIN_FILES := changes.txt license.txt readme.txt ipxwrapper.dll mswsock.dll wsock32.dll ipxconfig.exe \
-	ipxrouter.exe dpwsockx.dll directplay-win32.reg directplay-win64.reg
-SRC_FILES := changes.txt license.txt Makefile mkstubs.pl readme.txt src/config.h src/ipxconfig.cpp \
-	src/ipxwrapper.c src/ipxwrapper.def src/ipxwrapper.h src/ipxwrapper_stubs.txt src/log.c \
-	src/mswsock.def src/mswsock_stubs.txt src/stubdll.c src/winsock.c src/wsock32.def \
-	src/wsock32_stubs.txt src/directplay.c src/dpwsockx.def src/dpwsockx_stubs.txt src/common.c \
-	src/common.h src/router.c src/router.h src/router-exe.c src/interface.c src/interface.h \
-	icons/ipxrouter.rc icons/ipxrouter.ico icons/ipxconfig.rc icons/ipxconfig.ico \
-	include/dplay.h include/dplaysp.h include/dplobby.h include/wsnwlink.h directplay-win32.reg \
-	directplay-win64.reg
+BIN_FILES := $(shell cat manifest.bin.txt)
+SRC_FILES := $(shell cat manifest.src.txt)
 
 # DLLs to copy to the tests directory before running the test suite.
 
@@ -56,6 +48,7 @@ all: ipxwrapper.dll wsock32.dll mswsock.dll ipxconfig.exe dpwsockx.dll
 clean:
 	rm -f ipxwrapper.dll wsock32.dll mswsock.dll ipxconfig.exe dpwsockx.dll
 	rm -f src/*.o src/*_stubs.s version.o Makefile.dep
+	rm -f tests/*.exe tests/*.o
 
 dist: all
 	mkdir ipxwrapper-$(VERSION)
