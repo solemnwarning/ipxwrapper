@@ -3,3 +3,4 @@ Makefile.dep
 *.s
 *.dll
 *.exe
+ipxwrapper.log
