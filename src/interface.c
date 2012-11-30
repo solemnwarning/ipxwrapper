@@ -335,6 +335,92 @@ void ipx_interfaces_init(void)
 		log_printf(LOG_ERROR, "Failed to initialise critical section: %s", w32_error(GetLastError()));
 		abort();
 	}
+	
+	/* Dump the interface lists for debugging... */
+	
+	log_printf(LOG_INFO, "--");
+	
+	/* IP interfaces... */
+	
+	IP_ADAPTER_INFO *ip_ifaces = load_sys_interfaces(), *ip;
+	
+	log_printf(LOG_INFO, "Listing IP interfaces:");
+	log_printf(LOG_INFO, "--");
+	
+	if(!ip_ifaces)
+	{
+		log_printf(LOG_INFO, "No IP interfaces detected!");
+		log_printf(LOG_INFO, "--");
+	}
+	
+	for(ip = ip_ifaces; ip; ip = ip->Next)
+	{
+		log_printf(LOG_INFO, "AdapterName:   %s", ip->AdapterName);
+		log_printf(LOG_INFO, "Description:   %s", ip->Description);
+		log_printf(LOG_INFO, "AddressLength: %u", (unsigned int)(ip->AddressLength));
+		
+		if(ip->AddressLength == 6)
+		{
+			char hwaddr[ADDR48_STRING_SIZE];
+			addr48_string(hwaddr, addr48_in(ip->Address));
+			
+			log_printf(LOG_INFO, "Address:       %s", hwaddr);
+		}
+		
+		log_printf(LOG_INFO, "Index:         %u", (unsigned int)(ip->Index));
+		log_printf(LOG_INFO, "Type:          %u", (unsigned int)(ip->Type));
+		log_printf(LOG_INFO, "DhcpEnabled:   %u", (unsigned int)(ip->DhcpEnabled));
+		
+		IP_ADDR_STRING *addr = &(ip->IpAddressList);
+		
+		for(; addr; addr = addr->Next)
+		{
+			log_printf(LOG_INFO, "IpAddress:     %s", addr->IpAddress.String);
+			log_printf(LOG_INFO, "IpMask:        %s", addr->IpMask.String);
+		}
+		
+		log_printf(LOG_INFO, "--");
+	}
+	
+	free(ip_ifaces);
+	
+	/* Virtual IPX interfaces... */
+	
+	log_printf(LOG_INFO, "Listing IPX interfaces:");
+	log_printf(LOG_INFO, "--");
+	
+	ipx_interface_t *ipx_root = get_ipx_interfaces(), *ipx;
+	
+	if(!ipx_root)
+	{
+		log_printf(LOG_INFO, "No IPX interfaces detected!");
+		log_printf(LOG_INFO, "--");
+	}
+	
+	DL_FOREACH(ipx_root, ipx)
+	{
+		char net[ADDR32_STRING_SIZE];
+		addr32_string(net, ipx->ipx_net);
+		
+		char node[ADDR48_STRING_SIZE];
+		addr48_string(node, ipx->ipx_node);
+		
+		log_printf(LOG_INFO, "Network:    %s", net);
+		log_printf(LOG_INFO, "Node:       %s", node);
+		
+		ipx_interface_ip_t *ip;
+		
+		DL_FOREACH(ipx->ipaddr, ip)
+		{
+			log_printf(LOG_INFO, "IP address: %s", inet_ntoa(*((struct in_addr*)&(ip->ipaddr))));
+			log_printf(LOG_INFO, "Netmask:    %s", inet_ntoa(*((struct in_addr*)&(ip->netmask))));
+			log_printf(LOG_INFO, "Broadcast:  %s", inet_ntoa(*((struct in_addr*)&(ip->bcast))));
+		}
+		
+		log_printf(LOG_INFO, "--");
+	}
+	
+	free_ipx_interface_list(&ipx_root);
 }
 
 /* Release any resources used by the IPX interface cache. */
