@@ -47,6 +47,10 @@ SRC_FILES := changes.txt license.txt Makefile mkstubs.pl readme.txt src/config.h
 	include/dplay.h include/dplaysp.h include/dplobby.h include/wsnwlink.h directplay-win32.reg \
 	directplay-win64.reg
 
+# DLLs to copy to the tests directory before running the test suite.
+
+TEST_DLLS := ipxwrapper.dll wsock32.dll mswsock.dll dpwsockx.dll
+
 all: ipxwrapper.dll wsock32.dll mswsock.dll ipxconfig.exe dpwsockx.dll
 
 clean:
@@ -64,8 +68,15 @@ dist: all
 	zip -r ipxwrapper-$(VERSION)-src.zip ipxwrapper-$(VERSION)-src/
 	rm -r ipxwrapper-$(VERSION)-src/
 
+test: $(TEST_DLLS) tests/bind.exe
+	cp $(TEST_DLLS) tests/
+	cd tests; perl bind.pl
+
+tests/%.exe: tests/%.c
+	$(CC) $(CFLAGS) -o $@ $< -lwsock32
+
 .SECONDARY:
-.PHONY: all clean dist depend
+.PHONY: all clean dist depend test
 
 depend: Makefile.dep
 
