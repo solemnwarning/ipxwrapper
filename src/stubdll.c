@@ -20,17 +20,14 @@
 #include <stdlib.h>
 
 #include "common.h"
+#include "config.h"
 
 BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res) {
 	if(why == DLL_PROCESS_ATTACH)
 	{
 		log_open("ipxwrapper.log");
 		
-		HKEY reg = reg_open_main(false);
-		
-		min_log_level = reg_get_dword(reg, "min_log_level", LOG_INFO);
-		
-		reg_close(reg);
+		min_log_level = get_main_config().log_level;
 	}
 	else if(why == DLL_PROCESS_DETACH)
 	{

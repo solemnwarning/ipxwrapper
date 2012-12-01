@@ -85,8 +85,8 @@ ipxwrapper.dll: $(IPXWRAPPER_DEPS)
 ipxconfig.exe: src/ipxconfig.cpp icons/ipxconfig.o src/addr.o src/interface.o src/common.o src/config.o
 	$(CXX) $(CXXFLAGS) -static-libgcc -static-libstdc++ -D_WIN32_IE=0x0400 -mwindows -o ipxconfig.exe $^ -liphlpapi -lcomctl32 -lws2_32
 
-dpwsockx.dll: src/directplay.o src/log.o src/dpwsockx_stubs.o src/common.o
-	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -shared -o dpwsockx.dll src/directplay.o src/log.o src/common.o src/dpwsockx_stubs.o src/dpwsockx.def -lwsock32
+dpwsockx.dll: src/directplay.o src/log.o src/dpwsockx_stubs.o src/common.o src/config.o src/addr.o src/dpwsockx.def
+	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -shared -o $@ $^ -lwsock32
 
 src/ipxwrapper_stubs.s: src/ipxwrapper_stubs.txt
 	perl mkstubs.pl src/ipxwrapper_stubs.txt src/ipxwrapper_stubs.s 0
@@ -103,7 +103,7 @@ src/dpwsockx_stubs.s: src/dpwsockx_stubs.txt
 icons/%.o: icons/%.rc icons/%.ico
 	windres $< -O coff -o $@
 
-%.dll: src/stubdll.o src/%_stubs.o src/log.o src/common.o src/%.def
+%.dll: src/stubdll.o src/%_stubs.o src/log.o src/common.o src/config.o src/addr.o src/%.def
 	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -shared -o $@ $^
 
 src/%_stubs.o: src/%_stubs.s
