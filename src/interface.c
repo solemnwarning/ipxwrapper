@@ -125,26 +125,15 @@ ipx_interface_t *load_ipx_interfaces(void)
 	
 	ipx_interface_t *nics = NULL;
 	
-	iface_config_t wc_config = get_iface_config(WILDCARD_IFACE_HWADDR);
+	iface_config_t wc_config  = get_iface_config(WILDCARD_IFACE_HWADDR);
+	ipx_interface_t *wc_iface = NULL;
 	
 	if(wc_config.enabled)
 	{
 		/* Initialise wildcard interface. */
 		
-		ipx_interface_t *wc_iface = _new_iface(wc_config.netnum, wc_config.nodenum);
-		if(!wc_iface)
+		if(!(wc_iface = _new_iface(wc_config.netnum, wc_config.nodenum)))
 		{
-			return NULL;
-		}
-		
-		/* Use 0.0.0.0/0 as the IP/network of the wildcard interface
-		 * to broadcast to 255.255.255.255 and match packets from any
-		 * address.
-		*/
-		
-		if(!_push_addr(wc_iface, 0, 0))
-		{
-			free_ipx_interface(wc_iface);
 			return NULL;
 		}
 		
@@ -190,7 +179,7 @@ ipx_interface_t *load_ipx_interfaces(void)
 				continue;
 			}
 			
-			if(!_push_addr(iface, ipaddr, netmask))
+			if(!_push_addr(iface, ipaddr, netmask) || (wc_iface && !_push_addr(wc_iface, ipaddr, netmask)))
 			{
 				free_ipx_interface(iface);
 				free_ipx_interface_list(&nics);
