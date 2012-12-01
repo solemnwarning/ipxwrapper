@@ -160,8 +160,6 @@ ipx_interface_t *load_ipx_interfaces(void)
 		if(!config.enabled)
 		{
 			/* Interface has been disabled, don't add it */
-			
-			ifptr = ifptr->Next;
 			continue;
 		}
 		
