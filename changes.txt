@@ -53,6 +53,8 @@ Version 0.4.0:
 	
 	Cleanup: Use some IPXWrapper library code for interface and registry handling
 	in ipxconfig.
+	
+	Bugfix: Don't skip interfaces immediately after disabled ones.
 
 Version 0.3.4:
 	Feature: Added workaround for games that unset SystemRoot in the environment
