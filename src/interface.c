@@ -95,23 +95,40 @@ static ipx_interface_t *_new_iface(addr32_t net, addr48_t node)
 	return iface;
 }
 
-/* Add an IP address to an ipx_interface structure.
+/* Iterate over the addresses of an IP interface and append them to the IP list
+ * of an IPX interface.
+ * 
  * Returns false on malloc failure.
 */
-static bool _push_addr(ipx_interface_t *iface, uint32_t ipaddr, uint32_t netmask)
+static bool _push_addr(ipx_interface_t *iface, IP_ADDR_STRING *ip)
 {
-	ipx_interface_ip_t *addr = malloc(sizeof(ipx_interface_ip_t));
-	if(!addr)
+	for(; ip; ip = ip->Next)
 	{
-		log_printf(LOG_ERROR, "Couldn't allocate ipx_interface_ip!");
-		return false;
+		uint32_t ipaddr  = inet_addr(ip->IpAddress.String);
+		uint32_t netmask = inet_addr(ip->IpMask.String);
+		
+		if(ipaddr == 0)
+		{
+			/* No IP address.
+			 * Because an empty linked list would be silly.
+			*/
+			
+			continue;
+		}
+		
+		ipx_interface_ip_t *addr = malloc(sizeof(ipx_interface_ip_t));
+		if(!addr)
+		{
+			log_printf(LOG_ERROR, "Couldn't allocate ipx_interface_ip!");
+			return false;
+		}
+		
+		addr->ipaddr  = ipaddr;
+		addr->netmask = netmask;
+		addr->bcast   = ipaddr | (~netmask);
+		
+		DL_APPEND(iface->ipaddr, addr);
 	}
-	
-	addr->ipaddr  = ipaddr;
-	addr->netmask = netmask;
-	addr->bcast   = ipaddr | (~netmask);
-	
-	DL_APPEND(iface->ipaddr, addr);
 	
 	return true;
 }
@@ -146,6 +163,14 @@ ipx_interface_t *load_ipx_interfaces(void)
 		
 		iface_config_t config = get_iface_config(hwaddr);
 		
+		/* Append addresses to the wildcard interface... */
+		
+		if(wc_iface && !_push_addr(wc_iface, &(ifptr->IpAddressList)))
+		{
+			free_ipx_interface_list(&nics);
+			return NULL;
+		}
+		
 		if(!config.enabled)
 		{
 			/* Interface has been disabled, don't add it */
@@ -159,33 +184,21 @@ ipx_interface_t *load_ipx_interfaces(void)
 			return NULL;
 		}
 		
-		/* Iterate over the interface IP address list and add them to
-		 * the ipx_interface structure.
-		*/
-		
-		IP_ADDR_STRING *ip_ptr = &(ifptr->IpAddressList);
-		
-		for(; ip_ptr; ip_ptr = ip_ptr->Next)
+		if(hwaddr == primary)
 		{
-			uint32_t ipaddr  = inet_addr(ip_ptr->IpAddress.String);
-			uint32_t netmask = inet_addr(ip_ptr->IpMask.String);
-			
-			if(ipaddr == 0)
-			{
-				/* No IP address.
-				 * Because an empty linked list would be silly.
-				*/
-				
-				continue;
-			}
-			
-			if(!_push_addr(iface, ipaddr, netmask) || (wc_iface && !_push_addr(wc_iface, ipaddr, netmask)))
-			{
-				free_ipx_interface(iface);
-				free_ipx_interface_list(&nics);
-				
-				return NULL;
-			}
+			/* Primary interface, insert at the start of the list */
+			DL_PREPEND(nics, iface);
+		}
+		else{
+			DL_APPEND(nics, iface);
+		}
+		
+		/* Populate the virtual interface IP list. */
+		
+		if(!_push_addr(iface, &(ifptr->IpAddressList)))
+		{
+			free_ipx_interface_list(&nics);
+			return NULL;
 		}
 		
 		/* Workaround for buggy versions of Hamachi that don't initialise
@@ -200,15 +213,6 @@ ipx_interface_t *load_ipx_interfaces(void)
 			
 			addr32_out(hamachi_bug + 2, iface->ipaddr->ipaddr);
 			iface->ipx_node = addr48_in(hamachi_bug);
-		}
-		
-		if(hwaddr == primary)
-		{
-			/* Primary interface, insert at the start of the list */
-			DL_PREPEND(nics, iface);
-		}
-		else{
-			DL_APPEND(nics, iface);
 		}
 	}
 	
