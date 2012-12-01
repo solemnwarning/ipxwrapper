@@ -855,13 +855,20 @@ static int send_packet(const ipx_packet *packet, int len, struct sockaddr *addr,
 		struct sockaddr_in *v4 = (struct sockaddr_in*)(addr);
 		
 		IPX_STRING_ADDR(
-			addr_s,
+			src_addr,
+			addr32_in(packet->src_net),
+			addr48_in(packet->src_node),
+			packet->src_socket
+		);
+		
+		IPX_STRING_ADDR(
+			dest_addr,
 			addr32_in(packet->dest_net),
 			addr48_in(packet->dest_node),
 			packet->dest_socket
 		);
 		
-		log_printf(LOG_DEBUG, "Sending packet to %s (%s:%hu)", addr_s, inet_ntoa(v4->sin_addr), ntohs(v4->sin_port));
+		log_printf(LOG_DEBUG, "Sending packet from %s to %s (%s:%hu)", src_addr, dest_addr, inet_ntoa(v4->sin_addr), ntohs(v4->sin_port));
 	}
 	
 	return (r_sendto(private_socket, (char*)packet, len, 0, addr, addrlen) == len);
