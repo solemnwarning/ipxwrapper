@@ -98,7 +98,7 @@ static ipx_interface_t *_new_iface(addr32_t net, addr48_t node)
 /* Iterate over the addresses of an IP interface and append them to the IP list
  * of an IPX interface.
  * 
- * Returns false on malloc failure.
+ * Returns false on memory allocation failure or other error.
 */
 static bool _push_addr(ipx_interface_t *iface, IP_ADDR_STRING *ip)
 {
@@ -114,6 +114,62 @@ static bool _push_addr(ipx_interface_t *iface, IP_ADDR_STRING *ip)
 			*/
 			
 			continue;
+		}
+		
+		/* Workaround for point-to-point links.
+		 * 
+		 * A PPP interface has a netmask of 255.255.255.255 which is
+		 * useless for calculating the correct broadcast address, so we
+		 * instead iterate over the routing table looking for a route
+		 * which encompasses the local IP address and copy the netmask
+		 * from it.
+		 * 
+		 * The default route is ignored and the route with the smallest
+		 * network is preferred.
+		*/
+		
+		if(netmask == inet_addr("255.255.255.255"))
+		{
+			MIB_IPFORWARDTABLE *table = NULL;
+			ULONG size = 2048;
+			
+			DWORD err = ERROR_INSUFFICIENT_BUFFER;
+			
+			while(err == ERROR_INSUFFICIENT_BUFFER)
+			{
+				if(!(table = realloc(table, size)))
+				{
+					log_printf(LOG_ERROR, "Couldn't allocate %u byte MIB_IPFORWARDTABLE buffer", (unsigned int)(size));
+					return false;
+				}
+				
+				err = GetIpForwardTable(table, &size, FALSE);
+			}
+			
+			if(err != NO_ERROR)
+			{
+				log_printf(LOG_ERROR, "Error fetching routing table: %s", w32_error(err));
+				free(table);
+				
+				return false;
+			}
+			
+			DWORD n;
+			for(n = 0; n < table->dwNumEntries; ++n)
+			{
+				uint32_t a_ip   = ntohl(ipaddr);
+				uint32_t a_mask = ntohl(netmask);
+				
+				uint32_t r_net  = ntohl(table->table[n].dwForwardDest);
+				uint32_t r_mask = ntohl(table->table[n].dwForwardMask);
+				
+				if(r_mask > 0 && r_mask < a_mask && (a_ip & r_mask) == r_net)
+				{
+					netmask = table->table[n].dwForwardMask;
+				}
+			}
+			
+			free(table);
 		}
 		
 		ipx_interface_ip_t *addr = malloc(sizeof(ipx_interface_ip_t));
