@@ -1,5 +1,5 @@
 /* ipxwrapper - Library header
- * Copyright (C) 2008-2011 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2008-2013 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -87,6 +87,8 @@ extern main_config_t main_config;
 ipx_socket *get_socket(SOCKET sockfd);
 void lock_sockets(void);
 void unlock_sockets(void);
+
+void add_self_to_firewall(void);
 
 INT APIENTRY r_EnumProtocolsA(LPINT,LPVOID,LPDWORD);
 INT APIENTRY r_EnumProtocolsW(LPINT,LPVOID,LPDWORD);

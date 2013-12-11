@@ -1,5 +1,5 @@
 /* IPXWrapper - Configuration tool
- * Copyright (C) 2011 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2011-2013 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -40,6 +40,7 @@
 #define ID_OPT_W95 22
 #define ID_OPT_LOG_DEBUG 25
 #define ID_OPT_LOG_TRACE 26
+#define ID_OPT_FW_EXCEPT 27
 
 #define ID_OK 31
 #define ID_CANCEL 32
@@ -103,6 +104,7 @@ static struct {
 	HWND opt_w95;
 	HWND opt_log_debug;
 	HWND opt_log_trace;
+	HWND opt_fw_except;
 	
 	HWND ok_btn;
 	HWND can_btn;
@@ -216,7 +218,7 @@ static LRESULT CALLBACK main_wproc(HWND window, UINT msg, WPARAM wp, LPARAM lp) 
 			int lbl_w = get_text_width(windows.nic_net_lbl, "Network number");
 			int edit_w = get_text_width(windows.nic_node, "000000");
 			
-			int opt_h = 4 * text_h + edit_h + 16;
+			int opt_h = 5 * text_h + edit_h + 18;
 			
 			MoveWindow(windows.opt_group, 0, height - opt_h - btn_h - 12, width, opt_h, TRUE);
 			
@@ -228,6 +230,7 @@ static LRESULT CALLBACK main_wproc(HWND window, UINT msg, WPARAM wp, LPARAM lp) 
 			MoveWindow(windows.opt_w95, 10, y += edit_h + 4, width - 20, text_h, TRUE);
 			MoveWindow(windows.opt_log_debug, 10, y += text_h + 2, width - 20, text_h, TRUE);
 			MoveWindow(windows.opt_log_trace, 10, y += text_h + 2, width - 20, text_h, TRUE);
+			MoveWindow(windows.opt_fw_except, 10, y += text_h + 2, width - 20, text_h, TRUE);
 			
 			/* NIC groupbox */
 			
@@ -381,6 +384,7 @@ static bool save_config()
 	
 	main_config.udp_port  = port;
 	main_config.w95_bug   = Button_GetCheck(windows.opt_w95) == BST_CHECKED;
+	main_config.fw_except = Button_GetCheck(windows.opt_fw_except) == BST_CHECKED;
 	main_config.log_level = LOG_INFO;
 	
 	if(Button_GetCheck(windows.opt_log_debug) == BST_CHECKED)
@@ -541,10 +545,12 @@ static void init_windows() {
 		windows.opt_w95       = create_child(windows.opt_group, 0, 0, 0, 0, "BUTTON", "Enable Windows 95 SO_BROADCAST bug", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_OPT_W95);
 		windows.opt_log_debug = create_child(windows.opt_group, 0, 0, 0, 0, "BUTTON", "Log debugging messages", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_OPT_LOG_DEBUG);
 		windows.opt_log_trace = create_child(windows.opt_group, 0, 0, 0, 0, "BUTTON", "Log WinSock API calls", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_OPT_LOG_TRACE);
+		windows.opt_fw_except = create_child(windows.opt_group, 0, 0, 0, 0, "BUTTON", "Automatically create Windows Firewall exceptions", BS_AUTOCHECKBOX | WS_TABSTOP, 0, ID_OPT_FW_EXCEPT);
 		
 		Button_SetCheck(windows.opt_w95, main_config.w95_bug ? BST_CHECKED : BST_UNCHECKED);
 		Button_SetCheck(windows.opt_log_debug, main_config.log_level <= LOG_DEBUG ? BST_CHECKED : BST_UNCHECKED);
 		Button_SetCheck(windows.opt_log_trace, main_config.log_level <= LOG_CALL ? BST_CHECKED : BST_UNCHECKED);
+		Button_SetCheck(windows.opt_fw_except, main_config.fw_except ? BST_CHECKED : BST_UNCHECKED);
 		
 		EnableWindow(windows.opt_log_trace, Button_GetCheck(windows.opt_log_debug) == BST_CHECKED);
 	}

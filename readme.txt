@@ -2,7 +2,7 @@
 
 -- LICENSE --
 
-Copyright (C) 2008-2012 Daniel Collins <solemnwarning@solemnwarning.net>
+Copyright (C) 2008-2013 Daniel Collins <solemnwarning@solemnwarning.net>
 Read license.txt for licensing terms.
 
 -- INTRODUCTION --

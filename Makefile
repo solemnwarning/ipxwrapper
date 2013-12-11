@@ -1,5 +1,5 @@
 # IPXWrapper - Makefile
-# Copyright (C) 2011 Daniel Collins <solemnwarning@solemnwarning.net>
+# Copyright (C) 2011-2013 Daniel Collins <solemnwarning@solemnwarning.net>
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License version 2 as published by
@@ -20,8 +20,10 @@ else
 DBG_OPT := -Wl,-s
 endif
 
-CFLAGS   := -Wall -D_WIN32_WINNT=0x0500 $(DBG_OPT) -I./include/
-CXXFLAGS := $(CFLAGS)
+INCLUDE := -I./include/
+
+CFLAGS   := -std=c99 -Wall -D_WIN32_WINNT=0x0500 $(DBG_OPT) $(INCLUDE)
+CXXFLAGS := -Wall $(DBG_OPT) $(INCLUDE)
 
 # Used by mkdeps.pl
 #
@@ -34,7 +36,7 @@ VERSION := git
 
 IPXWRAPPER_DEPS := src/ipxwrapper.o src/winsock.o src/ipxwrapper_stubs.o src/log.o src/common.o \
 	src/interface.o src/router.o src/ipxwrapper.def src/addrcache.o src/config.o src/addr.o \
-	src/addrtable.o
+	src/addrtable.o src/firewall.o
 
 BIN_FILES := $(shell cat manifest.bin.txt)
 SRC_FILES := $(shell cat manifest.src.txt)
@@ -80,7 +82,7 @@ Makefile.dep: src/*.c src/*.cpp
 
 ipxwrapper.dll: $(IPXWRAPPER_DEPS)
 	echo 'const char *version_string = "$(VERSION)", *compile_time = "'`date`'";' | $(CC) -c -x c -o version.o -
-	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -shared -o ipxwrapper.dll $(IPXWRAPPER_DEPS) version.o -liphlpapi
+	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -shared -o ipxwrapper.dll $(IPXWRAPPER_DEPS) version.o -liphlpapi -lversion -lole32 -loleaut32
 
 ipxconfig.exe: src/ipxconfig.cpp icons/ipxconfig.o src/addr.o src/interface.o src/common.o src/config.o
 	$(CXX) $(CXXFLAGS) -static-libgcc -static-libstdc++ -D_WIN32_IE=0x0400 -mwindows -o ipxconfig.exe $^ -liphlpapi -lcomctl32 -lws2_32

@@ -1,3 +1,9 @@
+Version 0.4.1:
+	Feature: Added workaround for point-to-point links.
+	
+	Feature: Added option to automatically add Windows Firewall exceptions
+	during DLL initialisation. Disabled by default.
+
 Version 0.4.0:
 	Bugfix: Fixed a crash in closesocket.
 	

@@ -1,5 +1,5 @@
 /* ipxwrapper - Configuration header
- * Copyright (C) 2011 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2011-2013 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -29,6 +29,7 @@ main_config_t get_main_config(void)
 	
 	config.udp_port  = DEFAULT_PORT;
 	config.w95_bug   = true;
+	config.fw_except = false;
 	config.log_level = LOG_INFO;
 	
 	HKEY reg = reg_open_main(false);
@@ -47,8 +48,9 @@ main_config_t get_main_config(void)
 	
 	/* Overlay with any 0.4.x config values. */
 	
-	config.udp_port  = reg_get_dword(reg, "port", config.udp_port);
-	config.w95_bug   = reg_get_dword(reg, "w95_bug", config.w95_bug);
+	config.udp_port  = reg_get_dword(reg, "port",      config.udp_port);
+	config.w95_bug   = reg_get_dword(reg, "w95_bug",   config.w95_bug);
+	config.fw_except = reg_get_dword(reg, "fw_except", config.fw_except);
 	config.log_level = reg_get_dword(reg, "log_level", config.log_level);
 	
 	reg_close(reg);
@@ -62,6 +64,7 @@ bool set_main_config(const main_config_t *config)
 	
 	bool ok = reg_set_dword(reg, "port", config->udp_port)
 		&& reg_set_dword(reg, "w95_bug", config->w95_bug)
+		&& reg_set_dword(reg, "fw_except", config->fw_except)
 		&& reg_set_dword(reg, "log_level", config->log_level);
 	
 	reg_close(reg);

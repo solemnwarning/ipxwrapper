@@ -1,5 +1,5 @@
 /* ipxwrapper - Library functions
- * Copyright (C) 2008 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2008-2013 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -32,6 +32,8 @@
 #include "router.h"
 #include "addrcache.h"
 #include "addrtable.h"
+
+int _putenv(const char *envstring);
 
 extern const char *version_string;
 extern const char *compile_time;
@@ -77,6 +79,12 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res)
 		
 		main_config = get_main_config();
 		min_log_level = main_config.log_level;
+		
+		if(main_config.fw_except)
+		{
+			log_printf(LOG_INFO, "Adding exception to Windows Firewall");
+			add_self_to_firewall();
+		}
 		
 		addr_cache_init();
 		
