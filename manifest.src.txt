@@ -21,6 +21,7 @@ src/config.h
 src/directplay.c
 src/dpwsockx.def
 src/dpwsockx_stubs.txt
+src/firewall.c
 src/interface.c
 src/interface.h
 src/ipxwrapper.c
@@ -44,6 +45,8 @@ icons/ipxconfig.rc
 include/dplay.h
 include/dplaysp.h
 include/dplobby.h
+include/icftypes.h
+include/netfw.h
 include/stdbool.h
 include/uthash.h
 include/utlist.h
