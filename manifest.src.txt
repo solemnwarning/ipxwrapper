@@ -55,6 +55,7 @@ include/wsnwlink.h
 directplay-win32.reg
 directplay-win64.reg
 
+tests/addr.c
 tests/bind.c
 tests/bind.pl
 tests/ipxtest.pm

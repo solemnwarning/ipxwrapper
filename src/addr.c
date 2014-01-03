@@ -1,5 +1,5 @@
 /* ipxwrapper - Address manipulation functions
- * Copyright (C) 2012 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2012-2014 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -87,7 +87,7 @@ char *addr32_string(char *buf, addr32_t addr)
 */
 bool addr32_from_string(addr32_t *dest, const char *src)
 {
-	return _addr_from_string((unsigned char*)&dest, src, 4);
+	return _addr_from_string((unsigned char*)(dest), src, 4);
 }
 
 addr48_t addr48_in(const void *src)
@@ -131,7 +131,7 @@ char *addr48_string(char *buf, addr48_t addr)
 */
 bool addr48_from_string(addr48_t *dest, const char *src)
 {
-	return _addr_from_string(((unsigned char*)&dest) + 2, src, 6);
+	return _addr_from_string((unsigned char*)(dest) + 2, src, 6);
 }
 
 /* Format an IPX address as a string.

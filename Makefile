@@ -1,5 +1,5 @@
 # IPXWrapper - Makefile
-# Copyright (C) 2011-2013 Daniel Collins <solemnwarning@solemnwarning.net>
+# Copyright (C) 2011-2014 Daniel Collins <solemnwarning@solemnwarning.net>
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License version 2 as published by
@@ -63,12 +63,17 @@ dist: all
 	zip -r ipxwrapper-$(VERSION)-src.zip ipxwrapper-$(VERSION)-src/
 	rm -r ipxwrapper-$(VERSION)-src/
 
-test: $(TEST_DLLS) tests/bind.exe
+test: $(TEST_DLLS) tests/addr.exe tests/bind.exe
+	./tests/addr.exe
+	
 	cp $(TEST_DLLS) tests/
 	cd tests; perl bind.pl
 
-tests/%.exe: tests/%.c
-	$(CC) $(CFLAGS) -o $@ $< -lwsock32
+tests/addr.exe: tests/addr.c src/addr.o
+tests/bind.exe: tests/bind.c
+
+tests/%.exe:
+	$(CC) $(CFLAGS) -I./src/ -o $@ $^ -lwsock32
 
 .SECONDARY:
 .PHONY: all clean dist depend test
