@@ -67,7 +67,7 @@ test: $(TEST_DLLS) tests/addr.exe tests/bind.exe
 	./tests/addr.exe
 	
 	cp $(TEST_DLLS) tests/
-	cd tests; perl bind.pl
+	cd tests/; prove bind.t
 
 tests/addr.exe: tests/addr.c src/addr.o
 tests/bind.exe: tests/bind.c
