@@ -175,6 +175,54 @@ bool reg_set_dword(HKEY key, const char *name, DWORD value)
 	return false;
 }
 
+/* Read a 32-bit network address from the registry.
+ * Returns default_value upon failure.
+*/
+addr32_t reg_get_addr32(HKEY key, const char *name, addr32_t default_value)
+{
+	unsigned char buf[4], default_buf[4];
+	
+	addr32_out(default_buf, default_value);
+	reg_get_bin(key, name, buf, 4, default_buf);
+	
+	return addr32_in(buf);
+}
+
+/* Store a 32-bit network address in the registry.
+ * Returns true on success, false on failure.
+*/
+bool reg_set_addr32(HKEY key, const char *name, addr32_t value)
+{
+	unsigned char buf[4];
+	addr32_out(buf, value);
+	
+	return reg_set_bin(key, name, buf, sizeof(buf));
+}
+
+/* Read a 48-bit network address from the registry.
+ * Returns default_value upon failure.
+*/
+addr48_t reg_get_addr48(HKEY key, const char *name, addr48_t default_value)
+{
+	unsigned char buf[6], default_buf[6];
+	
+	addr48_out(default_buf, default_value);
+	reg_get_bin(key, name, buf, 6, default_buf);
+	
+	return addr48_in(buf);
+}
+
+/* Store a 48-bit network address in the registry.
+ * Returns true on success, false on failure.
+*/
+bool reg_set_addr48(HKEY key, const char *name, addr48_t value)
+{
+	unsigned char buf[6];
+	addr48_out(buf, value);
+	
+	return reg_set_bin(key, name, buf, sizeof(buf));
+}
+
 void load_dll(unsigned int dllnum) {
 	char path[512];
 	

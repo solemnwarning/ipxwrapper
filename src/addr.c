@@ -90,30 +90,6 @@ bool addr32_from_string(addr32_t *dest, const char *src)
 	return _addr_from_string((unsigned char*)&dest, src, 4);
 }
 
-/* Read a 32-bit network address from the registry.
- * Returns default_value upon failure.
-*/
-addr32_t reg_get_addr32(HKEY key, const char *name, addr32_t default_value)
-{
-	unsigned char buf[4], default_buf[4];
-	
-	addr32_out(default_buf, default_value);
-	reg_get_bin(key, name, buf, 4, default_buf);
-	
-	return addr32_in(buf);
-}
-
-/* Store a 32-bit network address in the registry.
- * Returns true on success, false on failure.
-*/
-bool reg_set_addr32(HKEY key, const char *name, addr32_t value)
-{
-	unsigned char buf[4];
-	addr32_out(buf, value);
-	
-	return reg_set_bin(key, name, buf, sizeof(buf));
-}
-
 addr48_t addr48_in(const void *src)
 {
 	addr48_t buf = 0;
@@ -156,30 +132,6 @@ char *addr48_string(char *buf, addr48_t addr)
 bool addr48_from_string(addr48_t *dest, const char *src)
 {
 	return _addr_from_string(((unsigned char*)&dest) + 2, src, 6);
-}
-
-/* Read a 48-bit network address from the registry.
- * Returns default_value upon failure.
-*/
-addr48_t reg_get_addr48(HKEY key, const char *name, addr48_t default_value)
-{
-	unsigned char buf[6], default_buf[6];
-	
-	addr48_out(default_buf, default_value);
-	reg_get_bin(key, name, buf, 6, default_buf);
-	
-	return addr48_in(buf);
-}
-
-/* Store a 48-bit network address in the registry.
- * Returns true on success, false on failure.
-*/
-bool reg_set_addr48(HKEY key, const char *name, addr48_t value)
-{
-	unsigned char buf[6];
-	addr48_out(buf, value);
-	
-	return reg_set_bin(key, name, buf, sizeof(buf));
 }
 
 /* Format an IPX address as a string.

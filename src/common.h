@@ -53,6 +53,12 @@ bool reg_set_bin(HKEY key, const char *name, void *buf, size_t size);
 DWORD reg_get_dword(HKEY key, const char *name, DWORD default_value);
 bool reg_set_dword(HKEY key, const char *name, DWORD value);
 
+addr32_t reg_get_addr32(HKEY key, const char *name, addr32_t default_value);
+bool reg_set_addr32(HKEY key, const char *name, addr32_t value);
+
+addr48_t reg_get_addr48(HKEY key, const char *name, addr48_t default_value);
+bool reg_set_addr48(HKEY key, const char *name, addr48_t value);
+
 void load_dll(unsigned int dllnum);
 void unload_dlls(void);
 void __stdcall *find_sym(unsigned int dllnum, const char *symbol);
