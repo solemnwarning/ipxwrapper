@@ -9,7 +9,7 @@ htons:4
 ntohs:4
 select:4
 r_listen:4
-accept:4
+r_accept:4
 send:4
 connect:4
 WSACreateEvent:4

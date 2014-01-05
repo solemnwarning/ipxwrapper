@@ -151,5 +151,6 @@ int PASCAL r_connect(SOCKET fd, const struct sockaddr *addr, int addrlen);
 int PASCAL r_send(SOCKET fd, const char *buf, int len, int flags);
 int PASCAL r_getpeername(SOCKET fd, struct sockaddr *addr, int *addrlen);
 int PASCAL r_listen(SOCKET s, int backlog);
+SOCKET PASCAL r_accept(SOCKET s, struct sockaddr *addr, int *addrlen);
 
 #endif /* !IPXWRAPPER_H */

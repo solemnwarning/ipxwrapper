@@ -1827,3 +1827,101 @@ int PASCAL listen(SOCKET s, int backlog)
 		return r_listen(s, backlog);
 	}
 }
+
+SOCKET PASCAL accept(SOCKET s, struct sockaddr *addr, int *addrlen)
+{
+	ipx_socket *sock = get_socket(s);
+	
+	if(sock)
+	{
+		if(sock->flags & IPX_IS_SPX)
+		{
+			if(addrlen && *addrlen < sizeof(struct sockaddr_ipx))
+			{
+				unlock_sockets();
+				
+				WSASetLastError(WSAEFAULT);
+				return -1;
+			}
+			
+			ipx_socket *nsock = malloc(sizeof(ipx_socket));
+			if(!nsock)
+			{
+				WSASetLastError(ERROR_OUTOFMEMORY);
+				return -1;
+			}
+			
+			if((nsock->fd = r_accept(s, NULL, NULL)) == -1)
+			{
+				free(nsock);
+				unlock_sockets();
+				
+				return -1;
+			}
+			
+			log_printf(LOG_INFO, "Accepted SPX connection (fd = %d)", nsock->fd);
+			
+			/* The first thing sent over an SPX connection is the
+			 * spxinit structure which contains the IPX address of
+			 * the client.
+			*/
+			
+			spxinit_t spxinit;
+			
+			for(int i = 0; i < sizeof(spxinit);)
+			{
+				int r = recv(nsock->fd, (char*)(&spxinit) + i, sizeof(spxinit) - i, 0);
+				if(r <= 0)
+				{
+					if(r == -1)
+					{
+						log_printf(LOG_ERROR, "Error receiving spxinit structure: %s", w32_error(WSAGetLastError()));
+					}
+					
+					closesocket(nsock->fd);
+					free(nsock);
+					unlock_sockets();
+					
+					WSASetLastError(WSAECONNRESET);
+					return -1;
+				}
+				
+				i += r;
+			}
+			
+			nsock->flags = IPX_IS_SPX | IPX_BOUND | IPX_CONNECTED | (sock->flags & IPX_IS_SPXII);
+			
+			/* Copy local address from the listening socket. */
+			
+			nsock->addr = sock->addr;
+			
+			/* Copy remote address from the spxinit packet. */
+			
+			nsock->remote_addr.sa_family = AF_IPX;
+			memcpy(nsock->remote_addr.sa_netnum, spxinit.net, 4);
+			memcpy(nsock->remote_addr.sa_nodenum, spxinit.node, 6);
+			nsock->remote_addr.sa_socket = spxinit.socket;
+			
+			HASH_ADD_INT(sockets, fd, nsock);
+			addr_table_add(nsock);
+			
+			if(addr)
+			{
+				*(struct sockaddr_ipx*)(addr) = nsock->remote_addr;
+			}
+			
+			unlock_sockets();
+			
+			return nsock->fd;
+		}
+		else{
+			unlock_sockets();
+			
+			WSASetLastError(WSAEOPNOTSUPP);
+			return -1;
+		}
+	}
+	else{
+		return r_accept(s, addr, addrlen);
+	}
+}

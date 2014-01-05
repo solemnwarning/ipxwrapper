@@ -19,3 +19,4 @@ EXPORTS
 	send
 	getpeername
 	listen
+	accept
