@@ -1728,18 +1728,27 @@ int PASCAL send(SOCKET fd, const char *buf, int len, int flags)
 	
 	if(sock)
 	{
-		if(!(sock->flags & IPX_CONNECTED))
+		if(sock->flags & IPX_IS_SPX)
 		{
-			WSASetLastError(WSAENOTCONN);
+			unlock_sockets();
+			
+			return r_send(fd, buf, len, flags);
+		}
+		else{
+			if(!(sock->flags & IPX_CONNECTED))
+			{
+				unlock_sockets();
+				
+				WSASetLastError(WSAENOTCONN);
+				return -1;
+			}
+			
+			int ret = sendto(fd, buf, len, 0, (struct sockaddr*)&(sock->remote_addr), sizeof(struct sockaddr_ipx));
 			
 			unlock_sockets();
-			return -1;
+			
+			return ret;
 		}
-		
-		int ret = sendto(fd, buf, len, 0, (struct sockaddr*)&(sock->remote_addr), sizeof(struct sockaddr_ipx));
-		
-		unlock_sockets();
-		return ret;
 	}
 	else{
 		return r_send(fd, buf, len, flags);
