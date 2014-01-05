@@ -628,19 +628,31 @@ int WSAAPI recvfrom(SOCKET fd, char *buf, int len, int flags, struct sockaddr *a
 	}
 }
 
-int WSAAPI recv(SOCKET fd, char *buf, int len, int flags) {
-	ipx_socket *sockptr = get_socket(fd);
+int WSAAPI recv(SOCKET fd, char *buf, int len, int flags)
+{
+	ipx_socket *sock = get_socket(fd);
 	
-	if(sockptr) {
-		int rval = recv_packet(sockptr, buf, len, flags, NULL, 0);
-		
-		if(rval > len) {
-			WSASetLastError(WSAEMSGSIZE);
-			return -1;
+	if(sock)
+	{
+		if(sock->flags & IPX_IS_SPX)
+		{
+			unlock_sockets();
+			
+			return r_recv(fd, buf, len, flags);
 		}
-		
-		return rval;
-	}else{
+		else{
+			int rval = recv_packet(sock, buf, len, flags, NULL, 0);
+			
+			if(rval > len)
+			{
+				WSASetLastError(WSAEMSGSIZE);
+				return -1;
+			}
+			
+			return rval;
+		}
+	}
+	else{
 		return r_recv(fd, buf, len, flags);
 	}
 }
