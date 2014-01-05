@@ -1140,7 +1140,7 @@ int PASCAL ioctlsocket(SOCKET fd, long cmd, u_long *argp)
 	{
 		log_printf(LOG_DEBUG, "ioctlsocket(%d, %d)", fd, cmd);
 		
-		if(cmd == FIONREAD)
+		if(cmd == FIONREAD && !(sock->flags & IPX_IS_SPX))
 		{
 			/* Test to see if data is waiting. */
 			
