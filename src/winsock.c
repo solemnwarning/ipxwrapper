@@ -1307,3 +1307,52 @@ int PASCAL getpeername(SOCKET fd, struct sockaddr *addr, int *addrlen)
 		return r_getpeername(fd, addr, addrlen);
 	}
 }
+
+int PASCAL listen(SOCKET s, int backlog)
+{
+	ipx_socket *sock = get_socket(s);
+	
+	if(sock)
+	{
+		if(sock->flags & IPX_IS_SPX)
+		{
+			if(!(sock->flags & IPX_BOUND))
+			{
+				unlock_sockets();
+				
+				WSASetLastError(WSAEINVAL);
+				return -1;
+			}
+			
+			if(sock->flags & IPX_LISTENING)
+			{
+				unlock_sockets();
+				
+				WSASetLastError(WSAEISCONN);
+				return -1;
+			}
+			
+			if(r_listen(sock->fd, backlog) == -1)
+			{
+				unlock_sockets();
+				
+				return -1;
+			}
+			
+			sock->flags |= IPX_LISTENING;
+			
+			unlock_sockets();
+			
+			return 0;
+		}
+		else{
+			unlock_sockets();
+			
+			WSASetLastError(WSAEOPNOTSUPP);
+			return -1;
+		}
+	}
+	else{
+		return r_listen(s, backlog);
+	}
+}

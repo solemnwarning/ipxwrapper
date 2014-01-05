@@ -43,6 +43,7 @@
 #define IPX_EXT_ADDR	(int)(1<<9)
 #define IPX_IS_SPX	(int)(1<<10)
 #define IPX_IS_SPXII	(int)(1<<11)
+#define IPX_LISTENING	(int)(1<<12)
 
 typedef struct ipx_socket ipx_socket;
 typedef struct ipx_packet ipx_packet;
@@ -109,5 +110,6 @@ int PASCAL r_ioctlsocket(SOCKET fd, long cmd, u_long *argp);
 int PASCAL r_connect(SOCKET fd, const struct sockaddr *addr, int addrlen);
 int PASCAL r_send(SOCKET fd, const char *buf, int len, int flags);
 int PASCAL r_getpeername(SOCKET fd, struct sockaddr *addr, int *addrlen);
+int PASCAL r_listen(SOCKET s, int backlog);
 
 #endif /* !IPXWRAPPER_H */

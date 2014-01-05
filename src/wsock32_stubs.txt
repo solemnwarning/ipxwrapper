@@ -10,7 +10,7 @@ htons
 inet_addr
 inet_ntoa
 ioctlsocket:0
-listen
+listen:0
 ntohl
 ntohs
 recv:0
