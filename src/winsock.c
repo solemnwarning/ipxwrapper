@@ -398,21 +398,17 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen)
 			return -1;
 		}
 		
-		/* Bind the fake (UDP) socket. */
+		/* Bind the underlying socket. */
 		
 		struct sockaddr_in bind_addr;
 		
 		bind_addr.sin_family      = AF_INET;
-		bind_addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+		bind_addr.sin_addr.s_addr = htonl(sock->flags & IPX_IS_SPX ? INADDR_ANY : INADDR_LOOPBACK);
 		bind_addr.sin_port        = 0;
 		
 		if(r_bind(fd, (struct sockaddr*)&bind_addr, sizeof(bind_addr)) == -1)
 		{
-			log_printf(
-				LOG_ERROR,
-				"Binding local UDP socket failed: %s",
-				w32_error(WSAGetLastError())
-			);
+			log_printf(LOG_ERROR, "Binding local socket failed: %s", w32_error(WSAGetLastError()));
 			
 			addr_table_unlock();
 			unlock_sockets();
@@ -426,17 +422,16 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen)
 		
 		if(r_getsockname(fd, (struct sockaddr*)&bind_addr, &al) == -1)
 		{
-			/* Socket state is now inconsistent as the underlying
-			 * UDP socket has been bound, but the IPX socket failed
-			 * to bind.
+			/* Socket state is now inconsistent because the
+			 * underlying socket has been bound, but we don't know
+			 * the port number and can't finish binding the IPX one
+			 * as a result.
 			 * 
-			 * We also don't know what port number the socket is
-			 * bound to and can't unbind, so future bind attempts
-			 * will fail.
+			 * In short, the socket is unusable now.
 			*/
 			
-			log_printf(LOG_ERROR, "getsockname: %s", w32_error(WSAGetLastError()));
-			log_printf(LOG_WARNING, "SOCKET STATE IS NOW INCONSISTENT!");
+			log_printf(LOG_ERROR, "Cannot get local port of socket: %s", w32_error(WSAGetLastError()));
+			log_printf(LOG_WARNING, "Socket %d is NOW INCONSISTENT!", fd);
 			
 			addr_table_unlock();
 			unlock_sockets();
@@ -446,7 +441,7 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen)
 		
 		sock->port = bind_addr.sin_port;
 		
-		log_printf(LOG_DEBUG, "Bound to local UDP port %hu", ntohs(sock->port));
+		log_printf(LOG_DEBUG, "Bound to local port %hu", ntohs(sock->port));
 		
 		/* Mark the IPX socket as bound and insert it into the address
 		 * table.
@@ -461,7 +456,8 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen)
 		unlock_sockets();
 		
 		return 0;
-	}else{
+	}
+	else{
 		return r_bind(fd, addr, addrlen);
 	}
 }
