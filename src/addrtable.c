@@ -130,7 +130,7 @@ void addr_table_cleanup(void)
 		{
 			if(s->flags & IPX_BOUND)
 			{
-				addr_table_remove(s->port);
+				addr_table_remove(s);
 			}
 		}
 	}
@@ -299,7 +299,7 @@ uint16_t addr_table_auto_socket(void)
  * Performs no conflict checking. Take the address table lock in the caller and
  * use addr_table_check() before calling this.
 */
-void addr_table_add(const struct sockaddr_ipx *addr, uint16_t port)
+void addr_table_add(const ipx_socket *sock)
 {
 	if(!addr_table_base)
 	{
@@ -322,14 +322,27 @@ void addr_table_add(const struct sockaddr_ipx *addr, uint16_t port)
 	
 	if(entry < end)
 	{
-		entry->netnum  = addr32_in(addr->sa_netnum);
-		entry->nodenum = addr48_in(addr->sa_nodenum);
-		entry->socket  = addr->sa_socket;
+		entry->netnum  = addr32_in(sock->addr.sa_netnum);
+		entry->nodenum = addr48_in(sock->addr.sa_nodenum);
+		entry->socket  = sock->addr.sa_socket;
 		
-		entry->flags = ADDR_TABLE_ENTRY_VALID | ADDR_TABLE_ENTRY_REUSE;
+		if(sock->flags & IPX_IS_SPXII)
+		{
+			entry->type = ADDR_TABLE_TYPE_SPXII;
+		}
+		else if(sock->flags & IPX_IS_SPX)
+		{
+			entry->type = ADDR_TABLE_TYPE_SPX;
+		}
+		else{
+			entry->type = ADDR_TABLE_TYPE_IPX;
+		}
 		
-		entry->port = port;
-		entry->time = time(NULL);
+		entry->process = GetCurrentProcessId();
+		entry->sock    = sock->fd;
+		
+		entry->flags = ADDR_TABLE_ENTRY_VALID;
+		entry->time  = time(NULL);
 	}
 	else{
 		log_printf(LOG_ERROR, "Out of address table slots, not appending!");
@@ -339,7 +352,7 @@ void addr_table_add(const struct sockaddr_ipx *addr, uint16_t port)
 }
 
 /* Remove an entry from the address table. */
-void addr_table_remove(uint16_t port)
+void addr_table_remove(const ipx_socket *sock)
 {
 	if(!addr_table_base)
 	{
@@ -353,20 +366,19 @@ void addr_table_remove(uint16_t port)
 	addr_table_entry_t *entry = addr_table_base;
 	addr_table_entry_t *end   = addr_table_base + ADDR_TABLE_MAX_ENTRIES;
 	
-	while(entry < end && (entry->flags & ADDR_TABLE_ENTRY_VALID) && entry->port != port)
+	while(entry < end && (entry->flags & ADDR_TABLE_ENTRY_VALID))
 	{
-		entry++;
-	}
-	
-	addr_table_entry_t *last = _last_entry();
-	
-	/* Replace entry with the last entry and mark the latter as invalid. */
-	
-	if(entry < end)
-	{
-		*entry = *last;
+		if(entry->process == GetCurrentProcessId() && entry->sock == sock->fd)
+		{
+			addr_table_entry_t *last = _last_entry();
+			
+			*entry = *last;
+			last->flags &= ~ADDR_TABLE_ENTRY_VALID;
+			
+			break;
+		}
 		
-		last->flags &= ~ADDR_TABLE_ENTRY_VALID;
+		++entry;
 	}
 	
 	addr_table_unlock();
@@ -415,7 +427,7 @@ void addr_table_update(void)
 			
 			for(entry = addr_table_base; entry < end && (entry->flags & ADDR_TABLE_ENTRY_VALID); entry++)
 			{
-				if(entry->port == sock->port)
+				if(entry->process == GetCurrentProcessId() && entry->sock == sock->fd)
 				{
 					entry->time = time(NULL);
 					break;

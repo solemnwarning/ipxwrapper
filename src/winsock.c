@@ -263,7 +263,7 @@ int WSAAPI closesocket(SOCKET sockfd)
 	
 	if(sock->flags & IPX_BOUND)
 	{
-		addr_table_remove(sock->port);
+		addr_table_remove(sock);
 	}
 	
 	HASH_DEL(sockets, sock);
@@ -448,14 +448,14 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen)
 		
 		log_printf(LOG_DEBUG, "Bound to local UDP port %hu", ntohs(sock->port));
 		
-		/* Add to the address table. */
-		
-		addr_table_add(&ipxaddr, sock->port);
-		
-		/* Mark the IPX socket as bound. */
+		/* Mark the IPX socket as bound and insert it into the address
+		 * table.
+		*/
 		
 		memcpy(&(sock->addr), &ipxaddr, sizeof(ipxaddr));
 		sock->flags |= IPX_BOUND;
+		
+		addr_table_add(sock);
 		
 		addr_table_unlock();
 		unlock_sockets();

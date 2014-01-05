@@ -23,6 +23,7 @@
 #include <time.h>
 
 #include "addr.h"
+#include "ipxwrapper.h"
 
 #define ADDR_TABLE_MAX_ENTRIES   512
 #define ADDR_TABLE_ENTRY_TIMEOUT 10
@@ -30,7 +31,7 @@
 #define ADDR_TABLE_MUTEX "IPXWrapper_addr_table_mutex"
 #define ADDR_TABLE_NAME  "IPXWrapper_addr_table"
 
-#define ADDR_TABLE_VERSION 1
+#define ADDR_TABLE_VERSION 2
 
 typedef struct addr_table_header addr_table_header_t;
 
@@ -40,7 +41,6 @@ struct addr_table_header
 };
 
 #define ADDR_TABLE_ENTRY_VALID ((int)(1<<0))
-#define ADDR_TABLE_ENTRY_REUSE ((int)(1<<1))
 
 typedef struct addr_table_entry addr_table_entry_t;
 
@@ -50,8 +50,16 @@ struct addr_table_entry
 	addr48_t nodenum;
 	uint16_t socket;
 	
+	enum {
+		ADDR_TABLE_TYPE_IPX,
+		ADDR_TABLE_TYPE_SPX,
+		ADDR_TABLE_TYPE_SPXII
+	} type;
+	
+	DWORD process;
+	int sock;
+	
 	int flags;
-	uint16_t port;
 	time_t time;
 };
 
@@ -64,8 +72,8 @@ void addr_table_unlock(void);
 bool addr_table_check(const struct sockaddr_ipx *addr);
 uint16_t addr_table_auto_socket(void);
 
-void addr_table_add(const struct sockaddr_ipx *addr, uint16_t port);
-void addr_table_remove(uint16_t port);
+void addr_table_add(const ipx_socket *sock);
+void addr_table_remove(const ipx_socket *sock);
 
 void addr_table_update(void);
 
