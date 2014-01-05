@@ -32,6 +32,9 @@
 #define MAX_DATA_SIZE 8192
 #define MAX_PKT_SIZE 8219
 
+#define IPX_CONNECT_TIMEOUT 6
+#define IPX_CONNECT_TRIES   3
+
 #define IPX_FILTER	(int)(1<<0)
 #define IPX_BOUND	(int)(1<<1)
 #define IPX_BROADCAST	(int)(1<<2)
@@ -109,6 +112,17 @@ struct spxlookup_reply
 	
 	char padding[18];
 }  __attribute__((__packed__));
+
+typedef struct spxinit spxinit_t;
+
+struct spxinit
+{
+	unsigned char net[4];
+	unsigned char node[6];
+	uint16_t socket;
+	
+	char padding[20];
+} __attribute__((__packed__));
 
 extern ipx_socket *sockets;
 extern main_config_t main_config;

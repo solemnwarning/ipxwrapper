@@ -1184,67 +1184,538 @@ int PASCAL ioctlsocket(SOCKET fd, long cmd, u_long *argp)
 	return r_ioctlsocket(fd, cmd, argp);
 }
 
+#define MAX_CONNECT_BCAST_ADDRS 64
+
+static void _connect_bcast_push(uint32_t *bcast_addrs, int *bcast_count, ipx_interface_ip_t *ips)
+{
+	ipx_interface_ip_t *ip;
+	DL_FOREACH(ips, ip)
+	{
+		for(int i = 0; i < *bcast_count; ++i)
+		{
+			if(bcast_addrs[i] == ip->bcast)
+			{
+				goto NEXT;
+			}
+		}
+		
+		if(*bcast_count < MAX_CONNECT_BCAST_ADDRS)
+		{
+			bcast_addrs[(*bcast_count)++] = ip->bcast;
+		}
+		
+		NEXT:;
+	}
+}
+
+static int _connect_spx(ipx_socket *sock, struct sockaddr_ipx *ipxaddr)
+{
+	if(ipxaddr->sa_family != AF_IPX)
+	{
+		unlock_sockets();
+		
+		WSASetLastError(WSAEAFNOSUPPORT);
+		return -1;
+	}
+	
+	/* SPX is implemented here as a very thin layer over the top of TCP, so
+	 * we need to ask all the hosts on the network if they have an
+	 * IPXWrapper SPX socket listening on the requested address.
+	 * 
+	 * We begin by determining which IP broadcast addresses to send the
+	 * lookup requests to.
+	 * 
+	 * If the socket is already bound, we broadcast to all of the IP subnets
+	 * on that interface.
+	 * 
+	 * If the socket is unbound, we broadcast to all IPX interfaces, this is
+	 * the best we can do since every interface has the same network number
+	 * by default.
+	*/
+	
+	uint32_t bcast_addrs[MAX_CONNECT_BCAST_ADDRS];
+	int bcast_count = 0;
+	
+	if(sock->flags & IPX_BOUND)
+	{
+		ipx_interface_t *iface = ipx_interface_by_addr(
+			addr32_in(sock->addr.sa_netnum),
+			addr48_in(sock->addr.sa_nodenum));
+		
+		if(iface)
+		{
+			_connect_bcast_push(bcast_addrs, &bcast_count, iface->ipaddr);
+		}
+		
+		free_ipx_interface(iface);
+	}
+	else{
+		ipx_interface_t *interfaces = get_ipx_interfaces();
+		
+		ipx_interface_t *iface;
+		DL_FOREACH(interfaces, iface)
+		{
+			_connect_bcast_push(bcast_addrs, &bcast_count, iface->ipaddr);
+		}
+		
+		free_ipx_interface_list(&interfaces);
+	}
+	
+	if(bcast_count == 0)
+	{
+		/* There isn't anywhere for us to probe. */
+		
+		unlock_sockets();
+		
+		WSASetLastError(WSAENETUNREACH);
+		return -1;
+	}
+	
+	{
+		IPX_STRING_ADDR(
+			addr_s,
+			addr32_in(ipxaddr->sa_netnum),
+			addr48_in(ipxaddr->sa_nodenum),
+			ipxaddr->sa_socket
+		);
+		
+		log_printf(LOG_DEBUG, "Trying to connect SPX socket %d to %s", sock->fd, addr_s);
+	}
+	
+	/* Construct the request packet. */
+	
+	spxlookup_req_t req;
+	memset(&req, 0, sizeof(req));
+	
+	memcpy(req.net, ipxaddr->sa_netnum, 4);
+	memcpy(req.node, ipxaddr->sa_nodenum, 6);
+	req.socket = ipxaddr->sa_socket;
+	
+	size_t packet_len  = sizeof(ipx_packet) - 1 + sizeof(req);
+	ipx_packet *packet = malloc(packet_len);
+	if(!packet)
+	{
+		unlock_sockets();
+		
+		WSASetLastError(ERROR_OUTOFMEMORY);
+		return -1;
+	}
+	
+	memset(packet, 0, sizeof(ipx_packet));
+	
+	packet->ptype = IPX_MAGIC_SPXLOOKUP;
+	
+	packet->size = htons(sizeof(req));
+	memcpy(packet->data, &req, sizeof(req));
+	
+	/* Set up a UDP socket for sending the spxlookup_req_t packets and
+	 * receiving the spxlookup_reply_t packets.
+	 * 
+	 * A dedicated socket is used so connect() can block without having to
+	 * worry about interaction with the router thread.
+	*/
+	
+	int lookup_fd = socket(AF_INET, SOCK_DGRAM, 0);
+	if(lookup_fd == -1)
+	{
+		log_printf(LOG_ERROR, "Cannot create UDP socket: %s", w32_error(WSAGetLastError()));
+		
+		free(packet);
+		unlock_sockets();
+		
+		return -1;
+	}
+	
+	unsigned long argp = 1;
+	ioctlsocket(lookup_fd, FIONBIO, &argp);
+	
+	BOOL bcast = TRUE;
+	setsockopt(lookup_fd, SOL_SOCKET, SO_BROADCAST, (char*)(&bcast), sizeof(bcast));
+	
+	struct sockaddr_in in_addr;
+	in_addr.sin_family      = AF_INET;
+	in_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+	in_addr.sin_port        = htons(0);
+	
+	if(bind(lookup_fd, (struct sockaddr*)(&in_addr), sizeof(in_addr)) == -1)
+	{
+		log_printf(LOG_ERROR, "Cannot bind UDP socket for SPX address lookup: %s", w32_error(WSAGetLastError()));
+		
+		closesocket(lookup_fd);
+		free(packet);
+		unlock_sockets();
+		
+		return -1;
+	}
+	
+	/* Try to find a host listening on the named SPX address. */
+	
+	bool got_reply = false;
+	
+	for(int i = 0; i < IPX_CONNECT_TRIES && !got_reply; ++i)
+	{
+		/* Send a batch of requests to the previously determined
+		 * broadcast addresses.
+		*/
+		
+		bool sent_req = false;
+		
+		for(int n = 0; n < bcast_count; ++n)
+		{
+			in_addr.sin_addr.s_addr = bcast_addrs[n];
+			in_addr.sin_port        = htons(main_config.udp_port);
+			
+			log_printf(LOG_DEBUG, "Sending IPX_MAGIC_SPXLOOKUP packet to %s:%hu", inet_ntoa(in_addr.sin_addr), main_config.udp_port);
+			
+			if(sendto(lookup_fd, (char*)(packet), packet_len, 0, (struct sockaddr*)(&in_addr), sizeof(in_addr)) == -1)
+			{
+				log_printf(LOG_ERROR, "Cannot send IPX_MAGIC_SPXLOOKUP packet: %s", w32_error(WSAGetLastError()));
+			}
+			else{
+				sent_req = true;
+			}
+		}
+		
+		if(!sent_req)
+		{
+			/* Give up if none of them could be sent. */
+			
+			closesocket(lookup_fd);
+			free(packet);
+			unlock_sockets();
+			
+			WSASetLastError(WSAENETUNREACH);
+			return -1;
+		}
+		
+		/* Wait for any replies to the batch.
+		 * 
+		 * BUG: Batch may time out or wait (effectively) forever if the
+		 * batch is sent just before the system tick count rolls over.
+		 * 
+		 * TODO: Use GetTickCount64() if available.
+		*/
+		
+		DWORD wait_until = GetTickCount() + (IPX_CONNECT_TIMEOUT / IPX_CONNECT_TRIES) * 1000;
+		
+		for(DWORD now; (now = GetTickCount()) < wait_until;)
+		{
+			/* Release the socket table in case the remote address
+			 * in question is in the same process and we block the
+			 * router from replying.
+			*/
+			
+			int reclaim_fd = sock->fd;
+			unlock_sockets();
+			
+			fd_set fdset;
+			FD_ZERO(&fdset);
+			FD_SET(lookup_fd, &fdset);
+			
+			struct timeval tv = {
+				.tv_sec  = (wait_until - now) / 1000,
+				.tv_usec = ((wait_until - now) % 1000) * 1000
+			};
+			
+			if(select(1, &fdset, NULL, NULL, &tv) == -1)
+			{
+				closesocket(lookup_fd);
+				free(packet);
+				
+				return -1;
+			}
+			
+			/* Reclaim the lock, ensure the socket hasn't been
+			 * closed by the application (naughty!) while we were
+			 * waiting.
+			*/
+			
+			ipx_socket *reclaim_sock = get_socket(reclaim_fd);
+			if(sock != reclaim_sock)
+			{
+				log_printf(LOG_DEBUG, "Application closed socket during connect!");
+				
+				closesocket(lookup_fd);
+				free(packet);
+				
+				if(reclaim_sock)
+				{
+					unlock_sockets();
+				}
+				
+				WSASetLastError(WSAENOTSOCK);
+				return -1;
+			}
+			
+			/* Read and process a single packet if available. */
+			
+			spxlookup_reply_t reply;
+			int addrlen = sizeof(in_addr);
+			
+			if(recvfrom(lookup_fd, (char*)(&reply), sizeof(reply), 0, (struct sockaddr*)(&in_addr), &addrlen) == sizeof(reply)
+				&& memcmp(reply.net, req.net, 4) == 0
+				&& memcmp(reply.node, req.node, 6) == 0
+				&& reply.socket == req.socket)
+			{
+				if(!(sock->flags & IPX_BOUND))
+				{
+					/* Connecting has to implicitly bind the
+					 * socket if it isn't already. Fill in
+					 * the local net/node numbers with those
+					 * of the interface that received the
+					 * reply.
+					*/
+					
+					ipx_interface_t *iface = ipx_interface_by_subnet(in_addr.sin_addr.s_addr);
+					
+					if(iface)
+					{
+						addr32_out(sock->addr.sa_netnum, iface->ipx_net);
+						addr48_out(sock->addr.sa_nodenum, iface->ipx_node);
+					}
+					
+					free_ipx_interface(iface);
+					
+					if(!iface)
+					{
+						continue;
+					}
+				}
+				
+				in_addr.sin_port = reply.port;
+				got_reply = true;
+				
+				break;
+			}
+		}
+	}
+	
+	closesocket(lookup_fd);
+	free(packet);
+	
+	if(!got_reply)
+	{
+		/* Didn't receive any replies. */
+		
+		log_printf(LOG_DEBUG, "Didn't get any replies to IPX_MAGIC_SPXLOOKUP");
+		
+		unlock_sockets();
+		
+		WSASetLastError(WSAENETUNREACH);
+		return -1;
+	}
+	
+	log_printf(LOG_DEBUG, "Got reply to IPX_MAGIC_SPXLOOKUP; connecting to %s:%hu", inet_ntoa(in_addr.sin_addr), htons(in_addr.sin_port));
+	
+	/* Attempt to connect the underlying TCP socket to the address we got in
+	 * response to the IPX_MAGIC_SPXLOOKUP packet.
+	*/
+	
+	if(r_connect(sock->fd, (struct sockaddr*)(&in_addr), sizeof(in_addr)) == -1)
+	{
+		unlock_sockets();
+		return -1;
+	}
+	
+	log_printf(LOG_DEBUG, "Connection succeeded");
+	
+	/* The TCP connection is up!
+	 * 
+	 * Store the remote IPX address in remote_addr and mark the socket as
+	 * connected for getpeername.
+	*/
+	
+	memcpy(&(sock->remote_addr), ipxaddr, sizeof(*ipxaddr));
+	sock->flags |= IPX_CONNECTED;
+	
+	/* If the socket wasn't previously bound to an IPX address, we need to
+	 * make it so now.
+	*/
+	
+	if(!(sock->flags & IPX_BOUND))
+	{
+		struct sockaddr_in local_addr;
+		int addrlen = sizeof(local_addr);
+		
+		if(r_getsockname(sock->fd, (struct sockaddr*)(&local_addr), &addrlen) == -1)
+		{
+			log_printf(LOG_ERROR, "Cannot get local TCP port of SPX socket: %s", w32_error(WSAGetLastError()));
+			log_printf(LOG_WARNING, "Socket %d is NOW INCONSISTENT!", sock->fd);
+			
+			unlock_sockets();
+			
+			return -1;
+		}
+		
+		sock->port = local_addr.sin_port;
+		log_printf(LOG_DEBUG, "Socket %d bound to TCP port %hu by connect", sock->fd, ntohs(sock->port));
+		
+		/* The sa_netnum and sa_nodenum fields are filled out above. */
+		
+		addr_table_lock();
+		
+		if((sock->addr.sa_socket = addr_table_auto_socket()) != 0)
+		{
+			sock->flags |= IPX_BOUND;
+			
+			addr_table_add(sock);
+		}
+		else{
+			log_printf(LOG_ERROR, "Cannot allocate socket number for SPX socket");
+			log_printf(LOG_WARNING, "Socket %d is NOW INCONSISTENT!", sock->fd);
+			
+			addr_table_unlock();
+			unlock_sockets();
+			
+			return -1;
+		}
+		
+		addr_table_unlock();
+		
+		{
+			IPX_STRING_ADDR(
+				addr_s,
+				addr32_in(sock->addr.sa_netnum),
+				addr48_in(sock->addr.sa_nodenum),
+				sock->addr.sa_socket
+			);
+			
+			log_printf(LOG_DEBUG, "Socket implicitly bound to %s", addr_s);
+		}
+	}
+	
+	/* Populate an spxinit_t structure and send it over the stream for the
+	 * IPXWrapper instance on the other end to receive inside accept and
+	 * initialise the new ipx_socket.
+	*/
+	
+	spxinit_t spxinit;
+	memset(&spxinit, 0, sizeof(spxinit));
+	
+	memcpy(spxinit.net, sock->addr.sa_netnum, 4);
+	memcpy(spxinit.node, sock->addr.sa_nodenum, 6);
+	spxinit.socket = sock->addr.sa_socket;
+	
+	for(int c = 0; c < sizeof(spxinit);)
+	{
+		int s = send(sock->fd, (char*)(&spxinit) + c, sizeof(spxinit) - c, 0);
+		if(s == -1)
+		{
+			log_printf(LOG_ERROR, "Cannot send spxinit structure: %s", w32_error(WSAGetLastError()));
+			log_printf(LOG_WARNING, "Socket %d is NOW INCONSISTENT!", sock->fd);
+			
+			unlock_sockets();
+			
+			return -1;
+		}
+		
+		c += s;
+	}
+	
+	unlock_sockets();
+	
+	return 0;
+}
+
 int PASCAL connect(SOCKET fd, const struct sockaddr *addr, int addrlen)
 {
+	log_printf(LOG_CALL, "connect(%d, %p, %d)", (int)(fd), addr, addrlen);
+	
 	ipx_socket *sock = get_socket(fd);
 	
 	if(sock)
 	{
-		if(addrlen < sizeof(struct sockaddr_ipx))
-		{
-			WSASetLastError(WSAEFAULT);
-			
-			unlock_sockets();
-			return -1;
-		}
-		
 		struct sockaddr_ipx *ipxaddr = (struct sockaddr_ipx*)addr;
 		
-		const unsigned char z6[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-		
-		if(ipxaddr->sa_family == AF_UNSPEC || (ipxaddr->sa_family == AF_IPX && memcmp(ipxaddr->sa_nodenum, z6, 6) == 0))
+		if(sock->flags & IPX_IS_SPX)
 		{
-			/* Disconnect. */
-			
-			sock->flags &= ~IPX_CONNECTED;
-			
-			unlock_sockets();
-			return 0;
-		}
-		
-		if(ipxaddr->sa_family != AF_IPX)
-		{
-			/* Invalid address family. */
-			
-			WSASetLastError(WSAEAFNOSUPPORT);
-			
-			unlock_sockets();
-			return -1;
-		}
-		
-		if(!(sock->flags & IPX_BOUND))
-		{
-			log_printf(LOG_WARNING, "connect() on unbound socket, attempting implicit bind");
-			
-			struct sockaddr_ipx bind_addr;
-			
-			bind_addr.sa_family = AF_IPX;
-			memcpy(bind_addr.sa_netnum, ipxaddr->sa_netnum, 4);
-			memset(bind_addr.sa_nodenum, 0, 6);
-			bind_addr.sa_socket = 0;
-			
-			if(bind(fd, (struct sockaddr*)&bind_addr, sizeof(bind_addr)) == -1)
+			if(addrlen < sizeof(struct sockaddr_ipx))
 			{
 				unlock_sockets();
+				
+				WSASetLastError(WSAEFAULT);
 				return -1;
 			}
+			
+			if(ipxaddr->sa_family != AF_IPX)
+			{
+				unlock_sockets();
+				
+				WSASetLastError(WSAEAFNOSUPPORT);
+				return -1;
+			}
+			
+			return _connect_spx(sock, ipxaddr);
 		}
-		
-		memcpy(&(sock->remote_addr), addr, sizeof(*ipxaddr));
-		sock->flags |= IPX_CONNECTED;
-		
-		unlock_sockets();
-		return 0;
+		else{
+			/* Windows 2000/XP allow disconnecting a datagram socket
+			 * by passing an AF_UNSPEC sockaddr.
+			 * 
+			 * I doubt anything using IPX depends on such recent
+			 * behaviour, but better safe than sorry.
+			*/
+			
+			if(addrlen >= sizeof(addr->sa_family) && addr->sa_family == AF_UNSPEC)
+			{
+				sock->flags &= ~IPX_CONNECTED;
+				unlock_sockets();
+				
+				return 0;
+			}
+			
+			if(addrlen < sizeof(struct sockaddr_ipx))
+			{
+				unlock_sockets();
+				
+				WSASetLastError(WSAEFAULT);
+				return -1;
+			}
+			
+			if(addr->sa_family != AF_IPX)
+			{
+				unlock_sockets();
+				
+				WSASetLastError(WSAEAFNOSUPPORT);
+				return -1;
+			}
+			
+			/* Calling connect with an sa_nodenum of all zeroes
+			 * disconnects in all known versions of Windows.
+			*/
+			
+			if(memcmp(ipxaddr->sa_nodenum, (unsigned char[]){ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }, 6) == 0)
+			{
+				sock->flags &= ~IPX_CONNECTED;
+				unlock_sockets();
+				
+				return 0;
+			}
+			
+			if(!(sock->flags & IPX_BOUND))
+			{
+				log_printf(LOG_WARNING, "connect() on unbound socket, attempting implicit bind");
+				
+				struct sockaddr_ipx bind_addr;
+				
+				bind_addr.sa_family = AF_IPX;
+				memcpy(bind_addr.sa_netnum, ipxaddr->sa_netnum, 4);
+				memset(bind_addr.sa_nodenum, 0, 6);
+				bind_addr.sa_socket = 0;
+				
+				if(bind(fd, (struct sockaddr*)&bind_addr, sizeof(bind_addr)) == -1)
+				{
+					unlock_sockets();
+					return -1;
+				}
+			}
+			
+			memcpy(&(sock->remote_addr), addr, sizeof(*ipxaddr));
+			sock->flags |= IPX_CONNECTED;
+			
+			unlock_sockets();
+			
+			return 0;
+		}
 	}
 	else{
 		return r_connect(fd, addr, addrlen);
