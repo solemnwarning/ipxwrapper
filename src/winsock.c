@@ -595,35 +595,61 @@ static int recv_packet(ipx_socket *sockptr, char *buf, int bufsize, int flags, s
 	return rval;
 }
 
-int WSAAPI recvfrom(SOCKET fd, char *buf, int len, int flags, struct sockaddr *addr, int *addrlen) {
-	ipx_socket *sockptr = get_socket(fd);
+int WSAAPI recvfrom(SOCKET fd, char *buf, int len, int flags, struct sockaddr *addr, int *addrlen)
+{
+	ipx_socket *sock = get_socket(fd);
 	
-	if(sockptr) {
-		if(addr && addrlen && *addrlen < sizeof(struct sockaddr_ipx)) {
+	if(sock)
+	{
+		if(sock->flags & IPX_IS_SPX)
+		{
+			/* Quoth the MSDN:
+			 * 
+			 * For stream-oriented sockets such as those of type
+			 * SOCK_STREAM, a call to recvfrom returns as much
+			 * information as is currently available-up to the size
+			 * of the buffer specified.
+			 * 
+			 * The from and fromlen parameters are ignored for
+			 * connection-oriented sockets.
+			*/
+			
 			unlock_sockets();
 			
-			WSASetLastError(WSAEFAULT);
-			return -1;
+			return r_recv(fd, buf, len, flags);
 		}
-		
-		int extended_addr = sockptr->flags & IPX_EXT_ADDR;
-		
-		int rval = recv_packet(sockptr, buf, len, flags, (struct sockaddr_ipx_ext*)addr, *addrlen);
-		
-		/* The value pointed to by addrlen is only set if the recv call was
-		 * successful, may not be correct.
-		*/
-		if(rval >= 0 && addr && addrlen) {
-			*addrlen = (*addrlen >= sizeof(struct sockaddr_ipx_ext) && extended_addr ? sizeof(struct sockaddr_ipx_ext) : sizeof(struct sockaddr_ipx));
+		else{
+			if(addr && addrlen && *addrlen < sizeof(struct sockaddr_ipx))
+			{
+				unlock_sockets();
+				
+				WSASetLastError(WSAEFAULT);
+				return -1;
+			}
+			
+			int extended_addr = sock->flags & IPX_EXT_ADDR;
+			
+			int rval = recv_packet(sock, buf, len, flags, (struct sockaddr_ipx_ext*)addr, *addrlen);
+			
+			/* The value pointed to by addrlen is only set if the
+			 * recv call was successful, may not be correct.
+			*/
+			
+			if(rval >= 0 && addr && addrlen)
+			{
+				*addrlen = (*addrlen >= sizeof(struct sockaddr_ipx_ext) && extended_addr ? sizeof(struct sockaddr_ipx_ext) : sizeof(struct sockaddr_ipx));
+			}
+			
+			if(rval > len)
+			{
+				WSASetLastError(WSAEMSGSIZE);
+				return -1;
+			}
+			
+			return rval;
 		}
-		
-		if(rval > len) {
-			WSASetLastError(WSAEMSGSIZE);
-			return -1;
-		}
-		
-		return rval;
-	}else{
+	}
+	else{
 		return r_recvfrom(fd, buf, len, flags, addr, addrlen);
 	}
 }
