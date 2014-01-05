@@ -67,6 +67,7 @@ void ipx_interfaces_cleanup(void);
 
 ipx_interface_t *get_ipx_interfaces(void);
 ipx_interface_t *ipx_interface_by_addr(addr32_t net, addr48_t node);
+ipx_interface_t *ipx_interface_by_subnet(uint32_t ipaddr);
 ipx_interface_t *ipx_interface_by_index(int index);
 int ipx_interface_count(void);
 

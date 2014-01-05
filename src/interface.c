@@ -533,6 +533,37 @@ ipx_interface_t *ipx_interface_by_addr(addr32_t net, addr48_t node)
 	return iface;
 }
 
+/* Search for an IPX interface by associated IP subnet.
+ * Returns NULL if no interfaces match or on malloc failure.
+*/
+ipx_interface_t *ipx_interface_by_subnet(uint32_t ipaddr)
+{
+	EnterCriticalSection(&interface_cache_cs);
+	
+	renew_interface_cache();
+	
+	ipx_interface_t *iface;
+	
+	DL_FOREACH(interface_cache, iface)
+	{
+		ipx_interface_ip_t *ip;
+		DL_FOREACH(iface->ipaddr, ip)
+		{
+			if((ip->ipaddr & ip->netmask) == (ipaddr & ip->netmask))
+			{
+				iface = copy_ipx_interface(iface);
+				goto DONE;
+			}
+		}
+	}
+	
+	DONE:
+	
+	LeaveCriticalSection(&interface_cache_cs);
+	
+	return iface;
+}
+
 /* Search for an IPX interface by index.
  * Returns NULL if the interface doesn't exist or malloc failure.
 */
