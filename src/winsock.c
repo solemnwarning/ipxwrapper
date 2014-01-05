@@ -683,26 +683,43 @@ int WSAAPI recv(SOCKET fd, char *buf, int len, int flags)
 	}
 }
 
-int PASCAL WSARecvEx(SOCKET fd, char *buf, int len, int *flags) {
-	ipx_socket *sockptr = get_socket(fd);
+int PASCAL WSARecvEx(SOCKET fd, char *buf, int len, int *flags)
+{
+	ipx_socket *sock = get_socket(fd);
 	
-	if(sockptr) {
-		int rval = recv_packet(sockptr, buf, len, 0, NULL, 0);
-		
-		if(rval > len) {
-			*flags = MSG_PARTIAL;
+	if(sock)
+	{
+		if(sock->flags & IPX_IS_SPX)
+		{
+			unlock_sockets();
 			
-			/* Wording of MSDN is unclear on what should be returned when
-			 * an incomplete message is read, I think it should return the
-			 * amount of data copied to the buffer.
-			*/
-			rval = len;
-		}else if(rval != -1) {
-			*flags = 0;
+			return r_WSARecvEx(fd, buf, len, flags);
 		}
-		
-		return rval;
-	}else{
+		else{
+			int rval = recv_packet(sock, buf, len, 0, NULL, 0);
+			
+			if(rval > len)
+			{
+				*flags = MSG_PARTIAL;
+				
+				/* Wording of MSDN is unclear on what should be
+				 * returned when a partial packet is read.
+				 * 
+				 * I _THINK_ it should return the amount of data
+				 * actually copied to the buffer.
+				*/
+				
+				rval = len;
+			}
+			else if(rval != -1)
+			{
+				*flags = 0;
+			}
+			
+			return rval;
+		}
+	}
+	else{
 		return r_WSARecvEx(fd, buf, len, flags);
 	}
 }
