@@ -193,6 +193,79 @@ static bool handle_recv(int fd)
 		return true;
 	}
 	
+	if(packet->src_socket == 0)
+	{
+		/* A source socket of zero indicates internal IPXWrapper
+		 * traffic. The ptype determines what should be done.
+		 * 
+		 * The destination address of any such packet will usually be
+		 * all zeroes to prevent older versions of IPXWrapper from
+		 * passing them on to applications, since they can't bind to
+		 * socket zero. This is also what prevents them from generating
+		 * such packets.
+		*/
+		
+		if(packet->ptype == IPX_MAGIC_SPXLOOKUP)
+		{
+			/* The other system is trying to resolve the IP address
+			 * and port number of a listening SPX socket.
+			*/
+			
+			if(packet->size != sizeof(spxlookup_req_t))
+			{
+				log_printf(LOG_DEBUG, "Recieved IPX_MAGIC_SPXLOOKUP packet with %hu byte payload, dropping", packet->size);
+				return true;
+			}
+			
+			spxlookup_req_t *req = (spxlookup_req_t*)(packet->data);
+			
+			/* Search the sockets table for a listening socket which
+			 * is bound to the requested address.
+			*/
+			
+			lock_sockets();
+			
+			ipx_socket *s, *tmp;
+			HASH_ITER(hh, sockets, s, tmp)
+			{
+				if(
+					s->flags & IPX_IS_SPX
+					&& s->flags & IPX_LISTENING
+					&& memcmp(req->net, s->addr.sa_netnum, 4) == 0
+					&& memcmp(req->node, s->addr.sa_nodenum, 6) == 0
+					&& req->socket == s->addr.sa_socket)
+				{
+					/* This socket seems to fit the bill.
+					 * Reply with the port number.
+					*/
+					
+					spxlookup_reply_t reply;
+					memset(&reply, 0, sizeof(reply));
+					
+					memcpy(reply.net, req->net, 4);
+					memcpy(reply.node, req->node, 6);
+					reply.socket = req->socket;
+					
+					reply.port = s->port;
+					
+					if(sendto(private_socket, (char*)(&reply), sizeof(reply), 0, (struct sockaddr*)(&addr), addrlen) == -1)
+					{
+						log_printf(LOG_ERROR, "Cannot send spxlookup_reply packet: %s", w32_error(WSAGetLastError()));
+					}
+					
+					break;
+				}
+			}
+			
+			unlock_sockets();
+		}
+		else{
+			log_printf(LOG_DEBUG, "Recieved magic packet unknown ptype %u, dropping", (unsigned int)(packet->ptype));
+		}
+		
+		return true;
+	}
+	
 	if(min_log_level <= LOG_DEBUG)
 	{
 		IPX_STRING_ADDR(src_addr, addr32_in(packet->src_net), addr48_in(packet->src_node), packet->src_socket);

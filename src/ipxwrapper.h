@@ -84,6 +84,32 @@ struct ipx_packet {
 	char data[1];
 } __attribute__((__packed__));
 
+#define IPX_MAGIC_SPXLOOKUP 1
+
+typedef struct spxlookup_req spxlookup_req_t;
+
+struct spxlookup_req
+{
+	unsigned char net[4];
+	unsigned char node[6];
+	uint16_t socket;
+	
+	char padding[20];
+}  __attribute__((__packed__));
+
+typedef struct spxlookup_reply spxlookup_reply_t;
+
+struct spxlookup_reply
+{
+	unsigned char net[4];
+	unsigned char node[6];
+	uint16_t socket;
+	
+	uint16_t port;
+	
+	char padding[18];
+}  __attribute__((__packed__));
+
 extern ipx_socket *sockets;
 extern main_config_t main_config;
 
