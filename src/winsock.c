@@ -160,31 +160,80 @@ SOCKET WSAAPI socket(int af, int type, int protocol)
 	
 	if(af == AF_IPX)
 	{
-		ipx_socket *nsock = malloc(sizeof(ipx_socket));
-		if(!nsock)
+		if(type == SOCK_DGRAM)
 		{
-			WSASetLastError(ERROR_OUTOFMEMORY);
-			return -1;
-		}
-		
-		if((nsock->fd = r_socket(AF_INET, SOCK_DGRAM, 0)) == -1)
-		{
-			log_printf(LOG_ERROR, "Cannot create UDP socket: %s", w32_error(WSAGetLastError()));
+			ipx_socket *nsock = malloc(sizeof(ipx_socket));
+			if(!nsock)
+			{
+				WSASetLastError(ERROR_OUTOFMEMORY);
+				return -1;
+			}
 			
-			free(nsock);
+			if((nsock->fd = r_socket(AF_INET, SOCK_DGRAM, 0)) == -1)
+			{
+				log_printf(LOG_ERROR, "Cannot create UDP socket: %s", w32_error(WSAGetLastError()));
+				
+				free(nsock);
+				return -1;
+			}
+			
+			nsock->flags = IPX_SEND | IPX_RECV | IPX_RECV_BCAST;
+			nsock->s_ptype = (protocol ? NSPROTO_IPX - protocol : 0);
+			
+			log_printf(LOG_INFO, "IPX socket created (fd = %d)", nsock->fd);
+			
+			lock_sockets();
+			HASH_ADD_INT(sockets, fd, nsock);
+			unlock_sockets();
+			
+			return nsock->fd;
+		}
+		else if(type == SOCK_STREAM)
+		{
+			if(protocol != 0 && protocol != NSPROTO_SPX && protocol != NSPROTO_SPXII)
+			{
+				log_printf(LOG_DEBUG, "Unknown protocol (%d) for AF_INET/SOCK_STREAM", protocol);
+				
+				WSASetLastError(WSAEPROTONOSUPPORT);
+				return -1;
+			}
+			
+			ipx_socket *nsock = malloc(sizeof(ipx_socket));
+			if(!nsock)
+			{
+				WSASetLastError(ERROR_OUTOFMEMORY);
+				return -1;
+			}
+			
+			if((nsock->fd = r_socket(AF_INET, SOCK_STREAM, 0)) == -1)
+			{
+				log_printf(LOG_ERROR, "Cannot create TCP socket: %s", w32_error(WSAGetLastError()));
+				free(nsock);
+				
+				return -1;
+			}
+			
+			nsock->flags = IPX_IS_SPX;
+			
+			if(protocol == NSPROTO_SPXII)
+			{
+				nsock->flags |= IPX_IS_SPXII;
+			}
+			
+			log_printf(LOG_INFO, "SPX socket created (fd = %d)", nsock->fd);
+			
+			lock_sockets();
+			HASH_ADD_INT(sockets, fd, nsock);
+			unlock_sockets();
+			
+			return nsock->fd;
+		}
+		else{
+			log_printf(LOG_DEBUG, "Unknown type (%d) for family AF_IPX", type);
+			
+			WSASetLastError(WSAEINVAL);
 			return -1;
 		}
-		
-		nsock->flags = IPX_SEND | IPX_RECV | IPX_RECV_BCAST;
-		nsock->s_ptype = (protocol ? NSPROTO_IPX - protocol : 0);
-		
-		log_printf(LOG_INFO, "IPX socket created (fd = %d)", nsock->fd);
-		
-		lock_sockets();
-		HASH_ADD_INT(sockets, fd, nsock);
-		unlock_sockets();
-		
-		return nsock->fd;
 	}
 	else{
 		return r_socket(af, type, protocol);

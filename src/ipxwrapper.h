@@ -41,6 +41,8 @@
 #define IPX_CONNECTED	(int)(1<<7)
 #define IPX_RECV_BCAST	(int)(1<<8)
 #define IPX_EXT_ADDR	(int)(1<<9)
+#define IPX_IS_SPX	(int)(1<<10)
+#define IPX_IS_SPXII	(int)(1<<11)
 
 typedef struct ipx_socket ipx_socket;
 typedef struct ipx_packet ipx_packet;
