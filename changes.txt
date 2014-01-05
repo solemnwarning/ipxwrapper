@@ -1,3 +1,6 @@
+Version XXX:
+	Bugfix: Allow address reuse when only the binding socket has SO_REUSEADDR.
+
 Version 0.4.1:
 	Feature: Added workaround for point-to-point links.
 	

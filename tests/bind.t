@@ -81,7 +81,7 @@ try_binds(
 try_binds(
 	"Single process, conflicting socket numbers, second using SO_REUSEADDR",
 	
-	"bind.exe 0 1234 --reuse 0 1234" => "FAIL",
+	"bind.exe 0 1234 --reuse 0 1234" => "OK",
 );
 
 try_binds(
@@ -144,7 +144,7 @@ try_binds(
 	"Two processes, conflicting socket numbers, second using SO_REUSEADDR",
 	
 	"bind.exe 0 1234"         => "OK",
-	"bind.exe --reuse 0 1234" => "FAIL",
+	"bind.exe --reuse 0 1234" => "OK",
 );
 
 sub try_binds

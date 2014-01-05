@@ -1,5 +1,5 @@
 /* IPXWrapper - Address table
- * Copyright (C) 2008-2012 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2008-2014 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -61,10 +61,10 @@ void addr_table_cleanup(void);
 void addr_table_lock(void);
 void addr_table_unlock(void);
 
-bool addr_table_check(const struct sockaddr_ipx *addr, bool reuse);
+bool addr_table_check(const struct sockaddr_ipx *addr);
 uint16_t addr_table_auto_socket(void);
 
-void addr_table_add(const struct sockaddr_ipx *addr, uint16_t port, bool reuse);
+void addr_table_add(const struct sockaddr_ipx *addr, uint16_t port);
 void addr_table_remove(uint16_t port);
 
 void addr_table_update(void);

@@ -1,5 +1,5 @@
 /* ipxwrapper - Winsock functions
- * Copyright (C) 2008 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2008-2014 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -335,7 +335,7 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen)
 		
 		/* Check that the address is free. */
 		
-		if(!addr_table_check(&ipxaddr, !!(sock->flags & IPX_REUSE)))
+		if(!(sock->flags & IPX_REUSE) && !addr_table_check(&ipxaddr))
 		{
 			/* Address has already been bound. */
 			
@@ -401,7 +401,7 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen)
 		
 		/* Add to the address table. */
 		
-		addr_table_add(&ipxaddr, sock->port, !!(sock->flags & IPX_REUSE));
+		addr_table_add(&ipxaddr, sock->port);
 		
 		/* Mark the IPX socket as bound. */
 		

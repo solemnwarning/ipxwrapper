@@ -1,5 +1,5 @@
 /* IPXWrapper - Address table
- * Copyright (C) 2008-2012 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2008-2014 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -179,7 +179,7 @@ void addr_table_unlock(void)
  * 
  * Returns false if a conflict was confirmed, true otherwise.
 */
-bool addr_table_check(const struct sockaddr_ipx *addr, bool reuse)
+bool addr_table_check(const struct sockaddr_ipx *addr)
 {
 	if(addr_table_base)
 	{
@@ -190,12 +190,8 @@ bool addr_table_check(const struct sockaddr_ipx *addr, bool reuse)
 		
 		while(entry < end && (entry->flags & ADDR_TABLE_ENTRY_VALID))
 		{
-			if(addr->sa_socket == entry->socket && (!(entry->flags & ADDR_TABLE_ENTRY_REUSE) || !reuse))
+			if(addr->sa_socket == entry->socket)
 			{
-				/* A socket is already bound to this address and either
-				* it or this one doesn't have SO_REUSEADDR set.
-				*/
-				
 				addr_table_unlock();
 				return false;
 			}
@@ -217,7 +213,7 @@ bool addr_table_check(const struct sockaddr_ipx *addr, bool reuse)
 		
 		HASH_ITER(hh, sockets, s, tmp)
 		{
-			if(memcmp(&(s->addr), addr, sizeof(struct sockaddr_ipx)) == 0 && (!(s->flags & IPX_REUSE) || !reuse))
+			if(memcmp(&(s->addr), addr, sizeof(struct sockaddr_ipx)) == 0)
 			{
 				unlock_sockets();
 				return true;
@@ -303,7 +299,7 @@ uint16_t addr_table_auto_socket(void)
  * Performs no conflict checking. Take the address table lock in the caller and
  * use addr_table_check() before calling this.
 */
-void addr_table_add(const struct sockaddr_ipx *addr, uint16_t port, bool reuse)
+void addr_table_add(const struct sockaddr_ipx *addr, uint16_t port)
 {
 	if(!addr_table_base)
 	{
@@ -330,12 +326,7 @@ void addr_table_add(const struct sockaddr_ipx *addr, uint16_t port, bool reuse)
 		entry->nodenum = addr48_in(addr->sa_nodenum);
 		entry->socket  = addr->sa_socket;
 		
-		entry->flags = ADDR_TABLE_ENTRY_VALID;
-		
-		if(reuse)
-		{
-			entry->flags |= ADDR_TABLE_ENTRY_REUSE;
-		}
+		entry->flags = ADDR_TABLE_ENTRY_VALID | ADDR_TABLE_ENTRY_REUSE;
 		
 		entry->port = port;
 		entry->time = time(NULL);
