@@ -213,9 +213,13 @@ static bool handle_recv(int fd)
 	HASH_ITER(hh, sockets, sock, tmp)
 	{
 		if(
+			/* Socket isn't SPX */
+			
+			!(sock->flags & IPX_IS_SPX)
+			
 			/* Socket is bound and not shutdown for recv. */
 			
-			(sock->flags & IPX_BOUND) && (sock->flags & IPX_RECV)
+			&& (sock->flags & IPX_BOUND) && (sock->flags & IPX_RECV)
 			
 			/* Packet type filtering is off, or packet type matches
 			 * filter.
