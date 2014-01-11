@@ -625,7 +625,7 @@ int WSAAPI recvfrom(SOCKET fd, char *buf, int len, int flags, struct sockaddr *a
 			
 			int extended_addr = sock->flags & IPX_EXT_ADDR;
 			
-			int rval = recv_packet(sock, buf, len, flags, (struct sockaddr_ipx_ext*)addr, *addrlen);
+			int rval = recv_packet(sock, buf, len, flags, (struct sockaddr_ipx_ext*)(addr), (addrlen ? *addrlen : 0));
 			
 			/* The value pointed to by addrlen is only set if the
 			 * recv call was successful, may not be correct.
@@ -703,6 +703,9 @@ int PASCAL WSARecvEx(SOCKET fd, char *buf, int len, int *flags)
 				 * 
 				 * I _THINK_ it should return the amount of data
 				 * actually copied to the buffer.
+				 * 
+				 * Windows 95/98: Returns -1
+				 * Windows 2000/XP: Returns len
 				*/
 				
 				rval = len;
@@ -752,6 +755,14 @@ int WSAAPI getsockopt(SOCKET fd, int level, int optname, char FAR *optval, int F
 		{
 			if(optname == IPX_PTYPE)
 			{
+				/* NOTE: Windows 95/98 only write to the first
+				 * byte of the buffer, leaving the rest
+				 * uninitialised. Windows 2000/XP write all 4
+				 * bytes.
+				 * 
+				 * Both require optlen to be at least 4.
+				*/
+				
 				RETURN_INT_OPT(sock->s_ptype);
 			}
 			else if(optname == IPX_FILTERPTYPE)

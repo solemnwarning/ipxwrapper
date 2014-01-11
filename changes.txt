@@ -5,6 +5,8 @@ Version XXX:
 	protocol value correctly.
 	
 	Bugfix: Removed conflicting send and connect functions.
+	
+	Bugfix: Fixed segfault in recvfrom when called with NULL addrlen.
 
 Version 0.4.1:
 	Feature: Added workaround for point-to-point links.
