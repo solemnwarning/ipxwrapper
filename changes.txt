@@ -1,5 +1,8 @@
 Version XXX:
 	Bugfix: Allow address reuse when only the binding socket has SO_REUSEADDR.
+	
+	Bugfix: Initialise the ptype of IPX sockets created with a nonzero
+	protocol value correctly.
 
 Version 0.4.1:
 	Feature: Added workaround for point-to-point links.

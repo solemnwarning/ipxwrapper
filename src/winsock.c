@@ -178,7 +178,7 @@ SOCKET WSAAPI socket(int af, int type, int protocol)
 			}
 			
 			nsock->flags = IPX_SEND | IPX_RECV | IPX_RECV_BCAST;
-			nsock->s_ptype = (protocol ? NSPROTO_IPX - protocol : 0);
+			nsock->s_ptype = (protocol ? protocol - NSPROTO_IPX : 0);
 			
 			log_printf(LOG_INFO, "IPX socket created (fd = %d)", nsock->fd);
 			
