@@ -982,6 +982,13 @@ int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct s
 	
 	if(sock)
 	{
+		if(sock->flags & IPX_IS_SPX)
+		{
+			unlock_sockets();
+			
+			return r_send(sock->fd, buf, len, flags);
+		}
+		
 		if(!addr)
 		{
 			/* Destination address required. */
