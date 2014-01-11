@@ -1107,18 +1107,25 @@ int PASCAL shutdown(SOCKET fd, int cmd)
 	
 	if(sock)
 	{
-		if(cmd == SD_RECEIVE || cmd == SD_BOTH)
+		if(sock->flags & IPX_IS_SPX)
 		{
-			sock->flags &= ~IPX_RECV;
+			unlock_sockets();
+			return r_shutdown(fd, cmd);
 		}
-		
-		if(cmd == SD_SEND || cmd == SD_BOTH)
-		{
-			sock->flags &= ~IPX_SEND;
+		else{
+			if(cmd == SD_RECEIVE || cmd == SD_BOTH)
+			{
+				sock->flags &= ~IPX_RECV;
+			}
+			
+			if(cmd == SD_SEND || cmd == SD_BOTH)
+			{
+				sock->flags &= ~IPX_SEND;
+			}
+			
+			unlock_sockets();
+			return 0;
 		}
-		
-		unlock_sockets();
-		return 0;
 	}
 	else{
 		return r_shutdown(fd, cmd);
