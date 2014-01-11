@@ -58,4 +58,6 @@ directplay-win64.reg
 tests/addr.c
 tests/bind.c
 tests/bind.t
+tests/ipx-sendrecv.c
 tests/socket.c
+tests/test.h
