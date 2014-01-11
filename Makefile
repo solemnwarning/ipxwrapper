@@ -63,7 +63,7 @@ dist: all
 	zip -r ipxwrapper-$(VERSION)-src.zip ipxwrapper-$(VERSION)-src/
 	rm -r ipxwrapper-$(VERSION)-src/
 
-test: $(TEST_DLLS) tests/addr.exe tests/socket.exe tests/bind.exe tests/ipx-sendrecv.exe
+test: $(TEST_DLLS) tests/addr.exe tests/socket.exe tests/bind.exe tests/ipx-sendrecv.exe tests/spx-connect.exe
 	cp $(TEST_DLLS) tests/
 	
 	./tests/addr.exe
@@ -72,11 +72,14 @@ test: $(TEST_DLLS) tests/addr.exe tests/socket.exe tests/bind.exe tests/ipx-send
 	cd tests/; prove bind.t
 	
 	./tests/ipx-sendrecv.exe
+	
+	./tests/spx-connect.exe
 
 tests/addr.exe: tests/addr.c src/addr.o
 tests/bind.exe: tests/bind.c
 tests/ipx-sendrecv.exe: tests/ipx-sendrecv.c tests/test.h
 tests/socket.exe: tests/socket.c
+tests/spx-connect.exe: tests/spx-connect.c tests/test.h
 
 tests/%.exe:
 	$(CC) $(CFLAGS) -I./src/ -o $@ $^ -lwsock32

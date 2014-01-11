@@ -60,4 +60,5 @@ tests/bind.c
 tests/bind.t
 tests/ipx-sendrecv.c
 tests/socket.c
+tests/spx-connect.c
 tests/test.h

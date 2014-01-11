@@ -87,6 +87,55 @@
 	} \
 }
 
+#define MUST_CONNECT_TO(sock, addr) \
+{ \
+	if(connect(sock, (struct sockaddr*)(&addr), sizeof(addr)) != 0) \
+	{ \
+		FAIL("Couldn't connect socket, WSAGetLastError = %d", (int)(WSAGetLastError())); \
+	} \
+	struct sockaddr_ipx got_addr; \
+	int addrlen = sizeof(got_addr); \
+	if(getpeername(sock, (struct sockaddr*)(&got_addr), &addrlen) != 0) \
+	{ \
+		FAIL("Couldn't get peer address of connected socket, WSAGetLastError = %d", (int)(WSAGetLastError())); \
+	} \
+	if(memcmp(&addr, &got_addr, sizeof(got_addr)) != 0) \
+	{ \
+		FAIL("Connected socket, but getpeername returns wrong address"); \
+	} \
+}
+
+#define EXPECT_LOCAL_ADDR(sock, expect_addr) \
+{ \
+	struct sockaddr_ipx got_addr; \
+	int addrlen = sizeof(got_addr); \
+	assert(getsockname(sock, (struct sockaddr*)(&got_addr), &addrlen) == 0); \
+	assert(memcmp(&got_addr, &expect_addr, sizeof(got_addr)) == 0); \
+}
+
+#define EXPECT_NO_ACCEPT(sock) \
+{ \
+	assert(accept(sock, NULL, NULL) == -1); \
+	assert(WSAGetLastError() == WSAEWOULDBLOCK); \
+}
+
+#define EXPECT_ACCEPT(sock) \
+({ \
+	int newfd = accept(sock, NULL, NULL); \
+	assert(newfd != -1); \
+	newfd; \
+})
+
+#define EXPECT_ACCEPT_FROM(sock, expect_addr) \
+({ \
+	struct sockaddr_ipx got_addr; \
+	int addrlen = sizeof(got_addr); \
+	int newfd = accept(sock, (struct sockaddr*)(&got_addr), &addrlen); \
+	assert(newfd != -1); \
+	assert(memcmp(&expect_addr, &got_addr, sizeof(got_addr)) == 0); \
+	newfd; \
+})
+
 static const char test_data_1[] = {
 	0x57, 0x65, 0x27, 0x72, 0x65, 0x20, 0x4b, 0x6e, 0x69, 0x67, 0x68, 0x74,
 	0x73, 0x20, 0x6f, 0x66, 0x20, 0x74, 0x68, 0x65, 0x20, 0x52, 0x6f, 0x75,
