@@ -58,3 +58,4 @@ directplay-win64.reg
 tests/addr.c
 tests/bind.c
 tests/bind.t
+tests/socket.c
