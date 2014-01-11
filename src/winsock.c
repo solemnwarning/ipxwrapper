@@ -29,6 +29,21 @@
 #include "addrcache.h"
 #include "addrtable.h"
 
+#define XP_CONNECTIONLESS      0x00000001
+#define XP_GUARANTEED_DELIVERY 0x00000002
+#define XP_GUARANTEED_ORDER    0x00000004
+#define XP_MESSAGE_ORIENTED    0x00000008
+#define XP_PSEUDO_STREAM       0x00000010
+#define XP_GRACEFUL_CLOSE      0x00000020
+#define XP_EXPEDITED_DATA      0x00000040
+#define XP_CONNECT_DATA        0x00000080
+#define XP_DISCONNECT_DATA     0x00000100
+#define XP_SUPPORTS_BROADCAST  0x00000200
+#define XP_SUPPORTS_MULTICAST  0x00000400
+#define XP_BANDWITH_ALLOCATION 0x00000800
+#define XP_FRAGMENTATION       0x00001000
+#define XP_ENCRYPTS            0x00002000
+
 typedef struct _PROTOCOL_INFO {
 	DWORD dwServiceFlags ;
 	INT iAddressFamily ;
@@ -50,108 +65,235 @@ struct sockaddr_ipx_ext {
 	unsigned char sa_flags;
 };
 
-static size_t strsize(void *str, BOOL unicode) {
-	return unicode ? 2 + wcslen(str)*2 : 1 + strlen(str);
+static size_t strsize(void *str, bool unicode)
+{
+	return unicode
+		? (wcslen(str) * 2) + 2
+		: strlen(str) + 1;
 }
 
-static int do_EnumProtocols(LPINT protocols, LPVOID buf, LPDWORD bsptr, BOOL unicode) {
-	int bufsize = *bsptr, rval, i, want_ipx = 0;
+#define PUSH_NAME(name) \
+{ \
+	int i = 0; \
+	do { \
+		if(unicode) \
+		{ \
+			*(wchar_t*)(name_base) = name[i]; \
+			name_base += 2; \
+		} \
+		else{ \
+			*name_base = name[i]; \
+			name_base += 1; \
+		} \
+	} while(name[i++] != '\0'); \
+}
+
+static int do_EnumProtocols(LPINT protocols, LPVOID buf, LPDWORD bsptr, bool unicode)
+{
+	/* Determine which IPX protocols should be added to the list. */
 	
-	PROTOCOL_INFO *pinfo = buf;
+	bool want_ipx   = !protocols;
+	bool want_spx   = !protocols;
+	bool want_spxii = !protocols;
 	
-	if((rval = unicode ? r_EnumProtocolsW(protocols, buf, bsptr) : r_EnumProtocolsA(protocols, buf, bsptr)) == -1) {
+	for(int i = 0; protocols && protocols[i]; ++i)
+	{
+		if(protocols[i] == NSPROTO_IPX)
+		{
+			want_ipx = true;
+		}
+		else if(protocols[i] == NSPROTO_SPX)
+		{
+			want_spx = true;
+		}
+		else if(protocols[i] == NSPROTO_SPXII)
+		{
+			want_spxii = true;
+		}
+	}
+	
+	/* Stash the true buffer size and call EnumProtocols to get any
+	 * protocols provided by the OS.
+	*/
+	
+	DWORD bufsize = *bsptr;
+	
+	int rval = unicode
+		? r_EnumProtocolsW(protocols, buf, bsptr)
+		: r_EnumProtocolsA(protocols, buf, bsptr);
+	
+	if(rval == -1 && GetLastError() != ERROR_INSUFFICIENT_BUFFER)
+	{
 		return -1;
 	}
 	
-	if(!protocols) {
-		want_ipx = 1;
-	}else{
-		for(i = 0; protocols[i]; i++) {
-			if(protocols[i] == NSPROTO_IPX) {
-				want_ipx = 1;
-				break;
-			}
+	/* Determine how much additional buffer space is needed and check that
+	 * the originally provided size is enough.
+	*/
+	
+	if(want_ipx)
+	{
+		*bsptr += sizeof(PROTOCOL_INFO) + (strlen("IPX") + 1) * (!!unicode + 1);
+	}
+	
+	if(want_spx)
+	{
+		*bsptr += sizeof(PROTOCOL_INFO) + (strlen("SPX") + 1) * (!!unicode + 1);
+	}
+	
+	if(want_spxii)
+	{
+		*bsptr += sizeof(PROTOCOL_INFO) + (strlen("SPX II") + 1) * (!!unicode + 1);
+	}
+	
+	if(*bsptr > bufsize)
+	{
+		SetLastError(ERROR_INSUFFICIENT_BUFFER);
+		return -1;
+	}
+	
+	if(rval == -1)
+	{
+		return -1;
+	}
+	
+	/* Remove any IPX/SPX protocols from the list the native EnumProtocols
+	 * function returned; this is to force the data for the IPX types to be
+	 * the same under all Windows versions.
+	*/
+	
+	PROTOCOL_INFO *pinfo = buf;
+	
+	for(int i = 0; i < rval;)
+	{
+		if(pinfo[i].iAddressFamily == AF_IPX)
+		{
+			pinfo[i] = pinfo[--rval];
+		}
+		else{
+			++i;
 		}
 	}
 	
-	if(want_ipx) {
-		for(i = 0; i < rval; i++) {
-			if(pinfo[i].iProtocol == NSPROTO_IPX) {
-				return rval;
-			}
+	/* The names pointed to by lpProtocol may be stored in the buffer, past
+	 * the PROTOCOL_INFO structures.
+	 * 
+	 * We want to overwrite that block, so move any such names out.
+	*/
+	
+	size_t name_buf_size = 0;
+	
+	for(int i = 0; i < rval; ++i)
+	{
+		if(pinfo[i].lpProtocol >= buf && pinfo[i].lpProtocol < (char*)(buf) + bufsize)
+		{
+			name_buf_size += strsize(pinfo[i].lpProtocol, unicode);
 		}
-		
-		*bsptr += sizeof(PROTOCOL_INFO) + (unicode ? 8 : 4);
-		
-		if(*bsptr > bufsize) {
-			SetLastError(ERROR_INSUFFICIENT_BUFFER);
-			return -1;
-		}
-		
-		/* Make sure there is space between the last PROTOCOL_INFO structure
-		 * and the protocol names for the extra structure.
-		*/
-		
-		size_t slen = 0, off = 0;
-		
-		for(i = 0; i < rval; i++) {
-			slen += strsize(pinfo[i].lpProtocol, unicode);
-		}
-		
-		char *name_buf = malloc(slen);
-		if(!name_buf) {
-			SetLastError(ERROR_OUTOFMEMORY);
-			return -1;
-		}
-		
-		for(i = 0; i < rval; i++) {
-			slen = strsize(pinfo[i].lpProtocol, unicode);
-			memcpy(name_buf + off, pinfo[i].lpProtocol, slen);
-			
-			off += slen;
-		}
-		
-		char *name_dest = ((char*)buf) + sizeof(PROTOCOL_INFO) * (rval + 1);
-		
-		memcpy(name_dest, name_buf, off);
-		free(name_buf);
-		
-		if(unicode) {
-			wcscpy((wchar_t*)(name_dest + off), L"IPX");
-		}else{
-			strcpy(name_dest + off, "IPX");
-		}
-		
-		for(i = 0, off = 0; i < rval; i++) {
-			pinfo[i].lpProtocol = name_dest + off;
-			off += strsize(pinfo[i].lpProtocol, unicode);
-		}
-		
-		int ipx_off = rval++;
-		
-		pinfo[ipx_off].dwServiceFlags = 5641;
-		pinfo[ipx_off].iAddressFamily = AF_IPX;
-		pinfo[ipx_off].iMaxSockAddr = 16;
-		pinfo[ipx_off].iMinSockAddr = 14;
-		pinfo[ipx_off].iSocketType = SOCK_DGRAM;
-		pinfo[ipx_off].iProtocol = NSPROTO_IPX;
-		pinfo[ipx_off].dwMessageSize = 576;
-		pinfo[ipx_off].lpProtocol = name_dest + off;
 	}
+	
+	char *name_buf = malloc(name_buf_size);
+	if(!name_buf)
+	{
+		SetLastError(ERROR_OUTOFMEMORY);
+		return -1;
+	}
+	
+	for(int i = 0, off = 0; i < rval; ++i)
+	{
+		if(pinfo[i].lpProtocol >= buf && pinfo[i].lpProtocol < (char*)(buf) + bufsize)
+		{
+			int len = strsize(pinfo[i].lpProtocol, unicode);
+			
+			pinfo[i].lpProtocol = memcpy(name_buf + off, pinfo[i].lpProtocol, len);
+			off += len;
+		}
+	}
+	
+	/* Calculate buffer offset so start adding names at. */
+	
+	char *name_base = (char*)(buf) + sizeof(PROTOCOL_INFO) * (rval + !!want_ipx + !!want_spx + !!want_spxii);
+	
+	/* Append additional PROTOCOL_INFO structures and name strings. */
+	
+	if(want_ipx)
+	{
+		pinfo[rval].dwServiceFlags = XP_CONNECTIONLESS | XP_MESSAGE_ORIENTED | XP_SUPPORTS_BROADCAST | XP_SUPPORTS_MULTICAST | XP_FRAGMENTATION;
+		pinfo[rval].iAddressFamily = AF_IPX;
+		pinfo[rval].iMaxSockAddr   = 16;
+		pinfo[rval].iMinSockAddr   = 14;
+		pinfo[rval].iSocketType    = SOCK_DGRAM;
+		pinfo[rval].iProtocol      = NSPROTO_IPX;
+		pinfo[rval].dwMessageSize  = 576;
+		pinfo[rval].lpProtocol     = name_base;
+		
+		PUSH_NAME("IPX");
+		
+		++rval;
+	}
+	
+	if(want_spx)
+	{
+		pinfo[rval].dwServiceFlags = XP_GUARANTEED_DELIVERY | XP_GUARANTEED_ORDER | XP_PSEUDO_STREAM | XP_FRAGMENTATION;
+		pinfo[rval].iAddressFamily = AF_IPX;
+		pinfo[rval].iMaxSockAddr   = 16;
+		pinfo[rval].iMinSockAddr   = 14;
+		pinfo[rval].iSocketType    = SOCK_STREAM;
+		pinfo[rval].iProtocol      = NSPROTO_SPX;
+		pinfo[rval].dwMessageSize  = 0xFFFFFFFF;
+		pinfo[rval].lpProtocol     = name_base;
+		
+		PUSH_NAME("SPX");
+		
+		++rval;
+	}
+	
+	if(want_spxii)
+	{
+		pinfo[rval].dwServiceFlags = XP_GUARANTEED_DELIVERY | XP_GUARANTEED_ORDER | XP_PSEUDO_STREAM | XP_FRAGMENTATION;
+		pinfo[rval].iAddressFamily = AF_IPX;
+		pinfo[rval].iMaxSockAddr   = 16;
+		pinfo[rval].iMinSockAddr   = 14;
+		pinfo[rval].iSocketType    = SOCK_STREAM;
+		pinfo[rval].iProtocol      = NSPROTO_SPXII;
+		pinfo[rval].dwMessageSize  = 0xFFFFFFFF;
+		pinfo[rval].lpProtocol     = name_base;
+		
+		PUSH_NAME("SPX II");
+		
+		++rval;
+	}
+	
+	/* Replace the names we pulled out of the buffer earlier. */
+	
+	for(int i = 0; i < rval; ++i)
+	{
+		if(pinfo[i].lpProtocol >= name_buf && pinfo[i].lpProtocol < name_buf + name_buf_size)
+		{
+			int size = strsize(pinfo[i].lpProtocol, unicode);
+			
+			pinfo[i].lpProtocol = memcpy(name_base, pinfo[i].lpProtocol, size);
+			name_base += size;
+		}
+	}
+	
+	free(name_buf);
 	
 	return rval;
 }
 
-INT APIENTRY EnumProtocolsA(LPINT protocols, LPVOID buf, LPDWORD bsptr) {
-	return do_EnumProtocols(protocols, buf, bsptr, FALSE);
+INT APIENTRY EnumProtocolsA(LPINT protocols, LPVOID buf, LPDWORD bsptr)
+{
+	return do_EnumProtocols(protocols, buf, bsptr, false);
 }
 
-INT APIENTRY EnumProtocolsW(LPINT protocols, LPVOID buf, LPDWORD bsptr) {
-	return do_EnumProtocols(protocols, buf, bsptr, TRUE);
+INT APIENTRY EnumProtocolsW(LPINT protocols, LPVOID buf, LPDWORD bsptr)
+{
+	return do_EnumProtocols(protocols, buf, bsptr, true);
 }
 
-INT WINAPI WSHEnumProtocols(LPINT protocols, LPWSTR ign, LPVOID buf, LPDWORD bsptr) {
-	return do_EnumProtocols(protocols, buf, bsptr, FALSE);
+INT WINAPI WSHEnumProtocols(LPINT protocols, LPWSTR ign, LPVOID buf, LPDWORD bsptr)
+{
+	return do_EnumProtocols(protocols, buf, bsptr, false);
 }
 
 SOCKET WSAAPI socket(int af, int type, int protocol)
