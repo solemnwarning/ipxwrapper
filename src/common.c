@@ -272,6 +272,7 @@ void __stdcall *find_sym(unsigned int dllnum, const char *symbol) {
 	return ptr;
 }
 
-void __stdcall log_call(unsigned int dllnum, const char *symbol) {
-	log_printf(LOG_CALL, "%s:%s", dll_names[dllnum], symbol);
+void __stdcall log_call(unsigned int entry, const char *symbol, unsigned int target)
+{
+	log_printf(LOG_CALL, "%s:%s -> %s", dll_names[entry], symbol, dll_names[target]);
 }

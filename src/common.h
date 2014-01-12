@@ -62,7 +62,7 @@ bool reg_set_addr48(HKEY key, const char *name, addr48_t value);
 void load_dll(unsigned int dllnum);
 void unload_dlls(void);
 void __stdcall *find_sym(unsigned int dllnum, const char *symbol);
-void __stdcall log_call(unsigned int dllnum, const char *symbol);
+void __stdcall log_call(unsigned int entry, const char *symbol, unsigned int target);
 
 void log_open(const char *file);
 void log_close();

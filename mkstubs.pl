@@ -70,8 +70,9 @@ foreach my $func(@stubs) {
 	print CODE "_$f_name:\n";
 	
 	if($do_logging) {
-		print CODE "\tpush\t$f_name\_sym\n";
 		print CODE "\tpush\tdword ".$func->{"dllnum"}."\n";
+		print CODE "\tpush\t$f_name\_sym\n";
+		print CODE "\tpush\tdword $dllnum\n";
 		print CODE "\tcall\t_log_call\n";
 	}
 	
