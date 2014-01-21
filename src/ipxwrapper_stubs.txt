@@ -33,3 +33,5 @@ r_connect:4
 r_send:4
 r_getpeername:4
 inet_ntoa:4
+__WSAFDIsSet:4
+r_WSAAsyncSelect:4

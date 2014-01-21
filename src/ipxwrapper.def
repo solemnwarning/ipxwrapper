@@ -20,3 +20,4 @@ EXPORTS
 	getpeername
 	listen
 	accept
+	WSAAsyncSelect

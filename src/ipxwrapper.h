@@ -47,6 +47,7 @@
 #define IPX_IS_SPX	(int)(1<<10)
 #define IPX_IS_SPXII	(int)(1<<11)
 #define IPX_LISTENING	(int)(1<<12)
+#define IPX_CONNECT_OK	(int)(1<<13)
 
 typedef struct ipx_socket ipx_socket;
 typedef struct ipx_packet ipx_packet;
@@ -152,5 +153,6 @@ int PASCAL r_send(SOCKET fd, const char *buf, int len, int flags);
 int PASCAL r_getpeername(SOCKET fd, struct sockaddr *addr, int *addrlen);
 int PASCAL r_listen(SOCKET s, int backlog);
 SOCKET PASCAL r_accept(SOCKET s, struct sockaddr *addr, int *addrlen);
+int PASCAL r_WSAAsyncSelect(SOCKET s, HWND hWnd, unsigned int wMsg, long lEvent);
 
 #endif /* !IPXWRAPPER_H */

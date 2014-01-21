@@ -29,7 +29,7 @@ getprotobynumber
 getservbyname
 getservbyport
 gethostname
-WSAAsyncSelect
+WSAAsyncSelect:0
 WSAAsyncGetHostByAddr
 WSAAsyncGetHostByName
 WSAAsyncGetProtoByNumber

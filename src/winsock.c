@@ -1724,11 +1724,56 @@ static int _connect_spx(ipx_socket *sock, struct sockaddr_ipx *ipxaddr)
 	
 	if(r_connect(sock->fd, (struct sockaddr*)(&in_addr), sizeof(in_addr)) == -1)
 	{
+		if(WSAGetLastError() == WSAEWOULDBLOCK)
+		{
+			/* The socket is in non-blocking mode, so we wait for
+			 * the asynchronous connect call to complete.
+			 * 
+			 * Keeping it synchronous until it is proven this breaks
+			 * something for simplicity.
+			*/
+			
+			fd_set w_fdset;
+			FD_ZERO(&w_fdset);
+			FD_SET(sock->fd, &w_fdset);
+			
+			fd_set e_fdset;
+			FD_ZERO(&e_fdset);
+			FD_SET(sock->fd, &e_fdset);
+			
+			if(select(1, NULL, &w_fdset, &e_fdset, NULL) == 1 && FD_ISSET(sock->fd, &w_fdset))
+			{
+				goto CONNECTED;
+			}
+			
+			int errnum, len = sizeof(int);
+			getsockopt(sock->fd, SOL_SOCKET, SO_ERROR, (char*)(&errnum), &len);
+			
+			log_printf(LOG_DEBUG, "Connection failed: %s", w32_error(errnum));
+			
+			unlock_sockets();
+			
+			WSASetLastError(WSAEWOULDBLOCK);
+			return -1;
+		}
+		
 		unlock_sockets();
 		return -1;
 	}
 	
+	CONNECTED:
+	
 	log_printf(LOG_DEBUG, "Connection succeeded");
+	
+	/* Set the IPX_CONNECT_OK bit which indicates the next WSAAsyncSelect
+	 * call with FD_CONNECT set should send a message indicating the
+	 * connection succeeded and then clear this bit.
+	 * 
+	 * This is a hack to make asynchronous connect calls vaguely work as
+	 * they should.
+	*/
+	
+	sock->flags |= IPX_CONNECT_OK;
 	
 	/* The TCP connection is up!
 	 * 
@@ -2144,4 +2189,27 @@ SOCKET PASCAL accept(SOCKET s, struct sockaddr *addr, int *addrlen)
 	else{
 		return r_accept(s, addr, addrlen);
 	}
+}
+
+int PASCAL WSAAsyncSelect(SOCKET s, HWND hWnd, unsigned int wMsg, long lEvent)
+{
+	if(lEvent & FD_CONNECT)
+	{
+		ipx_socket *sock = get_socket(s);
+		
+		if(sock)
+		{
+			if(sock->flags & IPX_CONNECT_OK)
+			{
+				log_printf(LOG_DEBUG, "Posting message %u for FD_CONNECT on socket %d", wMsg, sock->fd);
+				
+				PostMessage(hWnd, wMsg, sock->fd, MAKEWORD(FD_CONNECT, 0));
+				sock->flags &= ~IPX_CONNECT_OK;
+			}
+			
+			unlock_sockets();
+		}
+	}
+	
+	return r_WSAAsyncSelect(s, hWnd, wMsg, lEvent);
 }
