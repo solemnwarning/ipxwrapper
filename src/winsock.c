@@ -401,7 +401,7 @@ int WSAAPI closesocket(SOCKET sockfd)
 		return -1;
 	}
 	
-	log_printf(LOG_INFO, "IPX socket closed (fd = %d)", sockfd);
+	log_printf(LOG_INFO, "Socket %d (%s) closed", sockfd, (sock->flags & IPX_IS_SPX ? "SPX" : "IPX"));
 	
 	if(sock->flags & IPX_BOUND)
 	{
@@ -1009,32 +1009,34 @@ int WSAAPI getsockopt(SOCKET fd, int level, int optname, char FAR *optval, int F
 
 int WSAAPI setsockopt(SOCKET fd, int level, int optname, const char FAR *optval, int optlen)
 {
+	{
+		char opt_s[24] = "";
+		
+		for(int i = 0; i < optlen && i < 8 && optval; i++)
+		{
+			if(i)
+			{
+				strcat(opt_s, " ");
+			}
+			
+			sprintf(opt_s + i * 3, "%02X", (unsigned int)(unsigned char)optval[i]);
+		}
+		
+		if(optval)
+		{
+			log_printf(LOG_CALL, "setsockopt(%d, %d, %d, {%s}, %d)", fd, level, optname, opt_s, optlen);
+		}
+		else{
+			log_printf(LOG_CALL, "setsockopt(%d, %d, %d, NULL, %d)", fd, level, optname, optlen);
+		}
+	}
+	
 	int *intval = (int*)(optval);
 	
 	ipx_socket *sock = get_socket(fd);
 	
 	if(sock)
 	{
-		if(min_log_level <= LOG_DEBUG)
-		{
-			char opt_s[24] = "";
-			
-			int i;
-			for(i = 0; i < optlen && i < 8 && optval; i++) {
-				if(i) {
-					strcat(opt_s, " ");
-				}
-				
-				sprintf(opt_s + i * 3, "%02X", (unsigned int)(unsigned char)optval[i]);
-			}
-			
-			if(optval) {
-				log_printf(LOG_DEBUG, "setsockopt(%d, %d, %d, {%s}, %d)", fd, level, optname, opt_s, optlen);
-			}else{
-				log_printf(LOG_DEBUG, "setsockopt(%d, %d, %d, NULL, %d)", fd, level, optname, optlen);
-			}
-		}
-		
 		if(level == NSPROTO_IPX)
 		{
 			if(optname == IPX_PTYPE)
@@ -1095,7 +1097,10 @@ int WSAAPI setsockopt(SOCKET fd, int level, int optname, const char FAR *optval,
 		unlock_sockets();
 	}
 	
-	return r_setsockopt(fd, level, optname, optval, optlen);
+	int r = r_setsockopt(fd, level, optname, optval, optlen);
+	log_printf(LOG_CALL, "r_setsockopt = %d, WSAGetLastError = %d", r, (int)(WSAGetLastError()));
+	
+	return r;
 }
 
 /* Send an IPX packet to the specified address.
