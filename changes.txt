@@ -9,6 +9,8 @@ Version XXX:
 	Bugfix: Fixed segfault in recvfrom when called with NULL addrlen.
 	
 	Update: Log entry and target DLL of stub calls.
+	
+	Feature: Added workarounds for Jane's Combat Simulations: WWWII Fighters.
 
 Version 0.4.1:
 	Feature: Added workaround for point-to-point links.

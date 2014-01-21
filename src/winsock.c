@@ -1092,6 +1092,33 @@ int WSAAPI setsockopt(SOCKET fd, int level, int optname, const char FAR *optval,
 			{
 				SET_FLAG(IPX_REUSE);
 			}
+			else if(optname == SO_LINGER && !(sock->flags & IPX_IS_SPX))
+			{
+				/* Setting SO_LINGER only has an effect on
+				 * stream sockets and fails on datagrams, but
+				 * Jane's Combat Simulations: WWWII Fighters
+				 * depends on the call succeeding.
+				*/
+				
+				log_printf(LOG_DEBUG, "Ignoring SO_LINGER on IPX socket %d", sock->fd);
+				unlock_sockets();
+				
+				return 0;
+			}
+			else if(optname == 16399)
+			{
+				/* As far as I can tell, this socket option
+				 * isn't defined anywhere and no tested version
+				 * of Windows accepts it on an IPX socket, but
+				 * Jane's Combat Simulations: WWWII Fighters
+				 * uses it and won't work if the call fails.
+				*/
+				
+				log_printf(LOG_DEBUG, "Ignoring unknown SOL_SOCKET option 16399 on socket %d", sock->fd);
+				unlock_sockets();
+				
+				return 0;
+			}
 		}
 		
 		unlock_sockets();
