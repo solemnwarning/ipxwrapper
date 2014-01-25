@@ -10,6 +10,8 @@ Version XXX:
 	
 	Update: Log entry and target DLL of stub calls.
 	
+	Feature: Implemented support for SPX stream sockets over TCP.
+	
 	Feature: Added workarounds for Jane's Combat Simulations: WWWII Fighters.
 
 Version 0.4.1:
