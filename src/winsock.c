@@ -1635,13 +1635,11 @@ static int _connect_spx(ipx_socket *sock, struct sockaddr_ipx *ipxaddr)
 		 * 
 		 * BUG: Batch may time out or wait (effectively) forever if the
 		 * batch is sent just before the system tick count rolls over.
-		 * 
-		 * TODO: Use GetTickCount64() if available.
 		*/
 		
-		DWORD wait_until = GetTickCount() + (IPX_CONNECT_TIMEOUT / IPX_CONNECT_TRIES) * 1000;
+		uint64_t wait_until = get_ticks() + (IPX_CONNECT_TIMEOUT / IPX_CONNECT_TRIES) * 1000;
 		
-		for(DWORD now; (now = GetTickCount()) < wait_until;)
+		for(uint64_t now; (now = get_ticks()) < wait_until;)
 		{
 			/* Release the socket table in case the remote address
 			 * in question is in the same process and we block the

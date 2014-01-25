@@ -1,5 +1,5 @@
 /* ipxwrapper - Library functions
- * Copyright (C) 2008-2013 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2008-2014 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -47,6 +47,9 @@ ipx_socket *sockets = NULL;
 main_config_t main_config;
 
 static CRITICAL_SECTION sockets_cs;
+
+typedef ULONGLONG WINAPI (*GetTickCount64_t)(void);
+static HMODULE kernel32 = NULL;
 
 static void init_cs(CRITICAL_SECTION *cs)
 {
@@ -121,6 +124,12 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res)
 		unload_dlls();
 		
 		log_close();
+		
+		if(kernel32)
+		{
+			FreeLibrary(kernel32);
+			kernel32 = NULL;
+		}
 	}
 	
 	return TRUE;
@@ -156,4 +165,22 @@ void lock_sockets(void)
 void unlock_sockets(void)
 {
 	LeaveCriticalSection(&sockets_cs);
+}
+
+uint64_t get_ticks(void)
+{
+	static GetTickCount64_t GetTickCount64 = NULL;
+	
+	if(!kernel32 && (kernel32 = LoadLibrary("kernel32.dll")))
+	{
+		GetTickCount64 = (GetTickCount64_t)(GetProcAddress(kernel32, "GetTickCount64"));
+	}
+	
+	if(GetTickCount64)
+	{
+		return GetTickCount64();
+	}
+	else{
+		return GetTickCount();
+	}
 }
