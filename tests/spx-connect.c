@@ -101,12 +101,6 @@ int main()
 		int sock = socket(AF_IPX, SOCK_STREAM, NSPROTO_SPX);
 		assert(sock != -1);
 		
-		struct sockaddr_ipx my_addr = iface1_addr;
-		my_addr.sa_socket = htons(84);
-		
-		assert(bind(sock, (struct sockaddr*)(&my_addr), sizeof(my_addr)) == 0);
-		EXPECT_LOCAL_ADDR(sock, my_addr);
-		
 		MUST_CONNECT_TO(sock, ls1_addr);
 		
 		/* Work around race condition; connect returns before listening
@@ -143,6 +137,27 @@ int main()
 		Sleep(100);
 		
 		closesocket(EXPECT_ACCEPT_FROM(lsock1, my_addr));
+		
+		closesocket(sock);
+	}
+	
+	/* Try to connect to the other socket. */
+	
+	{
+		EXPECT_NO_ACCEPT(lsock2);
+		
+		int sock = socket(AF_IPX, SOCK_STREAM, NSPROTO_SPX);
+		assert(sock != -1);
+		
+		MUST_CONNECT_TO(sock, ls2_addr);
+		
+		/* Work around race condition; connect returns before listening
+		 * socket has necessarily been notified.
+		*/
+		
+		Sleep(100);
+		
+		closesocket(EXPECT_ACCEPT(lsock2));
 		
 		closesocket(sock);
 	}
