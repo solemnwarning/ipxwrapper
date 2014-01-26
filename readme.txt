@@ -2,14 +2,14 @@
 
 -- LICENSE --
 
-Copyright (C) 2008-2013 Daniel Collins <solemnwarning@solemnwarning.net>
+Copyright (C) 2008-2014 Daniel Collins <solemnwarning@solemnwarning.net>
 Read license.txt for licensing terms.
 
 -- INTRODUCTION --
 
-IPXWrapper is a wrapper library which transparently tunnels IPX packets over IP
-using UDP. To use it, simply copy the four included DLL files to the directory
-containing your legacy program.
+IPXWrapper is a wrapper library which transparently tunnels IPX/SPX over IP. To
+use it, simply copy the four included DLL files to the directory containing the
+program that needs it.
 
 If you are running Windows Vista or later and the game uses DirectPlay you may
 also need to import directplay-win32.reg or directplay-win64.reg as appropriate.
