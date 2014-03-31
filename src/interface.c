@@ -19,6 +19,7 @@
 #include <iphlpapi.h>
 #include <utlist.h>
 #include <time.h>
+#include <pcap.h>
 
 #include "interface.h"
 #include "common.h"
@@ -26,10 +27,15 @@
 
 #define INTERFACE_CACHE_TTL 5
 
+BOOL ipx_use_pcap;
+
 static CRITICAL_SECTION interface_cache_cs;
 
 static ipx_interface_t *interface_cache = NULL;
 static time_t interface_cache_ctime = 0;
+
+/* Missing in MinGW... */
+char *_strdup(const char *strSource);
 
 /* Fetch a list of network interfaces available on the system.
  *
@@ -71,6 +77,26 @@ IP_ADAPTER_INFO *load_sys_interfaces(void)
 	{
 		free(ifroot);
 		return NULL;
+	}
+	
+	for(ifptr = ifroot; ifptr; ifptr = ifptr->Next)
+	{
+		/* Workaround for buggy versions of Hamachi that don't initialise
+		 * the interface hardware address correctly.
+		*/
+		
+		unsigned char hamachi_bug[] = {0x7A, 0x79, 0x00, 0x00, 0x00, 0x00};
+		
+		if(ifptr->AddressLength == 6 && memcmp(ifptr->Address, hamachi_bug, 6) == 0)
+		{
+			uint32_t ipaddr = inet_addr(ifptr->IpAddressList.IpAddress.String);
+			
+			if(ipaddr)
+			{
+				log_printf(LOG_WARNING, "Invalid Hamachi interface detected, correcting node number");
+				memcpy(ifptr->Address + 2, &ipaddr, sizeof(ipaddr));
+			}
+		}
 	}
 	
 	return ifroot;
@@ -256,20 +282,6 @@ ipx_interface_t *load_ipx_interfaces(void)
 			free_ipx_interface_list(&nics);
 			return NULL;
 		}
-		
-		/* Workaround for buggy versions of Hamachi that don't initialise
-		 * the interface hardware address correctly.
-		*/
-		
-		unsigned char hamachi_bug[] = {0x7A, 0x79, 0x00, 0x00, 0x00, 0x00};
-		
-		if(iface->ipx_node == addr48_in(hamachi_bug) && iface->ipaddr)
-		{
-			log_printf(LOG_WARNING, "Invalid Hamachi interface detected, correcting node number");
-			
-			addr32_out(hamachi_bug + 2, iface->ipaddr->ipaddr);
-			iface->ipx_node = addr48_in(hamachi_bug);
-		}
 	}
 	
 	free(ifroot);
@@ -371,6 +383,69 @@ void free_ipx_interface_list(ipx_interface_t **list)
 	}
 }
 
+static void _init_pcap_interfaces(void)
+{
+	ipx_pcap_interface_t *pcap_interfaces = ipx_get_pcap_interfaces();
+	
+	log_printf(LOG_INFO, "Listing WinPcap interfaces:");
+	log_printf(LOG_INFO, "--");
+	
+	for(ipx_pcap_interface_t *i = pcap_interfaces; i; i = i->next)
+	{
+		char hwaddr[ADDR48_STRING_SIZE];
+		addr48_string(hwaddr, i->mac_addr);
+		
+		log_printf(LOG_INFO, "Name:        %s", i->name);
+		log_printf(LOG_INFO, "Description: %s", i->desc);
+		log_printf(LOG_INFO, "MAC Address: %s", hwaddr);
+		log_printf(LOG_INFO, "--");
+	}
+	
+	addr48_t primary = get_primary_iface();
+	
+	for(ipx_pcap_interface_t *i = pcap_interfaces; i; i = i->next)
+	{
+		iface_config_t config = get_iface_config(i->mac_addr);
+		
+		if(!config.enabled)
+		{
+			/* Interface has been disabled, don't add it */
+			continue;
+		}
+		
+		char errbuf[PCAP_ERRBUF_SIZE];
+		pcap_t *pcap = pcap_open(i->name, 1500 /* TODO */, PCAP_OPENFLAG_MAX_RESPONSIVENESS, 0, NULL, errbuf);
+		if(!pcap)
+		{
+			log_printf(LOG_ERROR, "Could not open WinPcap interface '%s': %s", i->name, errbuf);
+			log_printf(LOG_WARNING, "This interface will not be available for IPX use");
+			
+			continue;
+		}
+		
+		ipx_interface_t *iface = _new_iface(config.netnum, i->mac_addr);
+		if(!iface)
+		{
+			pcap_close(pcap);
+			continue;
+		}
+		
+		iface->mac_addr = i->mac_addr;
+		iface->pcap     = pcap;
+		
+		if(i->mac_addr == primary)
+		{
+			/* Primary interface, insert at the start of the list */
+			DL_PREPEND(interface_cache, iface);
+		}
+		else{
+			DL_APPEND(interface_cache, iface);
+		}
+	}
+	
+	ipx_free_pcap_interfaces(&pcap_interfaces);
+}
+
 /* Initialise the IPX interface cache. */
 void ipx_interfaces_init(void)
 {
@@ -387,49 +462,55 @@ void ipx_interfaces_init(void)
 	
 	log_printf(LOG_INFO, "--");
 	
-	/* IP interfaces... */
-	
-	IP_ADAPTER_INFO *ip_ifaces = load_sys_interfaces(), *ip;
-	
-	log_printf(LOG_INFO, "Listing IP interfaces:");
-	log_printf(LOG_INFO, "--");
-	
-	if(!ip_ifaces)
+	if(ipx_use_pcap)
 	{
-		log_printf(LOG_INFO, "No IP interfaces detected!");
-		log_printf(LOG_INFO, "--");
+		_init_pcap_interfaces();
 	}
-	
-	for(ip = ip_ifaces; ip; ip = ip->Next)
-	{
-		log_printf(LOG_INFO, "AdapterName:   %s", ip->AdapterName);
-		log_printf(LOG_INFO, "Description:   %s", ip->Description);
-		log_printf(LOG_INFO, "AddressLength: %u", (unsigned int)(ip->AddressLength));
+	else{
+		/* IP interfaces... */
 		
-		if(ip->AddressLength == 6)
+		IP_ADAPTER_INFO *ip_ifaces = load_sys_interfaces(), *ip;
+		
+		log_printf(LOG_INFO, "Listing IP interfaces:");
+		log_printf(LOG_INFO, "--");
+		
+		if(!ip_ifaces)
 		{
-			char hwaddr[ADDR48_STRING_SIZE];
-			addr48_string(hwaddr, addr48_in(ip->Address));
+			log_printf(LOG_INFO, "No IP interfaces detected!");
+			log_printf(LOG_INFO, "--");
+		}
+		
+		for(ip = ip_ifaces; ip; ip = ip->Next)
+		{
+			log_printf(LOG_INFO, "AdapterName:   %s", ip->AdapterName);
+			log_printf(LOG_INFO, "Description:   %s", ip->Description);
+			log_printf(LOG_INFO, "AddressLength: %u", (unsigned int)(ip->AddressLength));
 			
-			log_printf(LOG_INFO, "Address:       %s", hwaddr);
+			if(ip->AddressLength == 6)
+			{
+				char hwaddr[ADDR48_STRING_SIZE];
+				addr48_string(hwaddr, addr48_in(ip->Address));
+				
+				log_printf(LOG_INFO, "Address:       %s", hwaddr);
+			}
+			
+			log_printf(LOG_INFO, "Index:         %u", (unsigned int)(ip->Index));
+			log_printf(LOG_INFO, "Type:          %u", (unsigned int)(ip->Type));
+			log_printf(LOG_INFO, "DhcpEnabled:   %u", (unsigned int)(ip->DhcpEnabled));
+			
+			IP_ADDR_STRING *addr = &(ip->IpAddressList);
+			
+			for(; addr; addr = addr->Next)
+			{
+				log_printf(LOG_INFO, "IpAddress:     %s", addr->IpAddress.String);
+				log_printf(LOG_INFO, "IpMask:        %s", addr->IpMask.String);
+			}
+			
+			log_printf(LOG_INFO, "--");
 		}
 		
-		log_printf(LOG_INFO, "Index:         %u", (unsigned int)(ip->Index));
-		log_printf(LOG_INFO, "Type:          %u", (unsigned int)(ip->Type));
-		log_printf(LOG_INFO, "DhcpEnabled:   %u", (unsigned int)(ip->DhcpEnabled));
-		
-		IP_ADDR_STRING *addr = &(ip->IpAddressList);
-		
-		for(; addr; addr = addr->Next)
-		{
-			log_printf(LOG_INFO, "IpAddress:     %s", addr->IpAddress.String);
-			log_printf(LOG_INFO, "IpMask:        %s", addr->IpMask.String);
-		}
-		
-		log_printf(LOG_INFO, "--");
+		free(ip_ifaces);
 	}
-	
-	free(ip_ifaces);
 	
 	/* Virtual IPX interfaces... */
 	
@@ -475,6 +556,14 @@ void ipx_interfaces_cleanup(void)
 {
 	DeleteCriticalSection(&interface_cache_cs);
 	
+	if(ipx_use_pcap)
+	{
+		for(ipx_interface_t *i = interface_cache; i; i = i->next)
+		{
+			pcap_close(i->pcap);
+		}
+	}
+	
 	free_ipx_interface_list(&interface_cache);
 }
 
@@ -483,6 +572,14 @@ void ipx_interfaces_cleanup(void)
 */
 static void renew_interface_cache(void)
 {
+	if(ipx_use_pcap)
+	{
+		/* interface_cache is initialised during init when pcap is in
+		 * use and survives for the lifetime of the program.
+		*/
+		return;
+	}
+	
 	if(time(NULL) - interface_cache_ctime > INTERFACE_CACHE_TTL)
 	{
 		free_ipx_interface_list(&interface_cache);
@@ -608,4 +705,92 @@ int ipx_interface_count(void)
 	LeaveCriticalSection(&interface_cache_cs);
 	
 	return count;
+}
+
+#define PCAP_NAME_PREFIX "rpcap://\\Device\\NPF_"
+
+ipx_pcap_interface_t *ipx_get_pcap_interfaces(void)
+{
+	ipx_pcap_interface_t *ret_interfaces = NULL;
+	
+	IP_ADAPTER_INFO *ip_interfaces = load_sys_interfaces();
+	
+	pcap_if_t *pcap_interfaces;
+	char errbuf[PCAP_ERRBUF_SIZE];
+	if(pcap_findalldevs_ex(PCAP_SRC_IF_STRING, NULL, &pcap_interfaces, errbuf) == -1)
+	{
+		log_printf(LOG_ERROR, "Could not obtain list of WinPcap interfaces: %s", errbuf);
+		
+		free(ip_interfaces);
+		return NULL;
+	}
+	
+	for(pcap_if_t *pcap_if = pcap_interfaces; pcap_if; pcap_if = pcap_if->next)
+	{
+		if(strncmp(pcap_if->name, PCAP_NAME_PREFIX, strlen(PCAP_NAME_PREFIX)) == 0)
+		{
+			char *ifname = pcap_if->name + strlen(PCAP_NAME_PREFIX);
+			
+			IP_ADAPTER_INFO *ip_if = ip_interfaces;
+			while(ip_if && strcmp(ip_if->AdapterName, ifname))
+			{
+				ip_if = ip_if->Next;
+			}
+			
+			if(ip_if && ip_if->AddressLength == 6)
+			{
+				ipx_pcap_interface_t *new_if = malloc(sizeof(ipx_pcap_interface_t));
+				if(!new_if)
+				{
+					log_printf(LOG_ERROR, "Could not allocate memory!");
+					continue;
+				}
+				
+				new_if->name = strdup(pcap_if->name);
+				new_if->desc = strdup(pcap_if->description
+					? pcap_if->description
+					: pcap_if->name);
+				
+				if(!new_if->name || !new_if->desc)
+				{
+					free(new_if->name);
+					free(new_if->desc);
+					free(new_if);
+					
+					log_printf(LOG_ERROR, "Could not allocate memory!");
+					continue;
+				}
+				
+				new_if->mac_addr = addr48_in(ip_if->Address);
+				
+				DL_APPEND(ret_interfaces, new_if);
+			}
+			else{
+				log_printf(LOG_WARNING, "Could not determine MAC address of WinPcap interface '%s'", pcap_if->name);
+				log_printf(LOG_WARNING, "This interface will not be available for IPX use");
+			}
+		}
+		else{
+			log_printf(LOG_WARNING, "WinPcap interface with unexpected name format: '%s'", pcap_if->name);
+			log_printf(LOG_WARNING, "This interface will not be available for IPX use");
+		}
+	}
+	
+	pcap_freealldevs(pcap_interfaces);
+	free(ip_interfaces);
+	
+	return ret_interfaces;
+}
+
+void ipx_free_pcap_interfaces(ipx_pcap_interface_t **interfaces)
+{
+	ipx_pcap_interface_t *p, *p_tmp;
+	DL_FOREACH_SAFE(*interfaces, p, p_tmp)
+	{
+		DL_DELETE(*interfaces, p);
+		
+		free(p->name);
+		free(p->desc);
+		free(p);
+	}
 }

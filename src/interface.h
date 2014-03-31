@@ -21,6 +21,7 @@
 #include <iphlpapi.h>
 #include <stdint.h>
 #include <utlist.h>
+#include <pcap.h>
 
 #include "common.h"
 
@@ -49,9 +50,26 @@ struct ipx_interface {
 	
 	ipx_interface_ip_t *ipaddr;
 	
+	addr48_t mac_addr;
+	pcap_t *pcap;
+	
 	ipx_interface_t *prev;
 	ipx_interface_t *next;
 };
+
+typedef struct ipx_pcap_interface ipx_pcap_interface_t;
+
+struct ipx_pcap_interface {
+	char *name;
+	char *desc;
+	
+	addr48_t mac_addr;
+	
+	ipx_pcap_interface_t *prev;
+	ipx_pcap_interface_t *next;
+};
+
+extern BOOL ipx_use_pcap;
 
 IP_ADAPTER_INFO *load_sys_interfaces(void);
 ipx_interface_t *load_ipx_interfaces(void);
@@ -70,6 +88,9 @@ ipx_interface_t *ipx_interface_by_addr(addr32_t net, addr48_t node);
 ipx_interface_t *ipx_interface_by_subnet(uint32_t ipaddr);
 ipx_interface_t *ipx_interface_by_index(int index);
 int ipx_interface_count(void);
+
+ipx_pcap_interface_t *ipx_get_pcap_interfaces(void);
+void ipx_free_pcap_interfaces(ipx_pcap_interface_t **interfaces);
 
 #ifdef __cplusplus
 }

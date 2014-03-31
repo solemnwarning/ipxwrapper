@@ -22,8 +22,8 @@ endif
 
 INCLUDE := -I./include/
 
-CFLAGS   := -std=c99 -Wall -D_WIN32_WINNT=0x0500 $(DBG_OPT) $(INCLUDE)
-CXXFLAGS := -Wall $(DBG_OPT) $(INCLUDE)
+CFLAGS   := -std=c99 -Wall -D_WIN32_WINNT=0x0500 -DHAVE_REMOTE $(DBG_OPT) $(INCLUDE)
+CXXFLAGS := -Wall -DHAVE_REMOTE $(DBG_OPT) $(INCLUDE)
 
 # Used by mkdeps.pl
 #

@@ -89,6 +89,7 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res)
 			add_self_to_firewall();
 		}
 		
+		ipx_use_pcap = FALSE;
 		addr_cache_init();
 		
 		ipx_interfaces_init();
