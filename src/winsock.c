@@ -1159,6 +1159,182 @@ static int send_packet(const ipx_packet *packet, int len, struct sockaddr *addr,
 	return (r_sendto(private_socket, (char*)packet, len, 0, addr, addrlen) == len);
 }
 
+static DWORD ipx_send_packet(
+	uint8_t type,
+	addr32_t src_net,
+	addr48_t src_node,
+	uint16_t src_socket,
+	addr32_t dest_net,
+	addr48_t dest_node,
+	uint16_t dest_socket,
+	const void *data,
+	size_t data_size)
+{
+	{
+		IPX_STRING_ADDR(src_addr, src_net, src_node, src_socket);
+		IPX_STRING_ADDR(dest_addr, dest_net, dest_node, dest_socket);
+		
+		log_printf(LOG_DEBUG, "Sending %u byte payload from %s to %s",
+			(unsigned int)(data_size), src_addr, dest_addr);
+	}
+	
+	if(ipx_use_pcap)
+	{
+		ipx_interface_t *iface = ipx_interface_by_addr(src_net, src_node);
+		if(iface)
+		{
+			size_t packet_size = sizeof(real_ipx_packet_t) + data_size;
+			size_t frame_size  = sizeof(ethernet_frame_t)  + data_size;
+			ethernet_frame_t *frame = malloc(frame_size);
+			if(!frame)
+			{
+				return ERROR_OUTOFMEMORY;
+			}
+			
+			log_printf(LOG_DEBUG, "...packet size = %d, frame size = %d",
+				(unsigned int)(packet_size), (unsigned int)(frame_size));
+			
+			addr48_out(frame->dest_mac, dest_node);
+			addr48_out(frame->src_mac, iface->mac_addr);
+			
+			frame->ethertype = htons(0x8137);
+			
+			frame->packet.checksum = 0xFFFF;
+			frame->packet.length   = htons(packet_size);
+			frame->packet.hops     = 0;
+			frame->packet.type     = type;
+			
+			addr32_out(frame->packet.dest_net, dest_net);
+			addr48_out(frame->packet.dest_node, dest_node);
+			frame->packet.dest_socket = dest_socket;
+			
+			addr32_out(frame->packet.src_net, src_net);
+			addr48_out(frame->packet.src_node, src_node);
+			frame->packet.src_socket = src_socket;
+			
+			memcpy(frame->packet.data, data, data_size);
+			
+			if(pcap_sendpacket(iface->pcap, (void*)(frame), frame_size) == 0)
+			{
+				free(frame);
+				return ERROR_SUCCESS;
+			}
+			else{
+				log_printf(LOG_ERROR, "Could not transmit Ethernet frame");
+				
+				free(frame);
+				return WSAENETDOWN;
+			}
+		}
+		else{
+			/* It's a bug if we actually hit this. */
+			return WSAENETDOWN;
+		}
+	}
+	else{
+		int packet_size = sizeof(ipx_packet) - 1 + data_size;
+		
+		ipx_packet *packet = malloc(packet_size);
+		if(!packet)
+		{
+			return ERROR_OUTOFMEMORY;
+		}
+		
+		packet->ptype = type;
+		
+		addr32_out(packet->src_net, src_net);
+		addr48_out(packet->src_node, src_node);
+		packet->src_socket = src_socket;
+		
+		addr32_out(packet->dest_net, dest_net);
+		addr48_out(packet->dest_node, dest_node);
+		packet->dest_socket = dest_socket;
+		
+		packet->size = htons(data_size);
+		memcpy(packet->data, data, data_size);
+		
+		/* Search the address cache for an IP address */
+		
+		SOCKADDR_STORAGE send_addr;
+		size_t addrlen;
+		
+		DWORD send_error = ERROR_SUCCESS;
+		BOOL send_ok     = FALSE;
+		
+		if(addr_cache_get(&send_addr, &addrlen, dest_net, dest_node, dest_socket))
+		{
+			/* IP address is cached. We can send directly to the
+			 * host.
+			*/
+			
+			if(send_packet(
+				packet,
+				packet_size,
+				(struct sockaddr*)(&send_addr),
+				addrlen))
+			{
+				send_ok = TRUE;
+			}
+			else{
+				send_error = WSAGetLastError();
+			}
+		}
+		else{
+			/* No cached address. Send using broadcast. */
+			
+			ipx_interface_t *iface = ipx_interface_by_addr(src_net, src_node);
+			
+			if(iface && iface->ipaddr)
+			{
+				/* Iterate over all the IPs associated
+				 * with this interface and return
+				 * success if the packet makes it out
+				 * through any of them.
+				*/
+				
+				ipx_interface_ip_t* ip;
+				
+				DL_FOREACH(iface->ipaddr, ip)
+				{
+					struct sockaddr_in bcast;
+					
+					bcast.sin_family      = AF_INET;
+					bcast.sin_port        = htons(main_config.udp_port);
+					bcast.sin_addr.s_addr = ip->bcast;
+					
+					if(send_packet(
+						packet,
+						packet_size,
+						(struct sockaddr*)(&bcast),
+						sizeof(bcast)))
+					{
+						send_ok = TRUE;
+					}
+					else{
+						send_error = WSAGetLastError();
+					}
+				}
+			}
+			else{
+				/* No IP addresses; can't transmit */
+				
+				free_ipx_interface(iface);
+				free(packet);
+				
+				return WSAENETUNREACH;
+			}
+			
+			free_ipx_interface(iface);
+		}
+		
+		free(packet);
+		
+		return send_ok
+			? ERROR_SUCCESS
+			: send_error;
+	}
+}
+
 int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct sockaddr *addr, int addrlen)
 {
 	struct sockaddr_ipx_ext *ipxaddr = (struct sockaddr_ipx_ext*)addr;
@@ -1230,114 +1406,44 @@ int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct s
 			return -1;
 		}
 		
-		int psize = sizeof(ipx_packet)+len-1;
-		
-		ipx_packet *packet = malloc(psize);
-		if(!packet)
-		{
-			WSASetLastError(ERROR_OUTOFMEMORY);
-			
-			unlock_sockets();
-			return -1;
-		}
-		
-		packet->ptype = sock->s_ptype;
+		uint8_t type = sock->s_ptype;
 		
 		if(sock->flags & IPX_EXT_ADDR)
 		{
 			if(addrlen >= 15)
 			{
-				packet->ptype = ipxaddr->sa_ptype;
+				type = ipxaddr->sa_ptype;
 			}
 			else{
 				log_printf(LOG_DEBUG, "IPX_EXTENDED_ADDRESS enabled, sendto called with addrlen %d", addrlen);
 			}
 		}
 		
-		memcpy(packet->dest_net, ipxaddr->sa_netnum, 4);
-		memcpy(packet->dest_node, ipxaddr->sa_nodenum, 6);
-		packet->dest_socket = ipxaddr->sa_socket;
+		addr32_t src_net    = addr32_in(sock->addr.sa_netnum);
+		addr48_t src_node   = addr48_in(sock->addr.sa_nodenum);
+		uint16_t src_socket = sock->addr.sa_socket;
 		
-		unsigned char z6[] = {0,0,0,0,0,0};
+		addr32_t dest_net    = addr32_in(ipxaddr->sa_netnum);
+		addr48_t dest_node   = addr48_in(ipxaddr->sa_nodenum);
+		uint16_t dest_socket = ipxaddr->sa_socket;
 		
-		if(memcmp(packet->dest_net, z6, 4) == 0)
+		if(dest_net == addr32_in((unsigned char[]){0x00,0x00,0x00,0x00}))
 		{
-			memcpy(packet->dest_net, sock->addr.sa_netnum, 4);
+			dest_net = src_net;
 		}
 		
-		memcpy(packet->src_net, sock->addr.sa_netnum, 4);
-		memcpy(packet->src_node, sock->addr.sa_nodenum, 6);
-		packet->src_socket = sock->addr.sa_socket;
-		
-		packet->size = htons(len);
-		memcpy(packet->data, buf, len);
-		
-		/* Search the address cache for a real address */
-		
-		SOCKADDR_STORAGE send_addr;
-		size_t addrlen;
-		
-		int success = 0;
-		
-		if(addr_cache_get(&send_addr, &addrlen, addr32_in(packet->dest_net), addr48_in(packet->dest_node), packet->dest_socket))
-		{
-			/* Address is cached. We can send to the real host. */
-			
-			success = send_packet(
-				packet,
-				psize,
-				(struct sockaddr*)(&send_addr),
-				addrlen
-			);
-		}
-		else{
-			/* No cached address. Send using broadcast. */
-			
-			ipx_interface_t *iface = ipx_interface_by_addr(
-				addr32_in(packet->src_net),
-				addr48_in(packet->src_node)
-			);
-			
-			if(iface && iface->ipaddr)
-			{
-				/* Iterate over all the IPs associated
-				 * with this interface and return
-				 * success if the packet makes it out
-				 * through any of them.
-				*/
-				
-				ipx_interface_ip_t* ip;
-				
-				DL_FOREACH(iface->ipaddr, ip)
-				{
-					struct sockaddr_in bcast;
-					
-					bcast.sin_family      = AF_INET;
-					bcast.sin_port        = htons(main_config.udp_port);
-					bcast.sin_addr.s_addr = ip->bcast;
-					
-					success |= send_packet(
-						packet,
-						psize,
-						(struct sockaddr*)(&bcast),
-						sizeof(bcast)
-					);
-				}
-			}
-			else{
-				/* No IP addresses. */
-				
-				WSASetLastError(WSAENETDOWN);
-				success = 0;
-			}
-			
-			free_ipx_interface(iface);
-		}
-		
-		free(packet);
+		DWORD error = ipx_send_packet(type, src_net, src_node, src_socket, dest_net, dest_node, dest_socket, buf, len);
 		
 		unlock_sockets();
-		return (success ? len : -1);
+		
+		if(error == ERROR_SUCCESS)
+		{
+			return len;
+		}
+		else{
+			WSASetLastError(error);
+			return -1;
+		}
 	}
 	else{
 		return r_sendto(fd, buf, len, flags, addr, addrlen);

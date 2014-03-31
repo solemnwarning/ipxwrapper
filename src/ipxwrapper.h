@@ -88,6 +88,37 @@ struct ipx_packet {
 	char data[1];
 } __attribute__((__packed__));
 
+typedef struct real_ipx_packet real_ipx_packet_t;
+
+struct real_ipx_packet {
+	uint16_t checksum;
+	uint16_t length;
+	uint8_t  hops;
+	uint8_t  type;
+	
+	unsigned char dest_net[4];
+	unsigned char dest_node[6];
+	uint16_t dest_socket;
+	
+	unsigned char src_net[4];
+	unsigned char src_node[6];
+	uint16_t src_socket;
+	
+	unsigned char data[0];
+} __attribute__((__packed__));
+
+typedef struct ethernet_frame ethernet_frame_t;
+
+struct ethernet_frame
+{
+	unsigned char dest_mac[6];
+	unsigned char src_mac[6];
+	
+	uint16_t ethertype;
+	
+	real_ipx_packet_t packet;
+} __attribute__((__packed__));
+
 #define IPX_MAGIC_SPXLOOKUP 1
 
 typedef struct spxlookup_req spxlookup_req_t;
