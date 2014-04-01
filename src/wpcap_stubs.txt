@@ -1,0 +1,8 @@
+pcap_open
+pcap_close
+pcap_findalldevs_ex
+pcap_freealldevs
+pcap_getevent
+pcap_dispatch
+pcap_geterr
+pcap_sendpacket

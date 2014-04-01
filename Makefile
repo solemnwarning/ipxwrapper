@@ -36,7 +36,7 @@ VERSION := git
 
 IPXWRAPPER_DEPS := src/ipxwrapper.o src/winsock.o src/ipxwrapper_stubs.o src/log.o src/common.o \
 	src/interface.o src/router.o src/ipxwrapper.def src/addrcache.o src/config.o src/addr.o \
-	src/addrtable.o src/firewall.o
+	src/addrtable.o src/firewall.o src/wpcap_stubs.o
 
 BIN_FILES := $(shell cat manifest.bin.txt)
 SRC_FILES := $(shell cat manifest.src.txt)
@@ -98,8 +98,8 @@ ipxwrapper.dll: $(IPXWRAPPER_DEPS)
 	echo 'const char *version_string = "$(VERSION)", *compile_time = "'`date`'";' | $(CC) -c -x c -o version.o -
 	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -shared -o ipxwrapper.dll $(IPXWRAPPER_DEPS) version.o -liphlpapi -lversion -lole32 -loleaut32
 
-ipxconfig.exe: src/ipxconfig.cpp icons/ipxconfig.o src/addr.o src/interface.o src/common.o src/config.o
-	$(CXX) $(CXXFLAGS) -static-libgcc -static-libstdc++ -D_WIN32_IE=0x0400 -mwindows -o ipxconfig.exe $^ -liphlpapi -lcomctl32 -lws2_32
+ipxconfig.exe: src/ipxconfig.cpp icons/ipxconfig.o src/addr.o src/interface.o src/common.o src/config.o src/wpcap_stubs.o
+	$(CXX) $(CXXFLAGS) -Wl,--enable-stdcall-fixup -static-libgcc -static-libstdc++ -D_WIN32_IE=0x0400 -mwindows -o ipxconfig.exe $^ -liphlpapi -lcomctl32 -lws2_32
 
 dpwsockx.dll: src/directplay.o src/log.o src/dpwsockx_stubs.o src/common.o src/config.o src/addr.o src/dpwsockx.def
 	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -shared -o $@ $^ -lwsock32
@@ -115,6 +115,9 @@ src/mswsock_stubs.s: src/mswsock_stubs.txt
 
 src/dpwsockx_stubs.s: src/dpwsockx_stubs.txt
 	perl mkstubs.pl src/dpwsockx_stubs.txt src/dpwsockx_stubs.s 3
+
+src/wpcap_stubs.s: src/wpcap_stubs.txt
+	perl mkstubs.pl src/wpcap_stubs.txt src/wpcap_stubs.s 5
 
 icons/%.o: icons/%.rc icons/%.ico
 	windres $< -O coff -o $@

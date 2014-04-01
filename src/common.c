@@ -29,10 +29,11 @@ static const char *dll_names[] = {
 	"mswsock.dll",
 	"dpwsockx.dll",
 	"ws2_32.dll",
+	"wpcap.dll",
 	NULL
 };
 
-static HANDLE dll_handles[] = {NULL, NULL, NULL, NULL, NULL};
+static HANDLE dll_handles[] = {NULL, NULL, NULL, NULL, NULL, NULL};
 
 /* Convert a windows error number to an error message */
 const char *w32_error(DWORD errnum) {
@@ -225,8 +226,9 @@ bool reg_set_addr48(HKEY key, const char *name, addr48_t value)
 
 void load_dll(unsigned int dllnum) {
 	char path[512];
+	const char *dll;
 	
-	if(dllnum) {
+	if(dllnum && dllnum != 5) {
 		GetSystemDirectory(path, sizeof(path));
 		
 		if(strlen(path) + strlen(dll_names[dllnum]) + 2 > sizeof(path)) {
@@ -236,9 +238,12 @@ void load_dll(unsigned int dllnum) {
 		
 		strcat(path, "\\");
 		strcat(path, dll_names[dllnum]);
+		
+		dll = path;
 	}
-	
-	const char *dll = dllnum ? path : dll_names[dllnum];
+	else{
+		dll = dll_names[dllnum];
+	}
 	
 	dll_handles[dllnum] = LoadLibrary(dll);
 	if(!dll_handles[dllnum]) {
