@@ -31,6 +31,7 @@ typedef struct main_config {
 	
 	bool w95_bug;
 	bool fw_except;
+	bool use_pcap;
 	
 	enum ipx_log_level log_level;
 } main_config_t;

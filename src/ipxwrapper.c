@@ -82,6 +82,7 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res)
 		
 		main_config = get_main_config();
 		min_log_level = main_config.log_level;
+		ipx_use_pcap  = main_config.use_pcap;
 		
 		if(main_config.fw_except)
 		{
@@ -89,7 +90,6 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res)
 			add_self_to_firewall();
 		}
 		
-		ipx_use_pcap = FALSE;
 		addr_cache_init();
 		
 		ipx_interfaces_init();
