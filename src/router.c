@@ -19,6 +19,8 @@
 #include <winsock2.h>
 #include <uthash.h>
 #include <time.h>
+#include <pcap.h>
+#include <Win32-Extensions.h>
 
 #include "router.h"
 #include "common.h"
@@ -453,19 +455,109 @@ static bool _do_udp_recv(int fd)
 	return true;
 }
 
+static void _handle_pcap_frame(u_char *user, const struct pcap_pkthdr *pkt_header, const u_char *pkt_data)
+{
+	ipx_interface_t *iface = (ipx_interface_t*)(user);
+	
+	if(pkt_header->caplen < sizeof(ethernet_frame_t))
+	{
+		/* Frame isn't big enough to contain a full IPX header. */
+		return;
+	}
+	
+	ethernet_frame_t *frame = (ethernet_frame_t*)(pkt_data);
+	
+	if(ntohs(frame->ethertype) != 0x8137)
+	{
+		/* The ethertype field isn't IPX. */
+		return;
+	}
+	
+	if(frame->packet.checksum != 0xFFFF)
+	{
+		/* The "checksum" field doesn't have the magic IPX value. */
+		return;
+	}
+	
+	if(ntohs(frame->packet.length) > (pkt_header->caplen - (sizeof(*frame) - sizeof(frame->packet))))
+	{
+		/* The "length" field in the IPX header is too big. */
+		return;
+	}
+	
+	{
+		addr48_t dest  = addr48_in(frame->packet.dest_node);
+		addr48_t bcast = addr48_in((unsigned char[]){0xFF,0xFF,0xFF,0xFF,0xFF,0xFF});
+		
+		if(dest != iface->mac_addr && dest != bcast)
+		{
+			/* The destination node number isn't that of the card or
+			 * the broadcast address.
+			*/
+			return;
+		}
+	}
+	
+	_deliver_packet(frame->packet.type,
+		addr32_in(frame->packet.src_net),
+		addr48_in(frame->packet.src_node),
+		frame->packet.src_socket,
+		
+		addr32_in(frame->packet.dest_net),
+		addr48_in(frame->packet.dest_node),
+		frame->packet.dest_socket,
+		
+		frame->packet.data,
+		(ntohs(frame->packet.length) - sizeof(real_ipx_packet_t)));
+}
+
 static DWORD router_main(void *arg)
 {
+	DWORD exit_status = 0;
+	
 	time_t last_at_update = 0;
+	
+	ipx_interface_t *interfaces = NULL;
+	
+	HANDLE *wait_events = &router_event;
+	int n_events = 1;
+	
+	if(ipx_use_pcap)
+	{
+		interfaces = get_ipx_interfaces();
+		ipx_interface_t *i;
+		
+		DL_FOREACH(interfaces, i)
+		{
+			++n_events;
+		}
+		
+		wait_events = malloc(n_events * sizeof(HANDLE));
+		if(!wait_events)
+		{
+			log_printf(LOG_ERROR, "Could not allocate memory!");
+			
+			free_ipx_interface_list(&interfaces);
+			return 1;
+		}
+		
+		n_events = 1;
+		wait_events[0] = router_event;
+		
+		DL_FOREACH(interfaces, i)
+		{
+			wait_events[n_events++] = pcap_getevent(i->pcap);
+		}
+	}
 	
 	while(1)
 	{
-		WaitForSingleObject(router_event, 1000);
-		
+		WaitForMultipleObjects(n_events, wait_events, FALSE, 1000);
 		WSAResetEvent(router_event);
 		
 		if(!router_running)
 		{
-			return 0;
+			break;
 		}
 		
 		if(last_at_update != time(NULL))
@@ -474,11 +566,35 @@ static DWORD router_main(void *arg)
 			last_at_update = time(NULL);
 		}
 		
-		if(!_do_udp_recv(shared_socket) || !_do_udp_recv(private_socket))
+		if(ipx_use_pcap)
 		{
-			return 1;
+			ipx_interface_t *i;
+			DL_FOREACH(interfaces, i)
+			{
+				if(pcap_dispatch(i->pcap, -1, &_handle_pcap_frame, (u_char*)(i)) == -1)
+				{
+					log_printf(LOG_ERROR, "Could not dispatch frames on WinPcap interface: %s", pcap_geterr(i->pcap));
+					log_printf(LOG_WARNING, "No more IPX packets will be received");
+					
+					exit_status = 1;
+					break;
+				}
+			}
+		}
+		else{
+			if(!_do_udp_recv(shared_socket) || !_do_udp_recv(private_socket))
+			{
+				exit_status = 1;
+				break;
+			}
 		}
 	}
 	
-	return 0;
+	if(ipx_use_pcap)
+	{
+		free(wait_events);
+		free_ipx_interface_list(&interfaces);
+	}
+	
+	return exit_status;
 }
