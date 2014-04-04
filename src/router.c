@@ -163,34 +163,129 @@ void router_cleanup(void)
 	router_buf = NULL;
 }
 
-/* Recieve and process a packet from one of the UDP sockets. */
-static bool handle_recv(int fd)
+#define BCAST_NET  addr32_in((unsigned char[]){0xFF,0xFF,0xFF,0xFF})
+#define BCAST_NODE addr48_in((unsigned char[]){0xFF,0xFF,0xFF,0xFF,0xFF,0xFF})
+
+static void _deliver_packet(
+	uint8_t type,
+	addr32_t src_net,
+	addr48_t src_node,
+	uint16_t src_socket,
+	addr32_t dest_net,
+	addr48_t dest_node,
+	uint16_t dest_socket,
+	const void *data,
+	size_t data_size)
 {
-	const unsigned char f6[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-	
-	struct sockaddr_in addr;
-	int addrlen = sizeof(addr);
-	
-	ipx_packet *packet = (ipx_packet*)(router_buf);
-	
-	int len = recvfrom(fd, (char*)packet, MAX_PKT_SIZE, 0, (struct sockaddr*)(&addr), &addrlen);
-	if(len == -1)
 	{
-		if(WSAGetLastError() == WSAEWOULDBLOCK || WSAGetLastError() == WSAECONNRESET)
-		{
-			return true;
-		}
+		IPX_STRING_ADDR(src_addr, src_net, src_node, src_socket);
+		IPX_STRING_ADDR(dest_addr, dest_net, dest_node, dest_socket);
 		
-		return false;
+		log_printf(LOG_DEBUG, "Delivering %u byte payload from %s to %s",
+			(unsigned int)(data_size), src_addr, dest_addr);
 	}
 	
-	packet->size = ntohs(packet->size);
+	lock_sockets();
 	
-	if(len < sizeof(ipx_packet) - 1 || packet->size > MAX_DATA_SIZE || packet->size + sizeof(ipx_packet) - 1 != len)
+	ipx_socket *sock, *tmp;
+	HASH_ITER(hh, sockets, sock, tmp)
 	{
-		/* Packet size incorrect. */
+		if(sock->flags & IPX_IS_SPX)
+		{
+			/* Socket is SPX */
+			continue;
+		}
 		
-		return true;
+		if(!(sock->flags & IPX_BOUND))
+		{
+			/* Socket isn't bound */
+			continue;
+		}
+		
+		if(!(sock->flags & IPX_RECV))
+		{
+			/* Socket is shut down for receive operations. */
+			continue;
+		}
+		
+		if((sock->flags & IPX_FILTER) && sock->f_ptype != type)
+		{
+			/* Socket has packet type filtering enabled and this
+			 * packet is of the wrong type.
+			*/
+			continue;
+		}
+		
+		if((dest_net != addr32_in(sock->addr.sa_netnum) && dest_net != BCAST_NET)
+			|| (dest_node != addr48_in(sock->addr.sa_nodenum) && dest_node != BCAST_NODE)
+			|| dest_socket != sock->addr.sa_socket)
+		{
+			/* Packet destination address is neither the local
+			 * address of this socket nor broadcast.
+			*/
+			continue;
+		}
+		
+		if((sock->flags & IPX_CONNECTED)
+			&& (src_net != addr32_in(sock->remote_addr.sa_netnum)
+			|| src_node != addr48_in(sock->remote_addr.sa_nodenum)
+			|| src_socket != sock->remote_addr.sa_socket))
+		{
+			/* Socket is "connected" and the source address isn't
+			 * the remote address of the socket.
+			*/
+			continue;
+		}
+		
+		log_printf(LOG_DEBUG, "...relaying to local port %hu", ntohs(sock->port));
+		
+		size_t packet_size = (sizeof(ipx_packet) + data_size) - 1;
+		
+		ipx_packet *packet = malloc(packet_size);
+		if(!packet)
+		{
+			log_printf(LOG_ERROR, "Cannot allocate memory!");
+			continue;
+		}
+		
+		packet->ptype = type;
+		
+		addr32_out(packet->dest_net, dest_net);
+		addr48_out(packet->dest_node, dest_node);
+		packet->dest_socket = dest_socket;
+		
+		addr32_out(packet->src_net, src_net);
+		addr48_out(packet->src_node, src_node);
+		packet->src_socket = src_socket;
+		
+		packet->size = data_size;
+		memcpy(packet->data, data, data_size);
+		
+		struct sockaddr_in send_addr;
+		
+		send_addr.sin_family      = AF_INET;
+		send_addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+		send_addr.sin_port        = sock->port;
+		
+		if(sendto(private_socket, (void*)(packet), packet_size, 0, (struct sockaddr*)(&send_addr), sizeof(send_addr)) == -1)
+		{
+			log_printf(LOG_ERROR, "Error relaying packet: %s", w32_error(WSAGetLastError()));
+		}
+		
+		free(packet);
+	}
+	
+	unlock_sockets();
+}
+
+static void _handle_udp_recv(ipx_packet *packet, size_t packet_size, struct sockaddr_in src_ip)
+{
+	size_t data_size = ntohs(packet->size);
+	
+	if(packet_size < sizeof(ipx_packet) - 1 || data_size > MAX_DATA_SIZE || data_size + sizeof(ipx_packet) - 1 != packet_size)
+	{
+		/* Packet size field is incorrect. */
+		return;
 	}
 	
 	if(packet->src_socket == 0)
@@ -211,10 +306,10 @@ static bool handle_recv(int fd)
 			 * and port number of a listening SPX socket.
 			*/
 			
-			if(packet->size != sizeof(spxlookup_req_t))
+			if(data_size != sizeof(spxlookup_req_t))
 			{
-				log_printf(LOG_DEBUG, "Recieved IPX_MAGIC_SPXLOOKUP packet with %hu byte payload, dropping", packet->size);
-				return true;
+				log_printf(LOG_DEBUG, "Recieved IPX_MAGIC_SPXLOOKUP packet with %hu byte payload, dropping", data_size);
+				return;
 			}
 			
 			spxlookup_req_t *req = (spxlookup_req_t*)(packet->data);
@@ -248,7 +343,7 @@ static bool handle_recv(int fd)
 					
 					reply.port = s->port;
 					
-					if(sendto(private_socket, (char*)(&reply), sizeof(reply), 0, (struct sockaddr*)(&addr), addrlen) == -1)
+					if(sendto(private_socket, (char*)(&reply), sizeof(reply), 0, (struct sockaddr*)(&src_ip), sizeof(src_ip)) == -1)
 					{
 						log_printf(LOG_ERROR, "Cannot send spxlookup_reply packet: %s", w32_error(WSAGetLastError()));
 					}
@@ -263,7 +358,7 @@ static bool handle_recv(int fd)
 			log_printf(LOG_DEBUG, "Recieved magic packet unknown ptype %u, dropping", (unsigned int)(packet->ptype));
 		}
 		
-		return true;
+		return;
 	}
 	
 	if(min_log_level <= LOG_DEBUG)
@@ -271,118 +366,89 @@ static bool handle_recv(int fd)
 		IPX_STRING_ADDR(src_addr, addr32_in(packet->src_net), addr48_in(packet->src_node), packet->src_socket);
 		IPX_STRING_ADDR(dest_addr, addr32_in(packet->dest_net), addr48_in(packet->dest_node), packet->dest_socket);
 		
-		log_printf(LOG_DEBUG, "Recieved packet from %s (%s) for %s", src_addr, inet_ntoa(addr.sin_addr), dest_addr);
+		log_printf(LOG_DEBUG, "Recieved packet from %s (%s) for %s", src_addr, inet_ntoa(src_ip.sin_addr), dest_addr);
 	}
 	
-	addr_cache_set(
-		(struct sockaddr*)(&addr), sizeof(addr),
-		addr32_in(packet->src_net), addr48_in(packet->src_node), packet->src_socket
-	);
+	/* Check that the source IP of the UDP packet is within the subnet of a
+	 * valid interface. IPX broadcast packets will be accepted on any
+	 * enabled interface, unicast only on the interface with the destination
+	 * address.
+	*/
 	
-	lock_sockets();
+	ipx_interface_t *allow_interfaces;
+	BOOL source_ok = FALSE;
 	
-	ipx_socket *sock, *tmp;
-	
-	HASH_ITER(hh, sockets, sock, tmp)
+	if(addr48_in(packet->dest_node) == BCAST_NODE)
 	{
-		if(
-			/* Socket isn't SPX */
-			
-			!(sock->flags & IPX_IS_SPX)
-			
-			/* Socket is bound and not shutdown for recv. */
-			
-			&& (sock->flags & IPX_BOUND) && (sock->flags & IPX_RECV)
-			
-			/* Packet type filtering is off, or packet type matches
-			 * filter.
-			*/
-			
-			&& (!(sock->flags & IPX_FILTER) || sock->f_ptype == packet->ptype)
-			
-			/* Packet destination address is correct. */
-			
-			&& (memcmp(packet->dest_net, sock->addr.sa_netnum, 4) == 0 || (memcmp(packet->dest_net, f6, 4) == 0 && (sock->flags & IPX_BROADCAST || !main_config.w95_bug) && sock->flags & IPX_RECV_BCAST))
-			&& (memcmp(packet->dest_node, sock->addr.sa_nodenum, 6) == 0 || (memcmp(packet->dest_node, f6, 6) == 0 && (sock->flags & IPX_BROADCAST || !main_config.w95_bug) && sock->flags & IPX_RECV_BCAST))
-			&& packet->dest_socket == sock->addr.sa_socket
-			
-			/* Socket has not been connected, or the IPX source
-			 * address is correct.
-			*/
-			
-			&& (
-				!(sock->flags & IPX_CONNECTED)
-				
-				|| (
-					memcmp(sock->remote_addr.sa_netnum, packet->src_net, 4) == 0
-					&& memcmp(sock->remote_addr.sa_nodenum, packet->src_node, 6) == 0
-					&& sock->remote_addr.sa_socket == packet->src_socket
-				)
-			)
-		) {
-			addr32_t iface_net  = addr32_in(sock->addr.sa_netnum);
-			addr48_t iface_node = addr48_in(sock->addr.sa_nodenum);
-			
-			/* Fetch the interface this socket is bound to. */
-			
-			ipx_interface_t *iface = ipx_interface_by_addr(iface_net, iface_node);
-			
-			if(!iface)
+		allow_interfaces = get_ipx_interfaces();
+	}
+	else{
+		allow_interfaces = ipx_interface_by_addr(
+			addr32_in(packet->dest_net), addr32_in(packet->dest_node));
+	}
+	
+	ipx_interface_t *i;
+	DL_FOREACH(allow_interfaces, i)
+	{
+		ipx_interface_ip_t *ip;
+		DL_FOREACH(i->ipaddr, ip)
+		{
+			if((ip->ipaddr & ip->netmask) == (src_ip.sin_addr.s_addr & ip->netmask))
 			{
-				char net_s[ADDR32_STRING_SIZE], node_s[ADDR48_STRING_SIZE];
-				
-				addr32_string(net_s, iface_net);
-				addr48_string(node_s, iface_node);
-				
-				log_printf(LOG_WARNING, "No iface for %s/%s! Stale bind?", net_s, node_s);
-				
-				continue;
-			}
-			
-			/* Iterate over the subnets and compare to the packet
-			 * source IP address.
-			*/
-			
-			ipx_interface_ip_t *ip;
-			
-			int source_ok = 0;
-			
-			DL_FOREACH(iface->ipaddr, ip)
-			{
-				if((ip->ipaddr & ip->netmask) == (addr.sin_addr.s_addr & ip->netmask))
-				{
-					source_ok = 1;
-					break;
-				}
-			}
-			
-			free_ipx_interface(iface);
-			
-			if(!source_ok)
-			{
-				/* Packet did not originate from an associated
-				 * network.
-				*/
-				
-				continue;
-			}
-			
-			log_printf(LOG_DEBUG, "Relaying packet to local port %hu", ntohs(sock->port));
-			
-			struct sockaddr_in send_addr;
-			
-			send_addr.sin_family      = AF_INET;
-			send_addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-			send_addr.sin_port        = sock->port;
-			
-			if(sendto(private_socket, router_buf, len, 0, (struct sockaddr*)(&send_addr), sizeof(send_addr)) == -1)
-			{
-				log_printf(LOG_ERROR, "Error relaying packet: %s", w32_error(WSAGetLastError()));
+				source_ok = TRUE;
 			}
 		}
 	}
 	
-	unlock_sockets();
+	free_ipx_interface_list(&allow_interfaces);
+	
+	if(!source_ok)
+	{
+		return;
+	}
+	
+	/* Packet appears to have arrived from where we expect. Cache the source
+	 * IP address and destination IPX address so future send operations to
+	 * that IPX address can be unicast.
+	*/
+	
+	addr_cache_set(
+		(struct sockaddr*)(&src_ip), sizeof(src_ip),
+		addr32_in(packet->src_net), addr48_in(packet->src_node), packet->src_socket
+	);
+	
+	_deliver_packet(packet->ptype,
+		addr32_in(packet->src_net),
+		addr48_in(packet->src_node),
+		packet->src_socket,
+		
+		addr32_in(packet->dest_net),
+		addr48_in(packet->dest_node),
+		packet->dest_socket,
+		
+		packet->data,
+		data_size);
+}
+
+static bool _do_udp_recv(int fd)
+{
+	struct sockaddr_in addr;
+	int addrlen = sizeof(addr);
+	
+	ipx_packet *packet = (ipx_packet*)(router_buf);
+	
+	int len = recvfrom(fd, (char*)packet, MAX_PKT_SIZE, 0, (struct sockaddr*)(&addr), &addrlen);
+	if(len == -1)
+	{
+		if(WSAGetLastError() == WSAEWOULDBLOCK || WSAGetLastError() == WSAECONNRESET)
+		{
+			return true;
+		}
+		
+		return false;
+	}
+	
+	_handle_udp_recv(packet, len, addr);
 	
 	return true;
 }
@@ -408,7 +474,7 @@ static DWORD router_main(void *arg)
 			last_at_update = time(NULL);
 		}
 		
-		if(!handle_recv(shared_socket) || !handle_recv(private_socket))
+		if(!_do_udp_recv(shared_socket) || !_do_udp_recv(private_socket))
 		{
 			return 1;
 		}
