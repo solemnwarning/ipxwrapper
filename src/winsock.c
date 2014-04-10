@@ -332,6 +332,14 @@ SOCKET WSAAPI socket(int af, int type, int protocol)
 		}
 		else if(type == SOCK_STREAM)
 		{
+			if(ipx_use_pcap)
+			{
+				log_printf(LOG_WARNING, "Application attempted to create an SPX socket, this isn't supported when using Ethernet encapsulation");
+				
+				WSASetLastError(WSAEPROTONOSUPPORT);
+				return -1;
+			}
+			
 			if(protocol != 0 && protocol != NSPROTO_SPX && protocol != NSPROTO_SPXII)
 			{
 				log_printf(LOG_DEBUG, "Unknown protocol (%d) for AF_INET/SOCK_STREAM", protocol);
