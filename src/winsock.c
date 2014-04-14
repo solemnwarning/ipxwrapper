@@ -72,6 +72,13 @@ static size_t strsize(void *str, bool unicode)
 		: strlen(str) + 1;
 }
 
+static int _max_ipx_payload(void)
+{
+	return ipx_use_pcap
+		? (ETHERNET_MTU - sizeof(real_ipx_packet_t))
+		: MAX_DATA_SIZE;
+}
+
 #define PUSH_NAME(name) \
 { \
 	int i = 0; \
@@ -921,7 +928,7 @@ int WSAAPI getsockopt(SOCKET fd, int level, int optname, char FAR *optval, int F
 			}
 			else if(optname == IPX_MAXSIZE)
 			{
-				RETURN_INT_OPT(MAX_DATA_SIZE);
+				RETURN_INT_OPT(_max_ipx_payload());
 			}
 			else if(optname == IPX_ADDRESS)
 			{
@@ -944,7 +951,7 @@ int WSAAPI getsockopt(SOCKET fd, int level, int optname, char FAR *optval, int F
 				
 				ipxdata->wan       = FALSE;
 				ipxdata->status    = FALSE;
-				ipxdata->maxpkt    = MAX_DATA_SIZE;
+				ipxdata->maxpkt    = _max_ipx_payload();
 				ipxdata->linkspeed = 100000; /* 10MBps */
 				
 				free_ipx_interface(nic);
@@ -1406,7 +1413,7 @@ int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct s
 			}
 		}
 		
-		if(len > MAX_DATA_SIZE)
+		if(len > _max_ipx_payload())
 		{
 			WSASetLastError(WSAEMSGSIZE);
 			
