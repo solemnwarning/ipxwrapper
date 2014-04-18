@@ -32,7 +32,6 @@
 static bool router_running   = false;
 static WSAEVENT router_event = WSA_INVALID_EVENT;
 static HANDLE router_thread  = NULL;
-static char *router_buf      = NULL;
 
 /* The shared socket uses the UDP port number specified in the configuration,
  * every IPXWrapper instance will share it and use it to receive broadcast
@@ -97,12 +96,6 @@ static void _init_socket(SOCKET *sock, uint16_t port, BOOL reuseaddr)
 */
 void router_init(void)
 {
-	if(!(router_buf = malloc(MAX_PKT_SIZE)))
-	{
-		log_printf(LOG_ERROR, "Out of memory! Cannot allocate router buffer");
-		abort();
-	}
-	
 	/* Event object used for notification of new packets and exit signal. */
 	
 	if((router_event = WSACreateEvent()) == WSA_INVALID_EVENT)
@@ -160,9 +153,6 @@ void router_cleanup(void)
 		WSACloseEvent(router_event);
 		router_event = WSA_INVALID_EVENT;
 	}
-	
-	free(router_buf);
-	router_buf = NULL;
 }
 
 #define BCAST_NET  addr32_in((unsigned char[]){0xFF,0xFF,0xFF,0xFF})
@@ -437,9 +427,8 @@ static bool _do_udp_recv(int fd)
 	struct sockaddr_in addr;
 	int addrlen = sizeof(addr);
 	
-	ipx_packet *packet = (ipx_packet*)(router_buf);
-	
-	int len = recvfrom(fd, (char*)packet, MAX_PKT_SIZE, 0, (struct sockaddr*)(&addr), &addrlen);
+	char buf[MAX_PKT_SIZE];
+	int len = recvfrom(fd, buf, sizeof(buf), 0, (struct sockaddr*)(&addr), &addrlen);
 	if(len == -1)
 	{
 		if(WSAGetLastError() == WSAEWOULDBLOCK || WSAGetLastError() == WSAECONNRESET)
@@ -450,7 +439,7 @@ static bool _do_udp_recv(int fd)
 		return false;
 	}
 	
-	_handle_udp_recv(packet, len, addr);
+	_handle_udp_recv((ipx_packet*)(buf), len, addr);
 	
 	return true;
 }
