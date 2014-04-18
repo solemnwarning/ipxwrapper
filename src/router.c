@@ -40,6 +40,10 @@ static HANDLE router_thread  = NULL;
  * The private socket uses a randomly allocated UDP port number and is used to
  * send packets and receive unicast, it is unique to a single IPXWrapper
  * instance.
+ * 
+ * When running in WinPcap mode, only the private socket will be opened and it
+ * will be bound to loopback rather than INADDR_ANY since it is only used for
+ * forwarding IPX packets on to local sockets.
 */
 
 SOCKET shared_socket  = -1;
@@ -104,8 +108,29 @@ void router_init(void)
 		abort();
 	}
 	
-	_init_socket(&shared_socket, main_config.udp_port, TRUE);
-	_init_socket(&private_socket, 0, FALSE);
+	if(ipx_use_pcap)
+	{
+		if((private_socket = socket(AF_INET, SOCK_DGRAM, 0)) == -1)
+		{
+			log_printf(LOG_ERROR, "Error creating retransmit socket: %s", w32_error(WSAGetLastError()));
+			abort();
+		}
+		
+		struct sockaddr_in addr;
+		addr.sin_family      = AF_INET;
+		addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+		addr.sin_port        = htons(0);
+		
+		if(bind(private_socket, (struct sockaddr*)(&addr), sizeof(addr)) == -1)
+		{
+			log_printf(LOG_ERROR, "Error binding retransmit socket: %s", w32_error(WSAGetLastError()));
+			abort();
+		}
+	}
+	else{
+		_init_socket(&shared_socket, main_config.udp_port, TRUE);
+		_init_socket(&private_socket, 0, FALSE);
+	}
 	
 	router_running = true;
 	
