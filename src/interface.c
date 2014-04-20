@@ -304,7 +304,7 @@ ipx_interface_t *copy_ipx_interface(const ipx_interface_t *src)
 	*dest = *src;
 	
 	dest->ipaddr = NULL;
-	dest->prev   = NULL;
+	dest->prev   = dest;
 	dest->next   = NULL;
 	
 	ipx_interface_ip_t *ip;

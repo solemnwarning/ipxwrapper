@@ -401,7 +401,7 @@ static void _handle_udp_recv(ipx_packet *packet, size_t packet_size, struct sock
 	}
 	else{
 		allow_interfaces = ipx_interface_by_addr(
-			addr32_in(packet->dest_net), addr32_in(packet->dest_node));
+			addr32_in(packet->dest_net), addr48_in(packet->dest_node));
 	}
 	
 	ipx_interface_t *i;
@@ -421,6 +421,7 @@ static void _handle_udp_recv(ipx_packet *packet, size_t packet_size, struct sock
 	
 	if(!source_ok)
 	{
+		log_printf(LOG_DEBUG, "Packet did not come from an expected subnet, dropping");
 		return;
 	}
 	
