@@ -243,6 +243,26 @@ static void _deliver_packet(
 			continue;
 		}
 		
+		if((dest_net == BCAST_NET || dest_node == BCAST_NODE)
+			&& !(sock->flags & IPX_RECV_BCAST))
+		{
+			/* Packet destination address includes a broadcast part
+			 * and this socket has explicitly disabled reception of
+			 * broadcasts.
+			*/
+			continue;
+		}
+		
+		if((dest_net == BCAST_NET || dest_node == BCAST_NODE)
+			&& (main_config.w95_bug && !(sock->flags & IPX_BROADCAST)))
+		{
+			/* Packet destination address includes a broadcast part,
+			 * socket has not enabled the SO_BROADCAST option and
+			 * the Windows 95 SO_BROADCAST bug is being emulated.
+			*/
+			continue;
+		}
+		
 		if((sock->flags & IPX_CONNECTED)
 			&& (src_net != addr32_in(sock->remote_addr.sa_netnum)
 			|| src_node != addr48_in(sock->remote_addr.sa_nodenum)
