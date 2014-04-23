@@ -1,4 +1,4 @@
-/* IPXWrapper - Address manipulation unit tests
+/* IPXWrapper test suite
  * Copyright (C) 2014 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -18,9 +18,8 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "addr.h"
-
-static int failed = 0;
+#include "tests/tap/basic.h"
+#include "src/addr.h"
 
 static char *dump32(const void *p)
 {
@@ -38,91 +37,52 @@ static char *dump32(const void *p)
 static void test_a32_bin(const unsigned char *bin_in, const char *expect_text)
 {
 	{
-		printf("addr32_in(%s) => addr32_out()... ", dump32(bin_in));
-		
 		unsigned char got_bin[4];
 		addr32_out(got_bin, addr32_in(bin_in));
 		
-		if(memcmp(got_bin, bin_in, 4) == 0)
+		if(!ok((memcmp(got_bin, bin_in, 4) == 0),
+			"addr32_in(%s) => addr32_out()...", dump32(bin_in)))
 		{
-			printf("OK\n");
-		}
-		else{
-			printf("FAILED\n");
-			++failed;
-			
-			printf("Got:      %s\n", dump32(got_bin));
-			printf("Expected: %s\n", dump32(bin_in));
+			diag("Got:      %s", dump32(got_bin));
+			diag("Expected: %s", dump32(bin_in));
 		}
 	}
 	
 	{
-		printf("addr32_in(%s) => addr32_string()... ", dump32(bin_in));
-		
 		char got_text[256];
 		memset(got_text, '\0', 256);
 		
 		addr32_string(got_text, addr32_in(bin_in));
 		
-		if(strcmp(got_text, expect_text) == 0)
+		if(!ok((strcmp(got_text, expect_text) == 0),
+			"addr32_in(%s) => addr32_string()... ", dump32(bin_in)))
 		{
-			printf("OK\n");
-		}
-		else{
-			printf("FAILED\n");
-			++failed;
-			
-			printf("Got:      %s\n", got_text);
-			printf("Expected: %s\n", expect_text);
+			diag("Got:      %s", got_text);
+			diag("Expected: %s", expect_text);
 		}
 	}
 }
 
 static void test_valid_a32_text(const char *text_in, const unsigned char *expect_bin)
 {
-	printf("addr32_from_string(%s) => addr32_out()... ", text_in);
-	
 	addr32_t a32;
-	if(!addr32_from_string(&a32, text_in))
-	{
-		printf("FAILED\n");
-		++failed;
-		
-		printf("addr32_from_string() returned false\n");
-		
-		return;
-	}
+	int success = addr32_from_string(&a32, text_in);
 	
 	unsigned char got_bin[4];
 	addr32_out(got_bin, a32);
 	
-	if(memcmp(got_bin, expect_bin, 4))
+	if(!ok((success && memcmp(got_bin, expect_bin, 4) == 0),
+		"addr32_from_string(%s) => addr32_out()... ", text_in))
 	{
-		printf("FAILED\n");
-		++failed;
-		
-		printf("Got:      %s\n", dump32(got_bin));
-		printf("Expected: %s\n", dump32(expect_bin));
-		
-		return;
+		diag("Got:      %s", (success ? dump32(got_bin) : "FAILURE"));
+		diag("Expected: %s", dump32(expect_bin));
 	}
-	
-	printf("OK\n");
 }
 
 static void test_bad_a32_text(const char *text_in)
 {
-	printf("!addr32_from_string(%s)... ", text_in);
-	
 	addr32_t a32;
-	if(addr32_from_string(&a32, text_in))
-	{
-		printf("FAILED\n");
-		++failed;
-	}
-	else{
-		printf("OK\n");
-	}
+	ok(!addr32_from_string(&a32, text_in), "!addr32_from_string(%s)... ", text_in);
 }
 
 static char *dump48(const void *p)
@@ -143,95 +103,58 @@ static char *dump48(const void *p)
 static void test_a48_bin(const unsigned char *bin_in, const char *expect_text)
 {
 	{
-		printf("addr48_in(%s) => addr48_out()... ", dump48(bin_in));
-		
 		unsigned char got_bin[6];
 		addr48_out(got_bin, addr48_in(bin_in));
 		
-		if(memcmp(got_bin, bin_in, 6) == 0)
+		if(!ok((memcmp(got_bin, bin_in, 6) == 0),
+			"addr48_in(%s) => addr48_out()... ", dump48(bin_in)))
 		{
-			printf("OK\n");
-		}
-		else{
-			printf("FAILED\n");
-			++failed;
-			
-			printf("Got:      %s\n", dump48(got_bin));
-			printf("Expected: %s\n", dump48(bin_in));
+			diag("Got:      %s", dump48(got_bin));
+			diag("Expected: %s", dump48(bin_in));
 		}
 	}
 	
 	{
-		printf("addr48_in(%s) => addr48_string()... ", dump48(bin_in));
-		
 		char got_text[256];
 		memset(got_text, '\0', 256);
 		
 		addr48_string(got_text, addr48_in(bin_in));
 		
-		if(strcmp(got_text, expect_text) == 0)
+		if(!ok((strcmp(got_text, expect_text) == 0),
+			"addr48_in(%s) => addr48_string()... ", dump48(bin_in)))
 		{
-			printf("OK\n");
-		}
-		else{
-			printf("FAILED\n");
-			++failed;
-			
-			printf("Got:      %s\n", got_text);
-			printf("Expected: %s\n", expect_text);
+			diag("Got:      %s", got_text);
+			diag("Expected: %s", expect_text);
 		}
 	}
 }
 
 static void test_valid_a48_text(const char *text_in, const unsigned char *expect_bin)
 {
-	printf("addr48_from_string(%s) => addr48_out()... ", text_in);
-	
 	addr48_t a48;
-	if(!addr48_from_string(&a48, text_in))
-	{
-		printf("FAILED\n");
-		++failed;
-		
-		printf("addr48_from_string() returned false\n");
-		
-		return;
-	}
+	int success = addr48_from_string(&a48, text_in);
 	
 	unsigned char got_bin[6];
 	addr48_out(got_bin, a48);
 	
-	if(memcmp(got_bin, expect_bin, 6))
+	if(!ok((success && memcmp(got_bin, expect_bin, 6) == 0),
+		"addr48_from_string(%s) => addr48_out()... ", text_in))
 	{
-		printf("FAILED\n");
-		++failed;
-		
-		printf("Got:      %s\n", dump48(&got_bin));
-		printf("Expected: %s\n", dump48(expect_bin));
-		
-		return;
+		diag("Got:      %s", (success ? dump48(got_bin) : "FAILURE"));
+		diag("Expected: %s", dump48(expect_bin));
 	}
-	
-	printf("OK\n");
 }
 
 static void test_bad_a48_text(const char *text_in)
 {
-	printf("!addr48_from_string(%s)... ", text_in);
-	
 	addr48_t a48;
-	if(addr48_from_string(&a48, text_in))
-	{
-		printf("FAILED\n");
-		++failed;
-	}
-	else{
-		printf("OK\n");
-	}
+	ok(!addr48_from_string(&a48, text_in), "!addr48_from_string(%s)... ", text_in);
 }
 
 int main()
 {
+	plan_lazy();
+	
 	test_a32_bin((unsigned char[]){0x00, 0x00, 0x00, 0x00}, "00:00:00:00");
 	test_a32_bin((unsigned char[]){0x12, 0x34, 0x56, 0x78}, "12:34:56:78");
 	test_a32_bin((unsigned char[]){0xFF, 0xFF, 0xFF, 0xFF}, "FF:FF:FF:FF");
@@ -275,5 +198,5 @@ int main()
 	test_bad_a48_text("000000000000");
 	test_bad_a48_text("00-00-00-00-00-00");
 	
-	return failed;
+	return 0;
 }

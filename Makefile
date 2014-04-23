@@ -51,6 +51,9 @@ IPXWRAPPER_DEPS := src/ipxwrapper.o src/winsock.o src/ipxwrapper_stubs.o src/log
 BIN_FILES := $(shell cat manifest.bin.txt)
 SRC_FILES := $(shell cat manifest.src.txt)
 
+TOOLS := tools/socket.exe tools/list-interfaces.exe tools/bind.exe tools/ipx-send.exe \
+	tools/ipx-recv.exe tools/spx-server.exe tools/spx-client.exe  tools/ipx-isr.exe
+
 # DLLs to copy to the tests directory before running the test suite.
 
 TEST_DLLS := ipxwrapper.dll wsock32.dll mswsock.dll dpwsockx.dll
@@ -60,7 +63,7 @@ all: ipxwrapper.dll wsock32.dll mswsock.dll ipxconfig.exe dpwsockx.dll
 clean:
 	rm -f ipxwrapper.dll wsock32.dll mswsock.dll ipxconfig.exe dpwsockx.dll
 	rm -f src/*.o src/*_stubs.s icons/*.o version.o Makefile.dep
-	rm -f tests/*.exe tests/*.o
+	rm -f $(TOOLS) tests/addr.exe tests/addr.o tests/tap/basic.o
 
 dist: all
 	mkdir ipxwrapper-$(VERSION)
@@ -73,29 +76,20 @@ dist: all
 	zip -r ipxwrapper-$(VERSION)-src.zip ipxwrapper-$(VERSION)-src/
 	rm -r ipxwrapper-$(VERSION)-src/
 
-test: $(TEST_DLLS) tests/addr.exe tests/socket.exe tests/bind.exe tests/ipx-sendrecv.exe tests/spx-connect.exe
-	cp $(TEST_DLLS) tests/
-	
-	./tests/addr.exe
-	
-	./tests/socket.exe
-	cd tests/; prove bind.t
-	
-	./tests/ipx-sendrecv.exe
-	
-	./tests/spx-connect.exe
+tools: $(TOOLS) tests/addr.exe ipxwrapper.dll wsock32.dll
+	cp ipxwrapper.dll wsock32.dll tools/
 
-tests/addr.exe: tests/addr.c src/addr.o
-tests/bind.exe: tests/bind.c
-tests/ipx-sendrecv.exe: tests/ipx-sendrecv.c tests/test.h
-tests/socket.exe: tests/socket.c
-tests/spx-connect.exe: tests/spx-connect.c tests/test.h
+tools/%.exe: tools/%.c tools/tools.h src/addr.o
+	$(CC) $(CFLAGS) -I./src/ -o $@ $< src/addr.o -lwsock32
 
-tests/%.exe:
-	$(CC) $(CFLAGS) -I./src/ -o $@ $^ -lwsock32
+tests/addr.exe: tests/addr.o tests/tap/basic.o src/addr.o
+	$(CC) $(CFLAGS) -I./ -o $@ $^ -lwsock32
+
+tests/%.o: tests/%.c
+	$(CC) $(CFLAGS) -I./ -c -o $@ $<
 
 .SECONDARY:
-.PHONY: all clean dist depend test
+.PHONY: all clean dist depend test tools
 
 depend: Makefile.dep
 
