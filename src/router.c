@@ -182,6 +182,7 @@ void router_cleanup(void)
 
 #define BCAST_NET  addr32_in((unsigned char[]){0xFF,0xFF,0xFF,0xFF})
 #define BCAST_NODE addr48_in((unsigned char[]){0xFF,0xFF,0xFF,0xFF,0xFF,0xFF})
+#define ZERO_NET   addr32_in((unsigned char[]){0x00,0x00,0x00,0x00})
 
 static void _deliver_packet(
 	uint8_t type,
@@ -363,7 +364,8 @@ static void _handle_udp_recv(ipx_packet *packet, size_t packet_size, struct sock
 				if(
 					s->flags & IPX_IS_SPX
 					&& s->flags & IPX_LISTENING
-					&& memcmp(req->net, s->addr.sa_netnum, 4) == 0
+					&& (memcmp(req->net, s->addr.sa_netnum, 4) == 0
+						|| addr32_in(req->net) == ZERO_NET)
 					&& memcmp(req->node, s->addr.sa_nodenum, 6) == 0
 					&& req->socket == s->addr.sa_socket)
 				{
