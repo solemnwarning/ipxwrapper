@@ -27,7 +27,6 @@
 #include "interface.h"
 #include "router.h"
 #include "addrcache.h"
-#include "addrtable.h"
 
 #define XP_CONNECTIONLESS      0x00000001
 #define XP_GUARANTEED_DELIVERY 0x00000002
@@ -420,7 +419,7 @@ int WSAAPI closesocket(SOCKET sockfd)
 	
 	if(sock->flags & IPX_BOUND)
 	{
-		addr_table_remove(sock);
+		CloseHandle(sock->sock_mut);
 	}
 	
 	HASH_DEL(sockets, sock);
@@ -431,7 +430,59 @@ int WSAAPI closesocket(SOCKET sockfd)
 	return 0;
 }
 
-static bool _complete_bind_address(struct sockaddr_ipx *addr)
+static HANDLE _open_socket_mutex(uint16_t socket, bool exclusive)
+{
+	char mutex_name[256];
+	snprintf(mutex_name, sizeof(mutex_name), "ipxwrapper_socket_%hu", socket);
+	
+	HANDLE mutex = CreateMutex(NULL, FALSE, mutex_name);
+	if(!mutex)
+	{
+		log_printf(LOG_ERROR, "Error when creating mutex %s: %s",
+			mutex_name, w32_error(GetLastError()));
+	}
+	
+	if(GetLastError() == ERROR_ALREADY_EXISTS && exclusive)
+	{
+		CloseHandle(mutex);
+		return NULL;
+	}
+	
+	return mutex;
+}
+
+bool _complete_bind(ipx_socket *sock)
+{
+	if(ntohs(sock->addr.sa_socket) == 0)
+	{
+		uint16_t socknum = 1024;
+		
+		do {
+			HANDLE mutex = _open_socket_mutex(socknum, true);
+			if(mutex)
+			{
+				sock->addr.sa_socket = htons(socknum);
+				sock->sock_mut       = mutex;
+				sock->flags         |= IPX_BOUND;
+				
+				return true;
+			}
+		} while(socknum++ != 65535);
+	}
+	else{
+		if((sock->sock_mut = _open_socket_mutex(
+			ntohs(sock->addr.sa_socket), !(sock->flags & IPX_REUSE))))
+		{
+			sock->flags |= IPX_BOUND;
+			
+			return true;
+		}
+	}
+	
+	return false;
+}
+
+static bool _resolve_bind_address(ipx_socket *sock, const struct sockaddr_ipx *addr)
 {
 	/* Network number 00:00:00:00 is specified as the "current" network, this code
 	 * treats it as a wildcard when used for the network OR node numbers.
@@ -466,28 +517,14 @@ static bool _complete_bind_address(struct sockaddr_ipx *addr)
 		log_printf(LOG_ERROR, "bind failed: no such address");
 		
 		free_ipx_interface_list(&ifaces);
-		
-		WSASetLastError(WSAEADDRNOTAVAIL);
 		return false;
 	}
 	
-	addr32_out(addr->sa_netnum, iface->ipx_net);
-	addr48_out(addr->sa_nodenum, iface->ipx_node);
+	addr32_out(sock->addr.sa_netnum,  iface->ipx_net);
+	addr48_out(sock->addr.sa_nodenum, iface->ipx_node);
+	sock->addr.sa_socket = addr->sa_socket;
 	
 	free_ipx_interface_list(&ifaces);
-	
-	/* Socket zero signifies automatic allocation. */
-	
-	if(addr->sa_socket == 0 && (addr->sa_socket = addr_table_auto_socket()) == 0)
-	{
-		/* Hmmm. We appear to have ran out of sockets?! */
-		
-		log_printf(LOG_ERROR, "bind failed: out of sockets?!");
-		
-		WSASetLastError(WSAEADDRNOTAVAIL);
-		return false;
-	}
-	
 	return true;
 }
 
@@ -523,37 +560,29 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen)
 			return -1;
 		}
 		
-		addr_table_lock();
-		
 		/* Resolve any wildcards in the requested address. */
 		
-		if(!_complete_bind_address(&ipxaddr))
+		if(!_resolve_bind_address(sock, &ipxaddr))
 		{
-			addr_table_unlock();
 			unlock_sockets();
 			
+			WSASetLastError(WSAEADDRNOTAVAIL);
 			return -1;
 		}
-		
-		IPX_STRING_ADDR(got_addr_s, addr32_in(ipxaddr.sa_netnum), addr48_in(ipxaddr.sa_nodenum), ipxaddr.sa_socket);
-		
-		log_printf(LOG_INFO, "bind address: %s", got_addr_s);
 		
 		/* Check that the address is free. */
 		
-		if(!(sock->flags & IPX_REUSE) && !addr_table_check(&ipxaddr))
+		if(!_complete_bind(sock))
 		{
-			/* Address has already been bound. */
-			
-			log_printf(LOG_ERROR, "bind failed: address already in use");
-			
-			WSASetLastError(WSAEADDRINUSE);
-			
-			addr_table_unlock();
 			unlock_sockets();
 			
+			WSASetLastError(WSAEADDRINUSE);
 			return -1;
 		}
+		
+		IPX_STRING_ADDR(got_addr_s, addr32_in(sock->addr.sa_netnum), addr48_in(sock->addr.sa_nodenum), sock->addr.sa_socket);
+		
+		log_printf(LOG_INFO, "bind address: %s", got_addr_s);
 		
 		/* Bind the underlying socket. */
 		
@@ -567,7 +596,9 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen)
 		{
 			log_printf(LOG_ERROR, "Binding local socket failed: %s", w32_error(WSAGetLastError()));
 			
-			addr_table_unlock();
+			CloseHandle(sock->sock_mut);
+			sock->flags &= ~IPX_BOUND;
+			
 			unlock_sockets();
 			
 			return -1;
@@ -590,26 +621,17 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen)
 			log_printf(LOG_ERROR, "Cannot get local port of socket: %s", w32_error(WSAGetLastError()));
 			log_printf(LOG_WARNING, "Socket %d is NOW INCONSISTENT!", fd);
 			
-			addr_table_unlock();
+			CloseHandle(sock->sock_mut);
+			sock->flags &= ~IPX_BOUND;
+			
 			unlock_sockets();
 			
 			return -1;
 		}
 		
 		sock->port = bind_addr.sin_port;
-		
 		log_printf(LOG_DEBUG, "Bound to local port %hu", ntohs(sock->port));
 		
-		/* Mark the IPX socket as bound and insert it into the address
-		 * table.
-		*/
-		
-		memcpy(&(sock->addr), &ipxaddr, sizeof(ipxaddr));
-		sock->flags |= IPX_BOUND;
-		
-		addr_table_add(sock);
-		
-		addr_table_unlock();
 		unlock_sockets();
 		
 		return 0;
@@ -1959,25 +1981,15 @@ static int _connect_spx(ipx_socket *sock, struct sockaddr_ipx *ipxaddr)
 		
 		/* The sa_netnum and sa_nodenum fields are filled out above. */
 		
-		addr_table_lock();
-		
-		if((sock->addr.sa_socket = addr_table_auto_socket()) != 0)
+		if(!_complete_bind(sock))
 		{
-			sock->flags |= IPX_BOUND;
-			
-			addr_table_add(sock);
-		}
-		else{
 			log_printf(LOG_ERROR, "Cannot allocate socket number for SPX socket");
 			log_printf(LOG_WARNING, "Socket %d is NOW INCONSISTENT!", sock->fd);
 			
-			addr_table_unlock();
 			unlock_sockets();
 			
 			return -1;
 		}
-		
-		addr_table_unlock();
 		
 		{
 			IPX_STRING_ADDR(
@@ -2311,6 +2323,25 @@ SOCKET PASCAL accept(SOCKET s, struct sockaddr *addr, int *addrlen)
 			
 			nsock->addr = sock->addr;
 			
+			/* Duplicate the mutex handle held by the listening
+			 * socket used to detect address collisions. There is no
+			 * way to recover from an error here.
+			*/
+			
+			if(!(DuplicateHandle(GetCurrentProcess(), sock->sock_mut,
+				GetCurrentProcess(), &(nsock->sock_mut),
+				0, FALSE, DUPLICATE_SAME_ACCESS)))
+			{
+				log_printf(LOG_ERROR, "Could not duplicate socket mutex: %s", w32_error(GetLastError()));
+				
+				closesocket(nsock->fd);
+				free(nsock);
+				unlock_sockets();
+				
+				WSASetLastError(WSAENETDOWN);
+				return -1;
+			}
+			
 			/* Copy remote address from the spxinit packet. */
 			
 			nsock->remote_addr.sa_family = AF_IPX;
@@ -2319,7 +2350,6 @@ SOCKET PASCAL accept(SOCKET s, struct sockaddr *addr, int *addrlen)
 			nsock->remote_addr.sa_socket = spxinit.socket;
 			
 			HASH_ADD_INT(sockets, fd, nsock);
-			addr_table_add(nsock);
 			
 			if(addr)
 			{

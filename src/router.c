@@ -27,7 +27,6 @@
 #include "ipxwrapper.h"
 #include "interface.h"
 #include "addrcache.h"
-#include "addrtable.h"
 
 static bool router_running   = false;
 static WSAEVENT router_event = WSA_INVALID_EVENT;
@@ -552,8 +551,6 @@ static DWORD router_main(void *arg)
 {
 	DWORD exit_status = 0;
 	
-	time_t last_at_update = 0;
-	
 	ipx_interface_t *interfaces = NULL;
 	
 	HANDLE *wait_events = &router_event;
@@ -595,12 +592,6 @@ static DWORD router_main(void *arg)
 		if(!router_running)
 		{
 			break;
-		}
-		
-		if(last_at_update != time(NULL))
-		{
-			addr_table_update();
-			last_at_update = time(NULL);
 		}
 		
 		if(ipx_use_pcap)
