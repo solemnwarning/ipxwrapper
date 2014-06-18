@@ -31,6 +31,7 @@
 struct host_table_key {
 	addr32_t netnum;
 	addr48_t nodenum;
+	uint16_t socket;
 };
 
 struct host_table {
@@ -64,13 +65,14 @@ static void host_table_unlock(void)
 /* Search the host table for a node with the given net/node pair.
  * Returns NULL on failure.
 */
-static host_table_t *host_table_find(addr32_t net, addr48_t node)
+static host_table_t *host_table_find(addr32_t net, addr48_t node, uint16_t sock)
 {
 	host_table_key_t key;
 	memset(&key, 0, sizeof(key));
 	
 	key.netnum  = net;
 	key.nodenum = node;
+	key.socket  = sock;
 
 	host_table_t *host;
 	
@@ -123,7 +125,7 @@ int addr_cache_get(SOCKADDR_STORAGE *addr, size_t *addrlen, addr32_t net, addr48
 {
 	host_table_lock();
 	
-	host_table_t *host = host_table_find(net, node);
+	host_table_t *host = host_table_find(net, node, sock);
 	
 	if(host && time(NULL) < host->time + ADDR_CACHE_TTL)
 	{
@@ -151,7 +153,7 @@ void addr_cache_set(const struct sockaddr *addr, size_t addrlen, addr32_t net, a
 {
 	host_table_lock();
 	
-	host_table_t *host = host_table_find(net, node);
+	host_table_t *host = host_table_find(net, node, sock);
 	
 	if(!host)
 	{
@@ -171,6 +173,7 @@ void addr_cache_set(const struct sockaddr *addr, size_t addrlen, addr32_t net, a
 		
 		host->key.netnum  = net;
 		host->key.nodenum = node;
+		host->key.socket  = sock;
 		
 		HASH_ADD(hh, host_table, key, sizeof(host->key), host);
 	}
