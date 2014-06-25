@@ -15,6 +15,8 @@
  * Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
+#define WINSOCK_API_LINKAGE
+
 #include <windows.h>
 #include <iphlpapi.h>
 #include <utlist.h>
@@ -33,9 +35,6 @@ static CRITICAL_SECTION interface_cache_cs;
 
 static ipx_interface_t *interface_cache = NULL;
 static time_t interface_cache_ctime = 0;
-
-/* Missing in MinGW... */
-char *_strdup(const char *strSource);
 
 /* Fetch a list of network interfaces available on the system.
  *

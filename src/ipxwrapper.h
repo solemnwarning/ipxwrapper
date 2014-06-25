@@ -17,8 +17,9 @@
 
 #ifndef IPXWRAPPER_H
 #define IPXWRAPPER_H
-#include <windows.h>
+
 #include <winsock2.h>
+#include <windows.h>
 #include <iphlpapi.h>
 #include <wsipx.h>
 #include <stdint.h>

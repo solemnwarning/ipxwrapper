@@ -16,10 +16,11 @@
 */
 
 #define INITGUID
+#define WINSOCK_API_LINKAGE
 
+#include <winsock2.h>
 #include <windows.h>
 #include <dplaysp.h>
-#include <winsock2.h>
 #include <wsipx.h>
 
 #include "ipxwrapper.h"

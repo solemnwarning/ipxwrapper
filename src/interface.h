@@ -32,7 +32,10 @@ extern "C" {
 /* TODO: Dynamic MTU, per interface. */
 #define ETHERNET_MTU 1500
 
-#define WILDCARD_IFACE_HWADDR addr48_in((unsigned char[]){0x00,0x00,0x00,0x00,0x00,0x00})
+#define WILDCARD_IFACE_HWADDR ({ \
+	const unsigned char x[] = {0x00,0x00,0x00,0x00,0x00,0x00}; \
+	addr48_in(x); \
+})
 
 typedef struct ipx_interface_ip ipx_interface_ip_t;
 

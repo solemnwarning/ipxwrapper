@@ -15,8 +15,10 @@
  * Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
-#include <windows.h>
+#define WINSOCK_API_LINKAGE
+
 #include <winsock2.h>
+#include <windows.h>
 #include <wsipx.h>
 #include <nspapi.h>
 #include <iphlpapi.h>
@@ -31,8 +33,6 @@
 #include "interface.h"
 #include "router.h"
 #include "addrcache.h"
-
-int _putenv(const char *envstring);
 
 extern const char *version_string;
 extern const char *compile_time;

@@ -14,6 +14,16 @@
 # this program; if not, write to the Free Software Foundation, Inc., 51
 # Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
+ifdef HOST
+CC  := $(HOST)-gcc
+CXX := $(HOST)-g++
+endif
+
+WINDRES ?= $(shell \
+	(which "$(HOST)-windres" > /dev/null 2>&1 && echo "$(HOST)-windres") \
+	|| echo "windres" \
+)
+
 ifdef DEBUG
 DBG_OPT := -g
 else
@@ -49,7 +59,7 @@ all: ipxwrapper.dll wsock32.dll mswsock.dll ipxconfig.exe dpwsockx.dll
 
 clean:
 	rm -f ipxwrapper.dll wsock32.dll mswsock.dll ipxconfig.exe dpwsockx.dll
-	rm -f src/*.o src/*_stubs.s version.o Makefile.dep
+	rm -f src/*.o src/*_stubs.s icons/*.o version.o Makefile.dep
 	rm -f tests/*.exe tests/*.o
 
 dist: all
@@ -99,7 +109,7 @@ ipxwrapper.dll: $(IPXWRAPPER_DEPS)
 	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -shared -o ipxwrapper.dll $(IPXWRAPPER_DEPS) version.o -liphlpapi -lversion -lole32 -loleaut32
 
 ipxconfig.exe: src/ipxconfig.cpp icons/ipxconfig.o src/addr.o src/interface.o src/common.o src/config.o src/wpcap_stubs.o
-	$(CXX) $(CXXFLAGS) -Wl,--enable-stdcall-fixup -static-libgcc -static-libstdc++ -D_WIN32_IE=0x0400 -mwindows -o ipxconfig.exe $^ -liphlpapi -lcomctl32 -lws2_32
+	$(CXX) $(CXXFLAGS) -Wl,--enable-stdcall-fixup -static-libgcc -static-libstdc++ -D_WIN32_IE=0x0500 -mwindows -o ipxconfig.exe $^ -liphlpapi -lcomctl32 -lws2_32
 
 dpwsockx.dll: src/directplay.o src/log.o src/dpwsockx_stubs.o src/common.o src/config.o src/addr.o src/dpwsockx.def
 	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -shared -o $@ $^ -lwsock32
@@ -120,7 +130,7 @@ src/wpcap_stubs.s: src/wpcap_stubs.txt
 	perl mkstubs.pl src/wpcap_stubs.txt src/wpcap_stubs.s 5
 
 icons/%.o: icons/%.rc icons/%.ico
-	windres $< -O coff -o $@
+	$(WINDRES) $< -O coff -o $@
 
 %.dll: src/stubdll.o src/%_stubs.o src/log.o src/common.o src/config.o src/addr.o src/%.def
 	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -shared -o $@ $^

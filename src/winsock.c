@@ -15,8 +15,10 @@
  * Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
-#include <windows.h>
+#define WINSOCK_API_LINKAGE
+
 #include <winsock2.h>
+#include <windows.h>
 #include <wsipx.h>
 #include <mswsock.h>
 #include <nspapi.h>
@@ -27,32 +29,6 @@
 #include "interface.h"
 #include "router.h"
 #include "addrcache.h"
-
-#define XP_CONNECTIONLESS      0x00000001
-#define XP_GUARANTEED_DELIVERY 0x00000002
-#define XP_GUARANTEED_ORDER    0x00000004
-#define XP_MESSAGE_ORIENTED    0x00000008
-#define XP_PSEUDO_STREAM       0x00000010
-#define XP_GRACEFUL_CLOSE      0x00000020
-#define XP_EXPEDITED_DATA      0x00000040
-#define XP_CONNECT_DATA        0x00000080
-#define XP_DISCONNECT_DATA     0x00000100
-#define XP_SUPPORTS_BROADCAST  0x00000200
-#define XP_SUPPORTS_MULTICAST  0x00000400
-#define XP_BANDWITH_ALLOCATION 0x00000800
-#define XP_FRAGMENTATION       0x00001000
-#define XP_ENCRYPTS            0x00002000
-
-typedef struct _PROTOCOL_INFO {
-	DWORD dwServiceFlags ;
-	INT iAddressFamily ;
-	INT iMaxSockAddr ;
-	INT iMinSockAddr ;
-	INT iSocketType ;
-	INT iProtocol ;
-	DWORD dwMessageSize ;
-	void *lpProtocol ;
-} PROTOCOL_INFO;
 
 struct sockaddr_ipx_ext {
 	short sa_family;

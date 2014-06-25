@@ -219,9 +219,6 @@ typedef struct NetFwMgr NetFwMgr;
 extern "C"{
 #endif 
 
-void * __RPC_USER MIDL_user_allocate(size_t);
-void __RPC_USER MIDL_user_free( void * ); 
-
 #ifndef __INetFwRemoteAdminSettings_INTERFACE_DEFINED__
 #define __INetFwRemoteAdminSettings_INTERFACE_DEFINED__
 

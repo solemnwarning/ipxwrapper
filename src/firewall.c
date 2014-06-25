@@ -18,12 +18,17 @@
 #define COBJMACROS
 #define CINTERFACE
 
+#include <winsock2.h>
 #include <windows.h>
 #include <objbase.h>
-#include <netfw.h>
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunknown-pragmas"
+#include <netfw.h>
+#pragma GCC diagnostic pop
 
 #include "ipxwrapper.h"
 

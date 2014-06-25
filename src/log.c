@@ -15,6 +15,7 @@
  * Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
+#include <winsock2.h>
 #include <windows.h>
 #include <stdlib.h>
 #include <stdio.h>

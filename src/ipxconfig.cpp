@@ -460,7 +460,8 @@ static bool save_config()
 	
 	if(pri_index == 0)
 	{
-		primary_iface = addr48_in((unsigned char[]){0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF});
+		const unsigned char f6[] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
+		primary_iface = addr48_in(f6);
 	}
 	else{
 		/* Iterate over the NIC list to find the selected primary
