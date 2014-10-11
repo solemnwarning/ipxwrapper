@@ -1,29 +1,66 @@
-== IPXWRAPPER README ==
+IPXWrapper README
+=================
 
--- LICENSE --
+Introduction
+------------
+
+IPXWrapper allows using software that needs IPX/SPX support on recent versions
+of Windows which no longer support it.
+
+Quick start
+-----------
+
+Copy the four included DLL files to the directory containing the program that
+needs it and run directplay-win32.reg or directplay-win64.reg, depending whether
+you are running 32-bit or 64-bit Windows.
+
+Choosing network interfaces
+---------------------------
+
+By default, IPXWrapper will operate on all network interfaces in the system,
+which may not work correctly if you share more than one network with any other
+systems running IPXWrapper.
+
+To instead use a single network interface, change the "Primary interface" to
+the interface you want to use. Some software may also require you to select the
+interface in question inside it. Disabling all other interfaces may make this
+easier.
+
+Using the real IPX protocol
+---------------------------
+
+If your software needs to send/receive real IPX frames, for example because it
+talks to an old piece of equipment that only understands IPX, install WinPcap
+and enable the "Send and receive real IPX packets" option.
+
+**NOTE**: SPX connections are not supported when using this option.
+
+Compatibility
+-------------
+
+Software that uses WinSock 1.x and/or DirectPlay (before version 8) is supported.
+
+The following have been reported to work:
+
+ * Atomic Bomberman
+ * Carmageddon
+ * Carmageddon II
+ * Command & Conquer: Red Alert 2
+ * Delta Force 2
+ * Diablo
+ * Heroes of Might and Magic III
+ * Outlive
+ * Rising Lands
+ * Rival Realms
+ * Sid Meier's Alpha Centauri
+ * Street Wars: Constructor Underworld/Mob Rule
+ * Theme Hospital
+ * Warcraft II
+ * War Wind
+ * War Wind II: Human Onslaught
+
+License
+-------
 
 Copyright (C) 2008-2014 Daniel Collins <solemnwarning@solemnwarning.net>
 Read license.txt for licensing terms.
-
--- INTRODUCTION --
-
-IPXWrapper is a wrapper library which transparently tunnels IPX/SPX over IP. To
-use it, simply copy the four included DLL files to the directory containing the
-program that needs it.
-
-If you are running Windows Vista or later and the game uses DirectPlay you may
-also need to import directplay-win32.reg or directplay-win64.reg as appropriate.
-
-The "wildcard" interface is used by default, this will send and receieve packets
-on all available network interfaces and may cause problems if you share more
-than one network with the other computers running IPXWrapper. To use a single
-interface, run the ipxconfig program and select a different primary interface,
-change which interfaces are enabled or pick a different interface in the options
-of your program.
-
-Software using IPXWrapper can't communicate with software that is using the real
-IPX protocol and vice-versa.
-
--- COMPATIBILITY --
-
-Software that uses WinSock 1.x and/or (Pre version 8) DirectPlay is supported.
