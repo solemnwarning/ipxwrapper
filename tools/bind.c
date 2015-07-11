@@ -74,6 +74,8 @@ int main(int argc, const char **argv)
 			int addrlen = sizeof(addr);
 			assert(getsockname(sock, (struct sockaddr*)(&addr), &addrlen) == 0);
 			
+			assert(addr.sa_family == AF_IPX);
+			
 			char bound_addr[IPX_SADDR_SIZE];
 			ipx_to_string(bound_addr,
 				addr32_in(addr.sa_netnum), addr48_in(addr.sa_nodenum), addr.sa_socket);

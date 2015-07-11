@@ -91,6 +91,8 @@ int main(int argc, char **argv)
 		
 		assert(getsockname(sock, (struct sockaddr*)(&bound_addr), &addrlen) == 0);
 		
+		assert(bound_addr.sa_family == AF_IPX);
+		
 		char formatted_addr[IPX_SADDR_SIZE];
 		ipx_to_string(formatted_addr,
 			addr32_in(bound_addr.sa_netnum), addr48_in(bound_addr.sa_nodenum), bound_addr.sa_socket);

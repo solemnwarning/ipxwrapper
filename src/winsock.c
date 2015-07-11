@@ -536,6 +536,8 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen)
 			return -1;
 		}
 		
+		sock->addr.sa_family = AF_IPX;
+		
 		/* Resolve any wildcards in the requested address. */
 		
 		if(!_resolve_bind_address(sock, &ipxaddr))
@@ -1939,6 +1941,8 @@ static int _connect_spx(ipx_socket *sock, struct sockaddr_ipx *ipxaddr)
 	
 	if(!(sock->flags & IPX_BOUND))
 	{
+		sock->addr.sa_family = AF_IPX;
+		
 		struct sockaddr_in local_addr;
 		int addrlen = sizeof(local_addr);
 		
