@@ -178,116 +178,58 @@ static HRESULT WINAPI IPX_EnumSessions(LPDPSP_ENUMSESSIONSDATA data) {
 	return DP_OK;
 }
 
-static BOOL send_get_addr(struct sockaddr_ipx *addr, IDirectPlaySP *sp, DPID player_id) {
-	if(player_id) {
-		struct sockaddr_ipx *addr_p;
-		DWORD size;
-		
-		HRESULT r = IDirectPlaySP_GetSPPlayerData(sp, player_id, (void**)&addr_p, &size, DPGET_LOCAL);
-		if(r != DP_OK) {
-			log_printf(LOG_ERROR, "GetSPPlayerData: %d", (int)r);
-			return FALSE;
-		}
-		
-		if(!addr_p) {
-			goto NO_ADDR;
-		}
-		
-		memcpy(addr, addr_p, sizeof(*addr));
-		return TRUE;
-	}
-	
-	struct sp_data *sp_data = get_sp_data(sp);
-	
-	if(sp_data->ns_addr.sa_family) {
-		memcpy(addr, &(sp_data->ns_addr), sizeof(*addr));
-		
-		release_sp_data(sp_data);
-		return TRUE;
-	}
-	
-	release_sp_data(sp_data);
-	
-	NO_ADDR:
-	
-	log_printf(LOG_WARNING, "No known address for player ID %u, dropping packet", (unsigned int)player_id);
-	return FALSE;
-}
-
 static HRESULT WINAPI IPX_Send(LPDPSP_SENDDATA data) {
 	CALL("SP_Send");
 	
-	struct sockaddr_ipx addr;
+	struct sockaddr_ipx to_addr;
 	
-	if(!send_get_addr(&addr, data->lpISP, data->idPlayerTo)) {
-		return DP_OK;
-	}
-	
-	struct sp_data *sp_data = get_sp_data(data->lpISP);
-	
-	if(sendto(sp_data->sock, data->lpMessage + API_HEADER_SIZE, data->dwMessageSize - API_HEADER_SIZE, 0, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
-		log_printf(LOG_ERROR, "sendto failed: %s", w32_error(WSAGetLastError()));
+	if(data->idPlayerTo)
+	{
+		struct sockaddr_ipx *addr_p;
+		DWORD addr_size;
 		
-		release_sp_data(sp_data);
-		return DPERR_GENERIC;
-	}
-	
-	release_sp_data(sp_data);
-	return DP_OK;
-}
-
-/* This function is completely untested. It ignores the DPSEND_ASYNC flag and
- * part of the interface has been guessed. Attempts at testing have failed as
- * the DirectPlay builds on my test machine (XP _AND_ 7) call SP_Send, even
- * when SP_SendEx is implemented and DPSEND_ASYNC is used.
-*/
-static HRESULT WINAPI IPX_SendEx(LPDPSP_SENDEXDATA data) {
-	CALL("SP_SendEx");
-	
-	if(data->dwPriority || data->dwTimeout) {
-		log_printf(
-			LOG_ERROR,
-			"SendEx called with dwPriority = %u, dwTimeout = %u",
-			(unsigned int)(data->dwPriority),
-			(unsigned int)(data->dwTimeout)
-		);
-		
-		return DPERR_UNSUPPORTED;
-	}
-	
-	/* NOTE: The buffer arrangement is entirely guessed and currently untested.
-	 * TODO: TEST!
-	*/
-	
-	char *buf = malloc(data->dwMessageSize);
-	size_t off = 0, i;
-	
-	for(i = 0; i < data->cBuffers; i++) {
-		if(off + data->lpSendBuffers[i].len > data->dwMessageSize) {
-			log_printf(LOG_ERROR, "dwMessageSize too small, aborting");
-			return DPERR_GENERIC;
+		HRESULT r = IDirectPlaySP_GetSPPlayerData(
+			data->lpISP, data->idPlayerTo, (void**)(&addr_p), &addr_size, DPGET_LOCAL);
+		if(r != DP_OK)
+		{
+			log_printf(LOG_ERROR, "GetSPPlayerData: %x", (unsigned int)(r));
+			return r;
 		}
 		
-		memcpy(buf + off, data->lpSendBuffers[i].pData, data->lpSendBuffers[i].len);
-		off += data->lpSendBuffers[i].len;
+		if(addr_p && addr_size == sizeof(to_addr))
+		{
+			to_addr = *addr_p;
+		}
+		else{
+			log_printf(LOG_ERROR,
+				"Attempted SP_Send to an idPlayerTo (%u) with no player data",
+				(unsigned int)(data->idPlayerTo));
+			return DPERR_GENERIC;
+		}
 	}
-	
-	struct sockaddr_ipx addr;
-	
-	if(!send_get_addr(&addr, data->lpISP, data->idPlayerTo)) {
-		return DP_OK;
+	else{
+		struct sp_data *sp_data = get_sp_data(data->lpISP);
+		to_addr = sp_data->ns_addr;
+		release_sp_data(sp_data);
+		
+		if(!to_addr.sa_family) {
+			log_printf(LOG_ERROR,
+				"Attempted SP_Send with idPlayerTo 0, but no name server address known");
+			return DPERR_GENERIC;
+		}
 	}
 	
 	struct sp_data *sp_data = get_sp_data(data->lpISP);
 	
-	if(sendto(sp_data->sock, buf, off, 0, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
-		log_printf(LOG_ERROR, "sendto failed: %s", w32_error(WSAGetLastError()));
+	if(sendto(sp_data->sock,
+		data->lpMessage + API_HEADER_SIZE, data->dwMessageSize - API_HEADER_SIZE, 0,
+		(struct sockaddr*)(&to_addr), sizeof(to_addr)) == -1)
+	{
+		log_printf(LOG_ERROR, "IPX_Send: sendto failed: %s", w32_error(WSAGetLastError()));
 		
 		release_sp_data(sp_data);
 		return DPERR_GENERIC;
 	}
-	
-	free(buf);
 	
 	release_sp_data(sp_data);
 	return DP_OK;
@@ -549,7 +491,6 @@ HRESULT WINAPI SPInit(LPSPINITDATA data) {
 	
 	data->lpCB->EnumSessions = &IPX_EnumSessions;
 	data->lpCB->Send = &IPX_Send;
-	data->lpCB->SendEx = &IPX_SendEx;
 	data->lpCB->Reply = &IPX_Reply;
 	data->lpCB->CreatePlayer = &IPX_CreatePlayer;
 	data->lpCB->GetCaps = &IPX_GetCaps;
