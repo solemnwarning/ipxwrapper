@@ -66,30 +66,55 @@ static void release_sp_data(struct sp_data *data) {
 	LeaveCriticalSection(&(data->lock));
 }
 
-static BOOL recv_packet(int sockfd, char *buf, IDirectPlaySP *sp) {
+static void recv_packet(SOCKET *sockfd, char *buf, IDirectPlaySP *sp)
+{
+	struct sp_data *sp_data = get_sp_data((IDirectPlaySP*)(sp));
+	
+	if(*sockfd == -1)
+	{
+		release_sp_data(sp_data);
+		return;
+	}
+	
 	struct sockaddr_ipx addr;
 	int addrlen = sizeof(addr);
 	
-	int r = recvfrom(sockfd, buf, MAX_DATA_SIZE, 0, (struct sockaddr*)&addr, &addrlen);
-	if(r == -1) {
-		if(WSAGetLastError() == WSAEWOULDBLOCK || WSAGetLastError() == WSAECONNRESET) {
-			return TRUE;
+	int size = recvfrom(*sockfd, buf, MAX_DATA_SIZE, 0, (struct sockaddr*)(&addr), &addrlen);
+	if(size == -1)
+	{
+		if(WSAGetLastError() == WSAEWOULDBLOCK || WSAGetLastError() == WSAECONNRESET)
+		{
+			/* WSAEWOULDBLOCK - No packets waiting on this socket.
+			 * WSAECONNRESET  - We got an ICMP error on this port.
+			*/
+			release_sp_data(sp_data);
+			return;
 		}
 		
-		log_printf(LOG_ERROR, "Read error (IPX): %s", w32_error(WSAGetLastError()));
-		return FALSE;
+		log_printf(LOG_ERROR, "DirectPlay read error: %s", w32_error(WSAGetLastError()));
+		log_printf(LOG_DEBUG, "Closing socket %u", (unsigned int)(*sockfd));
+		
+		closesocket(*sockfd);
+		*sockfd = -1;
+		
+		release_sp_data(sp_data);
+		return;
 	}
 	
-	HRESULT h = IDirectPlaySP_HandleMessage(sp, buf, r, &addr);
-	if(h != DP_OK) {
-		log_printf(LOG_ERROR, "HandleMessage error: %d", (int)h);
-	}
+	release_sp_data(sp_data);
 	
-	return TRUE;
+	/* Pass the message on to DirectPlay to be processed. */
+	
+	IPX_STRING_ADDR(str_addr, addr32_in(addr.sa_netnum), addr48_in(addr.sa_nodenum), addr.sa_socket);
+	log_printf(LOG_DEBUG, "About to HandleMessage from %s", str_addr);
+	
+	HRESULT r = IDirectPlaySP_HandleMessage(sp, buf, size, &addr);
+	
+	log_printf(LOG_DEBUG, "HandleMessage returned %x", (unsigned int)(r));
 }
 
 static DWORD WINAPI worker_main(LPVOID sp) {
-	struct sp_data *sp_data = get_sp_data((IDirectPlaySP*)sp);
+	struct sp_data *sp_data = get_sp_data((IDirectPlaySP*)(sp));
 	release_sp_data(sp_data);
 	
 	char *buf = malloc(MAX_DATA_SIZE);
@@ -100,32 +125,22 @@ static DWORD WINAPI worker_main(LPVOID sp) {
 	while(1) {
 		WaitForSingleObject(sp_data->event, INFINITE);
 		
-		get_sp_data((IDirectPlaySP*)sp);
+		get_sp_data((IDirectPlaySP*)(sp));
 		
 		WSAResetEvent(sp_data->event);
 		
-		if(!sp_data->running) {
-			release_sp_data(sp_data);
-			return 0;
+		if(!sp_data->running)
+		{
+			break;
 		}
 		
 		release_sp_data(sp_data);
 		
-		if(!recv_packet(sp_data->sock, buf, sp)) {
-			return 1;
-		}
-		
-		if(sp_data->ns_sock != -1 && !recv_packet(sp_data->ns_sock, buf, sp)) {
-			log_printf(LOG_ERROR, "Closing ns_sock due to error");
-			
-			get_sp_data((IDirectPlaySP*)sp);
-			
-			closesocket(sp_data->ns_sock);
-			sp_data->ns_sock = -1;
-			
-			release_sp_data(sp_data);
-		}
+		recv_packet(&(sp_data->sock),    buf, sp);
+		recv_packet(&(sp_data->ns_sock), buf, sp);
 	}
+	
+	free(buf);
 	
 	return 0;
 }
