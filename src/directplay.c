@@ -28,7 +28,6 @@
 
 struct sp_data {
 	SOCKET sock;
-	struct sockaddr_ipx addr;
 	
 	SOCKET ns_sock;			/* For RECEIVING discovery messages only, -1 when not hosting */
 	struct sockaddr_ipx ns_addr;	/* sa_family is 0 when undefined */
@@ -160,15 +159,35 @@ static HRESULT WINAPI IPX_EnumSessions(LPDPSP_ENUMSESSIONSDATA data) {
 	
 	struct sp_data *sp_data = get_sp_data(data->lpISP);
 	
-	struct sockaddr_ipx addr;
+	/* Get the address of our main socket. */
 	
-	memcpy(&addr, &(sp_data->addr), sizeof(addr));
+	struct sockaddr_ipx my_addr;
+	int addrlen = sizeof(my_addr);
 	
-	memset(addr.sa_nodenum, 0xFF, 6);
-	addr.sa_socket = htons(DISCOVERY_SOCKET);
+	if(getsockname(sp_data->sock, (struct sockaddr*)(&my_addr), &addrlen) == -1)
+	{
+		log_printf(LOG_ERROR,
+			"getsockname: %s", w32_error(WSAGetLastError()));
+		
+		release_sp_data(sp_data);
+		return DPERR_GENERIC;
+	}
 	
-	if(sendto(sp_data->sock, data->lpMessage + API_HEADER_SIZE, data->dwMessageSize - API_HEADER_SIZE, 0, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
-		log_printf(LOG_ERROR, "sendto failed: %s", w32_error(WSAGetLastError()));
+	/* Broadcast to the discovery socket on the current network. */
+	
+	struct sockaddr_ipx to_addr = my_addr;
+	
+	memset(to_addr.sa_nodenum, 0xFF, 6);
+	to_addr.sa_socket = htons(DISCOVERY_SOCKET);
+	
+	/* Send probe packet. */
+	
+	if(sendto(sp_data->sock,
+		data->lpMessage + API_HEADER_SIZE, data->dwMessageSize - API_HEADER_SIZE, 0,
+		(struct sockaddr*)(&to_addr), sizeof(to_addr)) == -1)
+	{
+		log_printf(LOG_ERROR,
+			"IPX_EnumSessions: sendto failed: %s", w32_error(WSAGetLastError()));
 		
 		release_sp_data(sp_data);
 		return DPERR_GENERIC;
@@ -340,12 +359,26 @@ static HRESULT WINAPI IPX_CreatePlayer(LPDPSP_CREATEPLAYERDATA data) {
 		 * with our socket address.
 		*/
 		
-		struct sp_data *sp_data  = get_sp_data(data->lpISP);
-		struct sockaddr_ipx addr = sp_data->addr;
-		release_sp_data(sp_data);
+		struct sockaddr_ipx my_addr;
+		int addrlen = sizeof(my_addr);
+		
+		{
+			struct sp_data *sp_data = get_sp_data(data->lpISP);
+			
+			if(getsockname(sp_data->sock, (struct sockaddr*)(&my_addr), &addrlen) == -1)
+			{
+				log_printf(LOG_ERROR,
+					"getsockname: %s", w32_error(WSAGetLastError()));
+				
+				release_sp_data(sp_data);
+				return DPERR_GENERIC;
+			}
+			
+			release_sp_data(sp_data);
+		}
 		
 		HRESULT r = IDirectPlaySP_SetSPPlayerData(
-			data->lpISP, data->idPlayer, &addr, sizeof(addr), 0);
+			data->lpISP, data->idPlayer, &my_addr, sizeof(my_addr), 0);
 		if(r != DP_OK)
 		{
 			log_printf(LOG_ERROR, "IPX_CreatePlayer: SetSPPlayerData: %x", (unsigned int)(r));
@@ -435,9 +468,22 @@ static HRESULT WINAPI IPX_Open(LPDPSP_OPENDATA data) {
 			setsockopt(sp_data->ns_sock, SOL_SOCKET, SO_REUSEADDR, (char*)&t_bool, sizeof(BOOL));
 			setsockopt(sp_data->ns_sock, SOL_SOCKET, SO_BROADCAST, (char*)&t_bool, sizeof(BOOL));
 			
-			struct sockaddr_ipx addr;
+			/* Get the address of the main socket, use it to bind
+			 * to the discovery port on the right net/node.
+			*/
 			
-			memcpy(&addr, &(sp_data->addr), sizeof(addr));
+			struct sockaddr_ipx addr;
+			int addrlen = sizeof(addr);
+			
+			if(getsockname(sp_data->sock, (struct sockaddr*)(&addr), &addrlen) == -1)
+			{
+				log_printf(LOG_ERROR,
+					"getsockname: %s", w32_error(WSAGetLastError()));
+				
+				release_sp_data(sp_data);
+				return DPERR_GENERIC;
+			}
+			
 			addr.sa_socket = htons(DISCOVERY_SOCKET);
 			
 			if(bind(sp_data->ns_sock, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
@@ -546,13 +592,6 @@ HRESULT WINAPI SPInit(LPSPINITDATA data) {
 	
 	if(bind(sp_data.sock, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
 		log_printf(LOG_ERROR, "Error binding IPX socket: %s", w32_error(WSAGetLastError()));
-		goto FAIL5;
-	}
-	
-	int addrlen = sizeof(sp_data.addr);
-	
-	if(getsockname(sp_data.sock, (struct sockaddr*)&(sp_data.addr), &addrlen) == -1) {
-		log_printf(LOG_ERROR, "getsockname failed: %s", w32_error(WSAGetLastError()));
 		goto FAIL5;
 	}
 	
