@@ -205,6 +205,65 @@ static BOOL init_main_socket(struct sp_data *sp_data)
 	return TRUE;
 }
 
+static BOOL init_disc_socket(struct sp_data *sp_data)
+{
+	if(sp_data->ns_sock == -1)
+	{
+		int sock = socket(AF_IPX, SOCK_DGRAM, NSPROTO_IPX);
+		if(sock == -1)
+		{
+			log_printf(LOG_ERROR,
+				"Error creating IPX socket: %s", w32_error(WSAGetLastError()));
+			
+			return FALSE;
+		}
+		
+		BOOL t_bool = TRUE;
+		setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (char*)&t_bool, sizeof(BOOL));
+		setsockopt(sock, SOL_SOCKET, SO_BROADCAST, (char*)&t_bool, sizeof(BOOL));
+		
+		/* Get the address of the main socket, use it to bind
+		 * to the discovery port on the right net/node.
+		*/
+		
+		struct sockaddr_ipx addr;
+		int addrlen = sizeof(addr);
+		
+		if(getsockname(sp_data->sock, (struct sockaddr*)(&addr), &addrlen) == -1)
+		{
+			log_printf(LOG_ERROR,
+				"getsockname: %s", w32_error(WSAGetLastError()));
+			
+			closesocket(sock);
+			return FALSE;
+		}
+		
+		addr.sa_socket = htons(DISCOVERY_SOCKET);
+		
+		if(bind(sock, (struct sockaddr*)(&addr), sizeof(addr)) == -1)
+		{
+			log_printf(LOG_ERROR,
+				"Cannot bind DP discovery socket: %s", w32_error(WSAGetLastError()));
+			
+			closesocket(sock);
+			return FALSE;
+		}
+		
+		if(WSAEventSelect(sock, sp_data->event, FD_READ) == -1)
+		{
+			log_printf(LOG_ERROR,
+				"WSAEventSelect: %s", w32_error(WSAGetLastError()));
+			
+			closesocket(sock);
+			return FALSE;
+		}
+		
+		sp_data->ns_sock = sock;
+	}
+	
+	return TRUE;
+}
+
 static HRESULT WINAPI IPX_EnumSessions(LPDPSP_ENUMSESSIONSDATA data) {
 	CALL("SP_EnumSessions");
 	
@@ -412,6 +471,17 @@ static HRESULT WINAPI IPX_CreatePlayer(LPDPSP_CREATEPLAYERDATA data) {
 	
 	if(data->dwFlags & CREATEPLAYER_SELF)
 	{
+		if(data->dwFlags & CREATEPLAYER_NS)
+		{
+			/* We are becoming the name server, initialise the name
+			 * server socket used to receive discovery packets.
+			*/
+			
+			struct sp_data *sp_data = get_sp_data(data->lpISP);
+			init_disc_socket(sp_data);
+			release_sp_data(sp_data);
+		}
+		
 		/* This is a local player ID, initialise the shared player data
 		 * with our socket address.
 		*/
@@ -514,58 +584,14 @@ static HRESULT WINAPI IPX_Open(LPDPSP_OPENDATA data) {
 		return DPERR_GENERIC;
 	}
 	
-	if(data->bCreate) {
-		if(sp_data->ns_sock == -1) {
-			if((sp_data->ns_sock = socket(AF_IPX, SOCK_DGRAM, NSPROTO_IPX)) == -1) {
-				release_sp_data(sp_data);
-				
-				log_printf(LOG_ERROR, "Cannot create ns_sock: %s", w32_error(WSAGetLastError()));
-				return DPERR_CANNOTCREATESERVER;
-			}
-			
-			BOOL t_bool = TRUE;
-			setsockopt(sp_data->ns_sock, SOL_SOCKET, SO_REUSEADDR, (char*)&t_bool, sizeof(BOOL));
-			setsockopt(sp_data->ns_sock, SOL_SOCKET, SO_BROADCAST, (char*)&t_bool, sizeof(BOOL));
-			
-			/* Get the address of the main socket, use it to bind
-			 * to the discovery port on the right net/node.
-			*/
-			
-			struct sockaddr_ipx addr;
-			int addrlen = sizeof(addr);
-			
-			if(getsockname(sp_data->sock, (struct sockaddr*)(&addr), &addrlen) == -1)
-			{
-				log_printf(LOG_ERROR,
-					"getsockname: %s", w32_error(WSAGetLastError()));
-				
-				release_sp_data(sp_data);
-				return DPERR_GENERIC;
-			}
-			
-			addr.sa_socket = htons(DISCOVERY_SOCKET);
-			
-			if(bind(sp_data->ns_sock, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
-				closesocket(sp_data->ns_sock);
-				sp_data->ns_sock = -1;
-				
-				release_sp_data(sp_data);
-				
-				log_printf(LOG_ERROR, "Cannot bind ns_sock: %s", w32_error(WSAGetLastError()));
-				return DPERR_CANNOTCREATESERVER;
-			}
-			
-			if(WSAEventSelect(sp_data->ns_sock, sp_data->event, FD_READ) == -1) {
-				closesocket(sp_data->ns_sock);
-				sp_data->ns_sock = -1;
-				
-				release_sp_data(sp_data);
-				
-				log_printf(LOG_ERROR, "WSAEventSelect failed: %s", w32_error(WSAGetLastError()));
-				return DPERR_CANNOTCREATESERVER;
-			}
-		}
-	}else if(data->lpSPMessageHeader) {
+	if(data->bCreate)
+	{
+		/* Don't initialise the name server socket here - it gets done
+		 * when SP_CreatePlayer is called with CREATEPLAYER_NS instead.
+		*/
+	}
+	else if(data->lpSPMessageHeader)
+	{
 		memcpy(&(sp_data->ns_addr), data->lpSPMessageHeader, sizeof(struct sockaddr_ipx));
 		sp_data->ns_id = 0;
 	}
