@@ -145,34 +145,76 @@ static DWORD WINAPI worker_main(LPVOID sp) {
 	return 0;
 }
 
-static BOOL init_worker(IDirectPlaySP *sp) {
-	struct sp_data *sp_data = get_sp_data(sp);
-	
-	if(sp_data->worker_thread) {
-		release_sp_data(sp_data);
+static BOOL init_worker(IDirectPlaySP *sp, struct sp_data *sp_data)
+{
+	if(sp_data->worker_thread)
+	{
 		return TRUE;
 	}
 	
 	sp_data->worker_thread = CreateThread(NULL, 0, &worker_main, sp, 0, NULL);
-	if(!sp_data->worker_thread) {
+	if(!sp_data->worker_thread)
+	{
 		log_printf(LOG_ERROR, "Failed to create worker thread");
-		
-		release_sp_data(sp_data);
 		return FALSE;
 	}
 	
-	release_sp_data(sp_data);
+	return TRUE;
+}
+
+static BOOL init_main_socket(struct sp_data *sp_data)
+{
+	if(sp_data->sock == -1)
+	{
+		int sock = socket(AF_IPX, SOCK_DGRAM, NSPROTO_IPX);
+		if(sock == -1)
+		{
+			log_printf(LOG_ERROR,
+				"Error creating IPX socket: %s", w32_error(WSAGetLastError()));
+			return FALSE;
+		}
+		
+		struct sockaddr_ipx addr;
+		memset(&addr, 0, sizeof(addr));
+		addr.sa_family = AF_IPX;
+		
+		if(bind(sock, (struct sockaddr*)&addr, sizeof(addr)) == -1)
+		{
+			log_printf(LOG_ERROR,
+				"Error binding IPX socket: %s", w32_error(WSAGetLastError()));
+			
+			closesocket(sock);
+			return FALSE;
+		}
+		
+		BOOL bcast = TRUE;
+		setsockopt(sock, SOL_SOCKET, SO_BROADCAST, (char*)(&bcast), sizeof(bcast));
+		
+		if(WSAEventSelect(sock, sp_data->event, FD_READ) == -1)
+		{
+			log_printf(LOG_ERROR,
+				"WSAEventSelect: %s", w32_error(WSAGetLastError()));
+			
+			closesocket(sock);
+			return FALSE;
+		}
+		
+		sp_data->sock = sock;
+	}
+	
 	return TRUE;
 }
 
 static HRESULT WINAPI IPX_EnumSessions(LPDPSP_ENUMSESSIONSDATA data) {
 	CALL("SP_EnumSessions");
 	
-	if(!init_worker(data->lpISP)) {
+	struct sp_data *sp_data = get_sp_data(data->lpISP);
+	
+	if(!init_worker(data->lpISP, sp_data) || !init_main_socket(sp_data))
+	{
+		release_sp_data(sp_data);
 		return DPERR_GENERIC;
 	}
-	
-	struct sp_data *sp_data = get_sp_data(data->lpISP);
 	
 	/* Get the address of our main socket. */
 	
@@ -464,11 +506,13 @@ static HRESULT WINAPI IPX_GetCaps(LPDPSP_GETCAPSDATA data) {
 static HRESULT WINAPI IPX_Open(LPDPSP_OPENDATA data) {
 	CALL("SP_Open");
 	
-	if(!init_worker(data->lpISP)) {
+	struct sp_data *sp_data = get_sp_data(data->lpISP);
+	
+	if(!init_worker(data->lpISP, sp_data) || !init_main_socket(sp_data))
+	{
+		release_sp_data(sp_data);
 		return DPERR_GENERIC;
 	}
-	
-	struct sp_data *sp_data = get_sp_data(data->lpISP);
 	
 	if(data->bCreate) {
 		if(sp_data->ns_sock == -1) {
@@ -535,9 +579,16 @@ static HRESULT WINAPI IPX_CloseEx(LPDPSP_CLOSEDATA data) {
 	
 	struct sp_data *sp_data = get_sp_data(data->lpISP);
 	
-	if(sp_data->ns_sock != -1) {
+	if(sp_data->ns_sock != -1)
+	{
 		closesocket(sp_data->ns_sock);
 		sp_data->ns_sock = -1;
+	}
+	
+	if(sp_data->sock == -1)
+	{
+		closesocket(sp_data->sock);
+		sp_data->sock = -1;
 	}
 	
 	release_sp_data(sp_data);
@@ -564,11 +615,18 @@ static HRESULT WINAPI IPX_ShutdownEx(LPDPSP_SHUTDOWNDATA data) {
 		sp_data->worker_thread = NULL;
 	}
 	
-	if(sp_data->ns_sock != -1) {
+	if(sp_data->ns_sock != -1)
+	{
 		closesocket(sp_data->ns_sock);
+		sp_data->ns_sock = -1;
 	}
 	
-	closesocket(sp_data->sock);
+	if(sp_data->sock == -1)
+	{
+		closesocket(sp_data->sock);
+		sp_data->sock = -1;
+	}
+	
 	WSACloseEvent(sp_data->event);
 	DeleteCriticalSection(&(sp_data->lock));
 	
@@ -596,32 +654,11 @@ HRESULT WINAPI SPInit(LPSPINITDATA data) {
 		goto FAIL3;
 	}
 	
-	if((sp_data.sock = socket(AF_IPX, SOCK_DGRAM, NSPROTO_IPX)) == -1) {
-		log_printf(LOG_ERROR, "Error creating IPX socket: %s", w32_error(WSAGetLastError()));
-		goto FAIL4;
-	}
-	
-	struct sockaddr_ipx addr;
-	memset(&addr, 0, sizeof(addr));
-	addr.sa_family = AF_IPX;
-	
-	if(bind(sp_data.sock, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
-		log_printf(LOG_ERROR, "Error binding IPX socket: %s", w32_error(WSAGetLastError()));
-		goto FAIL5;
-	}
-	
+	sp_data.sock = -1;
 	sp_data.ns_sock = -1;
 	sp_data.ns_addr.sa_family = 0;
 	sp_data.running = TRUE;
 	sp_data.worker_thread = NULL;
-	
-	BOOL bcast = TRUE;
-	setsockopt(sp_data.sock, SOL_SOCKET, SO_BROADCAST, (char*)&bcast, sizeof(BOOL));
-	
-	if(WSAEventSelect(sp_data.sock, sp_data.event, FD_READ) == -1) {
-		log_printf(LOG_ERROR, "WSAEventSelect failed: %s", w32_error(WSAGetLastError()));
-		goto FAIL5;
-	}
 	
 	HRESULT r = IDirectPlaySP_SetSPData(data->lpISP, &sp_data, sizeof(sp_data), DPSET_LOCAL);
 	if(r != DP_OK) {
@@ -644,9 +681,6 @@ HRESULT WINAPI SPInit(LPSPINITDATA data) {
 	return DP_OK;
 	
 	FAIL5:
-	closesocket(sp_data.sock);
-	
-	FAIL4:
 	WSACloseEvent(sp_data.event);
 	
 	FAIL3:
