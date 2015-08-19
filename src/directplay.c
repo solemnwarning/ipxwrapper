@@ -523,22 +523,6 @@ HRESULT WINAPI SPInit(LPSPINITDATA data) {
 	
 	log_printf(LOG_DEBUG, "SPInit: %p (lpAddress = %p, dwAddressSize = %u)", data->lpISP, data->lpAddress, (unsigned int)(data->dwAddressSize));
 	
-	{
-		struct sp_data *sp_data;
-		DWORD size;
-		
-		HRESULT r = IDirectPlaySP_GetSPData(data->lpISP, (void**)&sp_data, &size, DPGET_LOCAL);
-		if(r != DP_OK) {
-			log_printf(LOG_ERROR, "SPInit: GetSPData: %d", r);
-			return DPERR_UNAVAILABLE;
-		}
-		
-		if(sp_data) {
-			log_printf(LOG_DEBUG, "SPInit: Already initialised, returning DP_OK");
-			return DP_OK;
-		}
-	}
-	
 	struct sp_data sp_data;
 	
 	if(!InitializeCriticalSectionAndSpinCount(&(sp_data.lock), 0x80000000)) {
