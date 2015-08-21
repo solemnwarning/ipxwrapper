@@ -240,23 +240,68 @@ static HRESULT WINAPI IPX_Reply(LPDPSP_REPLYDATA data) {
 	
 	struct sp_data *sp_data = get_sp_data(data->lpISP);
 	
-	if(sp_data->ns_id != data->idNameServer) {
+	/* Stash the address of the name server if the name server ID has
+	 * changed.
+	 * 
+	 * TODO: Store the ID and resolve the address at each xmit, probably
+	 * more reliable than assuming the address is known at this point.
+	*/
+	
+	if(sp_data->ns_id != data->idNameServer)
+	{
+		log_printf(LOG_DEBUG, "IPX_Reply: Name server update (%u -> %u)",
+			(unsigned int)(sp_data->ns_id), (unsigned int)(data->idNameServer));
+		
 		struct sockaddr_ipx *addr_p;
 		DWORD size;
 		
 		HRESULT r = IDirectPlaySP_GetSPPlayerData(data->lpISP, data->idNameServer, (void**)&addr_p, &size, 0);
-		if(r != DP_OK) {
-			log_printf(LOG_ERROR, "GetSPPlayerData: %d", (int)r);
-		}else if(addr_p) {
+		if(r != DP_OK)
+		{
+			log_printf(LOG_DEBUG, "IPX_Reply: GetSPPlayerData: %x", (unsigned int)(r));
+		}
+		else if(addr_p == NULL)
+		{
+			log_printf(LOG_DEBUG, "IPX_Reply: Cannot update name server, no shared data");
+		}
+		else if(size != sizeof(struct sockaddr_ipx))
+		{
+			log_printf(LOG_DEBUG,
+				"IPX_Reply: Cannot update name server, shared data is %u bytes (expected %u)",
+				(unsigned int)(size), (unsigned int)(sizeof(struct sockaddr_ipx)));
+		}
+		else{
 			memcpy(&(sp_data->ns_addr), addr_p, sizeof(struct sockaddr_ipx));
 			sp_data->ns_id = data->idNameServer;
+			
+			IPX_STRING_ADDR(str_addr,
+				addr32_in(sp_data->ns_addr.sa_netnum),
+				addr48_in(sp_data->ns_addr.sa_nodenum),
+				sp_data->ns_addr.sa_socket);
+			
+			log_printf(LOG_DEBUG, "IPX_Reply: New name server address is %s", str_addr);
 		}
 	}
 	
-	/* Do the actual sending */
+	/* Check we are being called in a context where we actually have an
+	 * address to send the reply to.
+	*/
 	
-	if(sendto(sp_data->sock, data->lpMessage + API_HEADER_SIZE, data->dwMessageSize - API_HEADER_SIZE, 0, (struct sockaddr*)data->lpSPMessageHeader, sizeof(struct sockaddr_ipx)) == -1) {
-		log_printf(LOG_ERROR, "sendto failed: %s", w32_error(WSAGetLastError()));
+	struct sockaddr_ipx *to_addr = (struct sockaddr_ipx*)(data->lpSPMessageHeader);
+	
+	if(to_addr == NULL)
+	{
+		log_printf(LOG_DEBUG, "Attempted SP_Reply with NULL lpSPMessageHeader");
+		return DPERR_GENERIC;
+	}
+	
+	/* Send the message. */
+	
+	if(sendto(sp_data->sock,
+		data->lpMessage + API_HEADER_SIZE, data->dwMessageSize - API_HEADER_SIZE, 0,
+		(struct sockaddr*)(to_addr), sizeof(*to_addr)) == -1)
+	{
+		log_printf(LOG_ERROR, "IPX_Reply: sendto failed: %s", w32_error(WSAGetLastError()));
 		
 		release_sp_data(sp_data);
 		return DPERR_GENERIC;
