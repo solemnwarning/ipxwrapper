@@ -189,7 +189,7 @@ static HRESULT WINAPI IPX_Send(LPDPSP_SENDDATA data) {
 		DWORD addr_size;
 		
 		HRESULT r = IDirectPlaySP_GetSPPlayerData(
-			data->lpISP, data->idPlayerTo, (void**)(&addr_p), &addr_size, DPGET_LOCAL);
+			data->lpISP, data->idPlayerTo, (void**)(&addr_p), &addr_size, 0);
 		if(r != DP_OK)
 		{
 			log_printf(LOG_ERROR, "GetSPPlayerData: %x", (unsigned int)(r));
@@ -244,7 +244,7 @@ static HRESULT WINAPI IPX_Reply(LPDPSP_REPLYDATA data) {
 		struct sockaddr_ipx *addr_p;
 		DWORD size;
 		
-		HRESULT r = IDirectPlaySP_GetSPPlayerData(data->lpISP, data->idNameServer, (void**)&addr_p, &size, DPGET_LOCAL);
+		HRESULT r = IDirectPlaySP_GetSPPlayerData(data->lpISP, data->idNameServer, (void**)&addr_p, &size, 0);
 		if(r != DP_OK) {
 			log_printf(LOG_ERROR, "GetSPPlayerData: %d", (int)r);
 		}else if(addr_p) {
@@ -266,14 +266,74 @@ static HRESULT WINAPI IPX_Reply(LPDPSP_REPLYDATA data) {
 	return DP_OK;
 }
 
+/* CreatePlayer dwFlags bits. Meanings guessed from examination of official
+ * implementation.
+*/
+#define CREATEPLAYER_FIRST 1 /* The first player ID of a node */
+#define CREATEPLAYER_NS    2 /* This instance is becomming the name server */
+#define CREATEPLAYER_SELF  8 /* This is a local player ID */
+
 static HRESULT WINAPI IPX_CreatePlayer(LPDPSP_CREATEPLAYERDATA data) {
 	CALL("SP_CreatePlayer");
 	
-	if(data->lpSPMessageHeader) {
-		HRESULT r = IDirectPlaySP_SetSPPlayerData(data->lpISP, data->idPlayer, data->lpSPMessageHeader, sizeof(struct sockaddr_ipx), DPSET_LOCAL);
+	if(data->lpSPMessageHeader)
+	{
+		struct sockaddr_ipx *addr = data->lpSPMessageHeader;
+		
+		IPX_STRING_ADDR(str_addr, addr32_in(addr->sa_netnum), addr48_in(addr->sa_nodenum), addr->sa_socket);
+		log_printf(LOG_DEBUG, "IPX_CreatePlayer: idPlayer = %u, addr = %s, dwFlags = %u",
+			(unsigned int)(data->idPlayer), str_addr, (unsigned int)(data->dwFlags));
+	}
+	else{
+		log_printf(LOG_DEBUG, "IPX_CreatePlayer: idPlayer = %u, dwFlags = %u",
+			(unsigned int)(data->idPlayer), (unsigned int)(data->dwFlags));
+	}
+	
+	if(data->dwFlags & CREATEPLAYER_SELF)
+	{
+		/* This is a local player ID, initialise the shared player data
+		 * with our socket address.
+		*/
+		
+		struct sp_data *sp_data  = get_sp_data(data->lpISP);
+		struct sockaddr_ipx addr = sp_data->addr;
+		release_sp_data(sp_data);
+		
+		HRESULT r = IDirectPlaySP_SetSPPlayerData(
+			data->lpISP, data->idPlayer, &addr, sizeof(addr), 0);
+		if(r != DP_OK)
+		{
+			log_printf(LOG_ERROR, "IPX_CreatePlayer: SetSPPlayerData: %x", (unsigned int)(r));
+			return r;
+		}
+	}
+	else{
+		/* This is a remote player ID, verify the shared player data
+		 * already contains an address.
+		*/
+		
+		struct sockaddr_ipx *addr;
+		DWORD addr_size;
+		
+		HRESULT r = IDirectPlaySP_GetSPPlayerData(
+			data->lpISP, data->idPlayer, (void**)(&addr), &addr_size, 0);
 		if(r != DP_OK) {
-			log_printf(LOG_ERROR, "SetSPPlayerData: %d", (int)r);
-			return DPERR_GENERIC;
+			log_printf(LOG_ERROR, "IPX_CreatePlayer: GetSPPlayerData: %x", (unsigned int)(r));
+			return r;
+		}
+		
+		if(addr == NULL)
+		{
+			log_printf(LOG_WARNING,
+				"IPX_CreatePlayer: Remote player %u has no shared data",
+				(unsigned int)(data->idPlayer));
+		}
+		else if(addr_size != sizeof(*addr))
+		{
+			log_printf(LOG_WARNING,
+				"IPX_CreatePlayer: Remote player %u shared data is %u bytes (expected %u)",
+				(unsigned int)(data->idPlayer),
+				(unsigned int)(addr_size), (unsigned int)(sizeof(*addr)));
 		}
 	}
 	
