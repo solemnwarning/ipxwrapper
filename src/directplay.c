@@ -41,7 +41,13 @@ struct sp_data {
 };
 
 #define DISCOVERY_SOCKET 42367
-#define API_HEADER_SIZE sizeof(struct sockaddr_ipx)
+
+/* Do not change this value! We don't need any memory reserved for writing out
+ * packet headers, but DirectPlay seems to corrupt itself internally and do
+ * funky things if this goes below a certain threshold. Value taken from the DX5
+ * service provider.
+*/
+#define API_HEADER_SIZE 20
 
 #define CALL(func) log_printf(LOG_CALL, "directplay.c: " func);
 
