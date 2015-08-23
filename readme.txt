@@ -55,6 +55,8 @@ The following have been reported to work:
  * Sid Meier's Alpha Centauri
  * Street Wars: Constructor Underworld/Mob Rule
  * Theme Hospital
+ * Total Annihilation
+ * Twisted Metal 2
  * Warcraft II
  * War Wind
  * War Wind II: Human Onslaught
@@ -62,5 +64,5 @@ The following have been reported to work:
 License
 -------
 
-Copyright (C) 2008-2014 Daniel Collins <solemnwarning@solemnwarning.net>
+Copyright (C) 2008-2015 Daniel Collins <solemnwarning@solemnwarning.net>
 Read license.txt for licensing terms.

@@ -5,6 +5,10 @@ Version 0.6.0:
 	Bugfix: Include IPX socket number in address cache hash table key.
 	
 	Bugfix: Correctly initialise local sa_family of SPX client sockets.
+	
+	Bugfix: Fix 3+ players in some/most DirectPlay games.
+	
+	Bugfix: Fix memory leaks in DirectPlay service provider.
 
 Version 0.5.0:
 	Bugfix: Allow address reuse when only the binding socket has SO_REUSEADDR.
