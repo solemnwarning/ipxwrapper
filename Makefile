@@ -52,7 +52,8 @@ BIN_FILES := $(shell cat manifest.bin.txt)
 SRC_FILES := $(shell cat manifest.src.txt)
 
 TOOLS := tools/socket.exe tools/list-interfaces.exe tools/bind.exe tools/ipx-send.exe \
-	tools/ipx-recv.exe tools/spx-server.exe tools/spx-client.exe  tools/ipx-isr.exe
+	tools/ipx-recv.exe tools/spx-server.exe tools/spx-client.exe  tools/ipx-isr.exe \
+	tools/dptool.exe
 
 # DLLs to copy to the tests directory before running the test suite.
 
@@ -76,11 +77,11 @@ dist: all
 	zip -r ipxwrapper-$(VERSION)-src.zip ipxwrapper-$(VERSION)-src/
 	rm -r ipxwrapper-$(VERSION)-src/
 
-tools: $(TOOLS) tests/addr.exe ipxwrapper.dll wsock32.dll
-	cp ipxwrapper.dll wsock32.dll tools/
+tools: $(TOOLS) tests/addr.exe ipxwrapper.dll wsock32.dll dpwsockx.dll
+	cp ipxwrapper.dll wsock32.dll dpwsockx.dll tools/
 
 tools/%.exe: tools/%.c tools/tools.h src/addr.o
-	$(CC) $(CFLAGS) -I./src/ -o $@ $< src/addr.o -lwsock32
+	$(CC) $(CFLAGS) -I./src/ -o $@ $< src/addr.o -lwsock32 -lole32 -lrpcrt4
 
 tests/addr.exe: tests/addr.o tests/tap/basic.o src/addr.o
 	$(CC) $(CFLAGS) -I./ -o $@ $^ -lwsock32

@@ -19,6 +19,11 @@ our $remote_ip_a  = "172.16.1.21";
 our $remote_mac_b = "08:00:27:43:47:5C";
 our $remote_ip_b  = "172.16.2.21";
 
+# IP addresses of additional nodes used for testing DirectPlay.
+
+our $remote_b_ip = "172.16.1.22";
+our $remote_c_ip = "172.16.1.23";
+
 # Network broadcast IPs.
 
 our $net_a_bcast  = "172.16.1.255";

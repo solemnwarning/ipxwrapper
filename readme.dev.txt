@@ -18,6 +18,8 @@ Running the test suite
 
 The test suite requires a Linux system and a Windows system, connected by two Ethernet networks with fixed IPv4 addresses on each. You must run `make tools` before attempting to run the test suite.
 
+Running the DirectPlay tests requires an additional two Windows systems, these have the same requirements as the first, except they only need network adapters on the first network.
+
 The Linux system:
 
   * Must have the following Perl modules installed:
