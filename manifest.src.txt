@@ -63,6 +63,7 @@ tests/20-bind.t
 tests/30-eth-ipx.t
 tests/30-ip-ipx.t
 tests/40-ip-spx.t
+tests/50-dplay.t
 tests/addr.c
 tests/config.pm
 tests/ptype.pm
@@ -71,6 +72,7 @@ tests/lib/IPXWrapper/Capture/IPX.pm
 tests/lib/IPXWrapper/Capture/IPXOverUDP.pm
 tests/lib/IPXWrapper/SPX.pm
 tests/lib/IPXWrapper/Tool/Bind.pm
+tests/lib/IPXWrapper/Tool/DPTool.pm
 tests/lib/IPXWrapper/Tool/Generic.pm
 tests/lib/IPXWrapper/Tool/IPXISR.pm
 tests/lib/IPXWrapper/Tool/IPXRecv.pm
@@ -83,6 +85,7 @@ tests/tap/basic.h
 tests/tap/macros.h
 
 tools/bind.c
+tools/dptool.c
 tools/ipx-isr.c
 tools/ipx-recv.c
 tools/ipx-send.c
