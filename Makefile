@@ -42,7 +42,7 @@ export CFLAGS
 export CXX
 export CXXFLAGS
 
-VERSION := git
+VERSION := 0.6.0
 
 IPXWRAPPER_DEPS := src/ipxwrapper.o src/winsock.o src/ipxwrapper_stubs.o src/log.o src/common.o \
 	src/interface.o src/router.o src/ipxwrapper.def src/addrcache.o src/config.o src/addr.o \
