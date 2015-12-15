@@ -53,7 +53,7 @@ SRC_FILES := $(shell cat manifest.src.txt)
 
 TOOLS := tools/socket.exe tools/list-interfaces.exe tools/bind.exe tools/ipx-send.exe \
 	tools/ipx-recv.exe tools/spx-server.exe tools/spx-client.exe  tools/ipx-isr.exe \
-	tools/dptool.exe
+	tools/dptool.exe tools/ipx-echo.exe tools/ipx-bench.exe
 
 # DLLs to copy to the tests directory before running the test suite.
 
