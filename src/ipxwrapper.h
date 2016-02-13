@@ -188,5 +188,6 @@ int PASCAL r_getpeername(SOCKET fd, struct sockaddr *addr, int *addrlen);
 int PASCAL r_listen(SOCKET s, int backlog);
 SOCKET PASCAL r_accept(SOCKET s, struct sockaddr *addr, int *addrlen);
 int PASCAL r_WSAAsyncSelect(SOCKET s, HWND hWnd, unsigned int wMsg, long lEvent);
+int PASCAL r_select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, const struct timeval *timeout);
 
 #endif /* !IPXWRAPPER_H */

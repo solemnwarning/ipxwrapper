@@ -1514,7 +1514,7 @@ int PASCAL ioctlsocket(SOCKET fd, long cmd, u_long *argp)
 			FD_ZERO(&fdset);
 			FD_SET(sock->fd, &fdset);
 			
-			int r = select(1, &fdset, NULL, NULL, &tv);
+			int r = r_select(1, &fdset, NULL, NULL, &tv);
 			
 			if(r == -1)
 			{
@@ -1779,7 +1779,7 @@ static int _connect_spx(ipx_socket *sock, struct sockaddr_ipx *ipxaddr)
 				.tv_usec = ((wait_until - now) % 1000) * 1000
 			};
 			
-			if(select(1, &fdset, NULL, NULL, &tv) == -1)
+			if(r_select(1, &fdset, NULL, NULL, &tv) == -1)
 			{
 				closesocket(lookup_fd);
 				free(packet);
@@ -1892,7 +1892,7 @@ static int _connect_spx(ipx_socket *sock, struct sockaddr_ipx *ipxaddr)
 			FD_ZERO(&e_fdset);
 			FD_SET(sock->fd, &e_fdset);
 			
-			if(select(1, NULL, &w_fdset, &e_fdset, NULL) == 1 && FD_ISSET(sock->fd, &w_fdset))
+			if(r_select(1, NULL, &w_fdset, &e_fdset, NULL) == 1 && FD_ISSET(sock->fd, &w_fdset))
 			{
 				goto CONNECTED;
 			}
@@ -2373,4 +2373,77 @@ int PASCAL WSAAsyncSelect(SOCKET s, HWND hWnd, unsigned int wMsg, long lEvent)
 	}
 	
 	return r_WSAAsyncSelect(s, hWnd, wMsg, lEvent);
+}
+
+int PASCAL select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, const struct timeval *timeout)
+{
+	if(ipx_use_pcap)
+	{
+		/* Can't do anything when using pcap since there isn't a socket
+		 * to wait on for sending.
+		*/
+		return r_select(nfds, readfds, writefds, exceptfds, timeout);
+	}
+	
+	bool writefds_bodge = false;
+	
+	fd_set writefds_pulled;
+	FD_ZERO(&writefds_pulled);
+	
+	if(writefds != NULL)
+	{
+		/* Search for any IPX sockets being referenced in writefds... */
+		lock_sockets();
+		
+		ipx_socket *sock, *tmp;
+		HASH_ITER(hh, sockets, sock, tmp)
+		{
+			if(!(sock->flags & IPX_IS_SPX) && FD_ISSET(sock->fd, writefds))
+			{
+				/* Found one! Remove it and stash it for later. */
+				writefds_bodge = true;
+				FD_SET(sock->fd, &writefds_pulled);
+				FD_CLR(sock->fd, writefds);
+			}
+		}
+		
+		unlock_sockets();
+	}
+	
+	if(writefds_bodge)
+	{
+		/* At least one IPX socket was removed from writefds, put the
+		 * private UDP socket there instead since that is what actually
+		 * matters for sending.
+		*/
+		FD_SET(private_socket, writefds);
+	}
+	
+	int sret = r_select(nfds, readfds, writefds, exceptfds, timeout);
+	
+	if(sret > 0 && writefds_bodge && FD_ISSET(private_socket, writefds))
+	{
+		/* We munged writefds and private_socket is still there, take it
+		 * out and re-add any of the IPX sockets we removed earlier.
+		*/
+		
+		FD_CLR(private_socket, writefds);
+		--sret;
+		
+		lock_sockets();
+		
+		ipx_socket *sock, *tmp;
+		HASH_ITER(hh, sockets, sock, tmp)
+		{
+			if(FD_ISSET(sock->fd, &writefds_pulled))
+			{
+				FD_SET(sock->fd, writefds);
+				++sret;
+			}
+		}
+		
+		unlock_sockets();
+	}
+	
+	return sret;
 }

@@ -15,7 +15,7 @@ ntohl
 ntohs
 recv:0
 recvfrom:0
-select
+select:0
 send:0
 sendto:0
 setsockopt:0
