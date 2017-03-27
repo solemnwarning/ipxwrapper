@@ -26,12 +26,19 @@
 extern "C" {
 #endif
 
+enum main_config_frame_type
+{
+	FRAME_TYPE_ETH_II = 1,
+	FRAME_TYPE_NOVELL = 2
+};
+
 typedef struct main_config {
 	uint16_t udp_port;
 	
 	bool w95_bug;
 	bool fw_except;
 	bool use_pcap;
+	enum main_config_frame_type frame_type;
 	
 	enum ipx_log_level log_level;
 } main_config_t;

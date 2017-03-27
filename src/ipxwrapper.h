@@ -116,7 +116,11 @@ struct ethernet_frame
 	unsigned char dest_mac[6];
 	unsigned char src_mac[6];
 	
-	uint16_t ethertype;
+	union {
+		/* Depends on frame type. */
+		uint16_t ethertype;
+		uint16_t length;
+	};
 	
 	real_ipx_packet_t packet;
 } __attribute__((__packed__));

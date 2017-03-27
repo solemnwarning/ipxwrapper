@@ -505,10 +505,43 @@ static void _handle_pcap_frame(u_char *user, const struct pcap_pkthdr *pkt_heade
 	
 	ethernet_frame_t *frame = (ethernet_frame_t*)(pkt_data);
 	
-	if(ntohs(frame->ethertype) != 0x8137)
+	uint16_t ipx_packet_len = ntohs(frame->packet.length);
+	
+	if(main_config.frame_type == FRAME_TYPE_ETH_II)
 	{
-		/* The ethertype field isn't IPX. */
-		return;
+		/* Configured for standard Ethernet. */
+		
+		if(ntohs(frame->ethertype) != 0x8137)
+		{
+			/* The ethertype field isn't IPX. */
+			return;
+		}
+	}
+	else if(main_config.frame_type == FRAME_TYPE_NOVELL)
+	{
+		/* Configured for Novell "raw" Ethernet. */
+		
+		uint16_t eth_payload_len = ntohs(frame->length);
+		
+		if(eth_payload_len > 1500)
+		{
+			/* Too big, must be an Ethernet II frame (or garbage). */
+			return;
+		}
+		else if(eth_payload_len < sizeof(frame->packet))
+		{
+			/* Too small to hold an IPX header. */
+			return;
+		}
+		else if(eth_payload_len < ipx_packet_len)
+		{
+			/* Too small to hold the IPX payload within. */
+			return;
+		}
+	}
+	else{
+		/* Unknown frame type configured. */
+		abort();
 	}
 	
 	if(frame->packet.checksum != 0xFFFF)
@@ -517,7 +550,7 @@ static void _handle_pcap_frame(u_char *user, const struct pcap_pkthdr *pkt_heade
 		return;
 	}
 	
-	if(ntohs(frame->packet.length) > (pkt_header->caplen - (sizeof(*frame) - sizeof(frame->packet))))
+	if(ipx_packet_len > (pkt_header->caplen - (sizeof(*frame) - sizeof(frame->packet))))
 	{
 		/* The "length" field in the IPX header is too big. */
 		return;

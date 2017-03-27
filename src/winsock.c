@@ -1206,13 +1206,41 @@ static DWORD ipx_send_packet(
 				return ERROR_OUTOFMEMORY;
 			}
 			
-			log_printf(LOG_DEBUG, "...packet size = %d, frame size = %d",
+			log_printf(LOG_DEBUG, "...packet size = %u, frame size = %u",
 				(unsigned int)(packet_size), (unsigned int)(frame_size));
 			
 			addr48_out(frame->dest_mac, dest_node);
 			addr48_out(frame->src_mac, iface->mac_addr);
 			
-			frame->ethertype = htons(0x8137);
+			if(main_config.frame_type == FRAME_TYPE_ETH_II)
+			{
+				/* Configured for standard Ethernet. */
+				frame->ethertype = htons(0x8137);
+			}
+			else if(main_config.frame_type == FRAME_TYPE_NOVELL)
+			{
+				/* Configured for Novell "raw" Ethernet. */
+				
+				if(packet_size > 1500)
+				{
+					/* Can't fit a payload this big into a
+					 * Novell Ethernet frame.
+					*/
+					
+					log_printf(LOG_ERROR,
+						"Tried sending a %u byte packet in a Novell (\"raw\") Ethernet frame",
+						(unsigned int)(packet_size));
+					
+					free(frame);
+					return WSAEMSGSIZE;
+				}
+				
+				frame->length = htons(packet_size);
+			}
+			else{
+				/* Unknown frame type configured. */
+				abort();
+			}
 			
 			frame->packet.checksum = 0xFFFF;
 			frame->packet.length   = htons(packet_size);
