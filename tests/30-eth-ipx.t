@@ -1,5 +1,5 @@
 # IPXWrapper test suite
-# Copyright (C) 2014 Daniel Collins <solemnwarning@solemnwarning.net>
+# Copyright (C) 2014-2017 Daniel Collins <solemnwarning@solemnwarning.net>
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License version 2 as published by
@@ -23,6 +23,7 @@ use FindBin;
 use lib "$FindBin::Bin/lib/";
 
 use IPXWrapper::Capture::IPX;
+use IPXWrapper::Capture::IPXNovell;
 use IPXWrapper::Tool::IPXRecv;
 use IPXWrapper::Util;
 
@@ -40,16 +41,11 @@ our $ptype_capture_class;
 
 my $node_c_net = "00:00:00:00";
 
-describe "IPXWrapper using Ethernet encapsulation" => sub
+my $ipx_eth_capture_class;
+my $ipx_eth_send_func;
+
+shared_examples_for "ipx over ethernet" => sub
 {
-	before all => sub
-	{
-		reg_delete_key($remote_ip_a, "HKCU\\Software\\IPXWrapper");
-		reg_set_dword( $remote_ip_a, "HKCU\\Software\\IPXWrapper", "use_pcap", 1);
-		reg_set_addr(  $remote_ip_a, "HKCU\\Software\\IPXWrapper\\$remote_mac_a", "net", "00:00:00:01");
-		reg_set_addr(  $remote_ip_a, "HKCU\\Software\\IPXWrapper\\$remote_mac_b", "net", "00:00:00:00");
-	};
-	
 	describe "unicast packets" => sub
 	{
 		they "are received" => sub
@@ -59,7 +55,7 @@ describe "IPXWrapper using Ethernet encapsulation" => sub
 				"00:00:00:00", $remote_mac_a, "4444",
 			);
 			
-			send_ipx_packet($local_dev_a,
+			$ipx_eth_send_func->($local_dev_a,
 				tc   => 0,
 				type => 0,
 				
@@ -94,7 +90,7 @@ describe "IPXWrapper using Ethernet encapsulation" => sub
 		
 		they "are transmitted" => sub
 		{
-			my $capture = IPXWrapper::Capture::IPX->new($local_dev_a);
+			my $capture = $ipx_eth_capture_class->new($local_dev_a);
 			
 			run_remote_cmd(
 				$remote_ip_a, "Z:\\tools\\ipx-send.exe",
@@ -127,7 +123,7 @@ describe "IPXWrapper using Ethernet encapsulation" => sub
 	{
 		they "are transmitted by sockets with SO_BROADCAST" => sub
 		{
-			my $capture = IPXWrapper::Capture::IPX->new($local_dev_a);
+			my $capture = $ipx_eth_capture_class->new($local_dev_a);
 			
 			run_remote_cmd(
 				$remote_ip_a, "Z:\\tools\\ipx-send.exe",
@@ -160,8 +156,8 @@ describe "IPXWrapper using Ethernet encapsulation" => sub
 		
 		they "are only transmitted on the bound interface (Network A)" => sub
 		{
-			my $capture_a = IPXWrapper::Capture::IPX->new($local_dev_a);
-			my $capture_b = IPXWrapper::Capture::IPX->new($local_dev_b);
+			my $capture_a = $ipx_eth_capture_class->new($local_dev_a);
+			my $capture_b = $ipx_eth_capture_class->new($local_dev_b);
 			
 			run_remote_cmd(
 				$remote_ip_a, "Z:\\tools\\ipx-send.exe",
@@ -197,8 +193,8 @@ describe "IPXWrapper using Ethernet encapsulation" => sub
 		
 		they "are only transmitted on the bound interface (Network B)" => sub
 		{
-			my $capture_a = IPXWrapper::Capture::IPX->new($local_dev_a);
-			my $capture_b = IPXWrapper::Capture::IPX->new($local_dev_b);
+			my $capture_a = $ipx_eth_capture_class->new($local_dev_a);
+			my $capture_b = $ipx_eth_capture_class->new($local_dev_b);
 			
 			run_remote_cmd(
 				$remote_ip_a, "Z:\\tools\\ipx-send.exe",
@@ -239,7 +235,7 @@ describe "IPXWrapper using Ethernet encapsulation" => sub
 				"-b", "00:00:00:00", $remote_mac_a, "4444",
 			);
 			
-			send_ipx_packet($local_dev_a,
+			$ipx_eth_send_func->($local_dev_a,
 				tc   => 0,
 				type => 0,
 				
@@ -276,7 +272,7 @@ describe "IPXWrapper using Ethernet encapsulation" => sub
 				"-b", "00:00:00:00", $remote_mac_b, "4444",
 			);
 			
-			send_ipx_packet($local_dev_a,
+			$ipx_eth_send_func->($local_dev_a,
 				tc   => 0,
 				type => 0,
 				
@@ -313,7 +309,7 @@ describe "IPXWrapper using Ethernet encapsulation" => sub
 				"-b", "00:00:00:00", $remote_mac_a, "4444",
 			);
 			
-			send_ipx_packet($local_dev_a,
+			$ipx_eth_send_func->($local_dev_a,
 				tc   => 0,
 				type => 0,
 				
@@ -344,7 +340,7 @@ describe "IPXWrapper using Ethernet encapsulation" => sub
 				"00:00:00:00", $remote_mac_a, "4444",
 			);
 			
-			send_ipx_packet($local_dev_a,
+			$ipx_eth_send_func->($local_dev_a,
 				tc   => 0,
 				type => 0,
 				
@@ -375,7 +371,7 @@ describe "IPXWrapper using Ethernet encapsulation" => sub
 				"00:00:00:00", $remote_mac_a, "4444",
 			);
 			
-			send_ipx_packet($local_dev_a,
+			$ipx_eth_send_func->($local_dev_a,
 				tc   => 0,
 				type => 0,
 				
@@ -413,7 +409,7 @@ describe "IPXWrapper using Ethernet encapsulation" => sub
 				"-r", "-b", "00:00:00:00", $remote_mac_a, "4444",
 			);
 			
-			send_ipx_packet($local_dev_a,
+			$ipx_eth_send_func->($local_dev_a,
 				tc   => 0,
 				type => 0,
 				
@@ -463,7 +459,7 @@ describe "IPXWrapper using Ethernet encapsulation" => sub
 				"-r", "-b", "00:00:00:00", $remote_mac_a, "4444",
 			);
 			
-			send_ipx_packet($local_dev_a,
+			$ipx_eth_send_func->($local_dev_a,
 				tc   => 0,
 				type => 0,
 				
@@ -507,13 +503,13 @@ describe "IPXWrapper using Ethernet encapsulation" => sub
 	
 	before all => sub
 	{
-		$ptype_capture_class = "IPXWrapper::Capture::IPX";
+		$ptype_capture_class = $ipx_eth_capture_class;
 		
 		$ptype_send_func = sub
 		{
 			my ($type, $data) = @_;
 			
-			send_ipx_packet($local_dev_a,
+			$ipx_eth_send_func->($local_dev_a,
 				tc   => 0,
 				type => $type,
 				
@@ -531,6 +527,40 @@ describe "IPXWrapper using Ethernet encapsulation" => sub
 	};
 	
 	it_should_behave_like "ipx packet type handling";
+};
+
+describe "IPXWrapper using Ethernet encapsulation" => sub
+{
+	before all => sub
+	{
+		reg_delete_key($remote_ip_a, "HKCU\\Software\\IPXWrapper");
+		reg_set_dword( $remote_ip_a, "HKCU\\Software\\IPXWrapper", "use_pcap", 1);
+		reg_set_dword( $remote_ip_a, "HKCU\\Software\\IPXWrapper", "frame_type", 1);
+		reg_set_addr(  $remote_ip_a, "HKCU\\Software\\IPXWrapper\\$remote_mac_a", "net", "00:00:00:01");
+		reg_set_addr(  $remote_ip_a, "HKCU\\Software\\IPXWrapper\\$remote_mac_b", "net", "00:00:00:00");
+		
+		$ipx_eth_capture_class = "IPXWrapper::Capture::IPX";
+		$ipx_eth_send_func     = \&send_ipx_packet_ethernet;
+	};
+	
+	it_should_behave_like "ipx over ethernet";
+};
+
+describe "IPXWrapper using Novell Ethernet encapsulation" => sub
+{
+	before all => sub
+	{
+		reg_delete_key($remote_ip_a, "HKCU\\Software\\IPXWrapper");
+		reg_set_dword( $remote_ip_a, "HKCU\\Software\\IPXWrapper", "use_pcap", 1);
+		reg_set_dword( $remote_ip_a, "HKCU\\Software\\IPXWrapper", "frame_type", 2);
+		reg_set_addr(  $remote_ip_a, "HKCU\\Software\\IPXWrapper\\$remote_mac_a", "net", "00:00:00:01");
+		reg_set_addr(  $remote_ip_a, "HKCU\\Software\\IPXWrapper\\$remote_mac_b", "net", "00:00:00:00");
+		
+		$ipx_eth_capture_class = "IPXWrapper::Capture::IPXNovell";
+		$ipx_eth_send_func     = \&send_ipx_packet_novell;
+	};
+	
+	it_should_behave_like "ipx over ethernet";
 };
 
 runtests unless caller;

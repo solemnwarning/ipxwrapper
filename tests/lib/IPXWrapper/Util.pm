@@ -1,5 +1,5 @@
 # IPXWrapper test suite
-# Copyright (C) 2014 Daniel Collins <solemnwarning@solemnwarning.net>
+# Copyright (C) 2014-2017 Daniel Collins <solemnwarning@solemnwarning.net>
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License version 2 as published by
@@ -30,7 +30,8 @@ our @EXPORT = qw(
 	reg_delete_value
 	
 	send_ipx_over_udp
-	send_ipx_packet
+	send_ipx_packet_ethernet
+	send_ipx_packet_novell
 	
 	cmp_hashes_partial
 	
@@ -134,7 +135,7 @@ sub _send_ethernet_frame
 		or die("Couldn't transmit frame on device $dev");
 }
 
-sub send_ipx_packet
+sub send_ipx_packet_ethernet
 {
 	my ($dev, %options) = @_;
 	
@@ -143,6 +144,18 @@ sub send_ipx_packet
 	_send_ethernet_frame($dev,
 		$packet->{dest_node}, $packet->{src_node}, 0x8137,
 		$packet->encode());
+}
+
+sub send_ipx_packet_novell
+{
+	my ($dev, %options) = @_;
+	
+	my $packet     = NetPacket::IPX->new(%options);
+	my $enc_packet = $packet->encode();
+	
+	_send_ethernet_frame($dev,
+		$packet->{dest_node}, $packet->{src_node}, length($enc_packet),
+		$enc_packet);
 }
 
 sub cmp_hashes_partial
