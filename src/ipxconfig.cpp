@@ -117,6 +117,8 @@ static struct {
 	HWND opt_log_trace;
 	HWND opt_fw_except;
 	HWND opt_use_pcap;
+	HWND opt_frame_type_lbl;
+	HWND opt_frame_type;
 	
 	HWND ok_btn;
 	HWND can_btn;
@@ -180,6 +182,8 @@ static LRESULT CALLBACK main_wproc(HWND window, UINT msg, WPARAM wp, LPARAM lp) 
 					
 					case ID_OPT_USE_PCAP: {
 						main_config.use_pcap = get_checkbox(wh.opt_use_pcap);
+						
+						EnableWindow(wh.opt_frame_type, PCAP_INSTALLED && main_config.use_pcap);
 						
 						reload_nics();
 						
@@ -517,6 +521,8 @@ static bool save_config()
 		}
 	}
 	
+	main_config.frame_type = (main_config_frame_type)(ComboBox_GetCurSel(wh.opt_frame_type) + 1);
+	
 	for(auto i = nics.begin(); i != nics.end(); i++)
 	{
 		if(!set_iface_config(i->hwaddr, &(i->config)))
@@ -598,6 +604,7 @@ static void main_window_init()
 	 * | □ Log WinSock API calls                                 |
 	 * | □ Automatically create Windows Firewall exceptions      |
 	 * | □ Send and receive real IPX packets                     |
+	 * |         Frame type   | Ethernet II  |▼|                 |
 	 * +---------------------------------------------------------+
 	*/
 	
@@ -618,13 +625,22 @@ static void main_window_init()
 		wh.opt_fw_except = create_checkbox(wh.box_options, "Automatically create Windows Firewall exceptions", ID_OPT_FW_EXCEPT);
 		wh.opt_use_pcap  = create_checkbox(wh.box_options, "Send and receive real IPX packets", ID_OPT_USE_PCAP);
 		
+		wh.opt_frame_type_lbl = create_STATIC(wh.box_options, "Frame type");
+		wh.opt_frame_type     = create_child( wh.box_options, WC_COMBOBOX, NULL, CBS_DROPDOWNLIST | CBS_HASSTRINGS, 0);
+		
 		set_checkbox(wh.opt_w95,       main_config.w95_bug);
 		set_checkbox(wh.opt_log_debug, main_config.log_level <= LOG_DEBUG);
 		set_checkbox(wh.opt_log_trace, main_config.log_level <= LOG_CALL);
 		set_checkbox(wh.opt_fw_except, main_config.fw_except);
 		set_checkbox(wh.opt_use_pcap,  main_config.use_pcap);
 		
-		EnableWindow(wh.opt_use_pcap,  PCAP_INSTALLED);
+		ComboBox_AddString(wh.opt_frame_type, "Ethernet II");
+		ComboBox_AddString(wh.opt_frame_type, "Novell \"raw\" 802.3");
+		
+		ComboBox_SetCurSel(wh.opt_frame_type, main_config.frame_type - 1);
+		
+		EnableWindow(wh.opt_use_pcap,   PCAP_INSTALLED);
+		EnableWindow(wh.opt_frame_type, PCAP_INSTALLED && main_config.use_pcap);
 	}
 	
 	wh.ok_btn  = create_child(wh.main, "BUTTON", "OK",     BS_PUSHBUTTON | WS_TABSTOP, 0, ID_OK);
@@ -711,6 +727,21 @@ static void main_window_resize(int width, int height)
 	
 	int port_w = get_text_width(wh.nic_node, "000000");
 	
+	/* Find the longest frame type (in horizontal pixels) and multiply it
+	 * by 1.5 to get the width of the frame type ComboBox, should be at
+	 * least wide enough to avoid truncating them.
+	*/
+	
+	int ft_w = 0;
+	for(int count = ComboBox_GetCount(wh.opt_frame_type), i = 0; i < count; ++i)
+	{
+		char ft_label[256];
+		ComboBox_GetLBText(wh.opt_frame_type, i, ft_label);
+		
+		int this_ft_w = get_text_width(wh.opt_frame_type, ft_label) * 1.5;
+		ft_w = std::max(ft_w, this_ft_w);
+	}
+	
 	MoveWindow(wh.opt_port_lbl, 10,         box_options_y + edge, lbl_w,  text_h, TRUE);
 	MoveWindow(wh.opt_port,     15 + lbl_w, box_options_y,        port_w, edit_h, TRUE);
 	box_options_y += edit_h + 4;
@@ -730,9 +761,13 @@ static void main_window_resize(int width, int height)
 	MoveWindow(wh.opt_use_pcap,  10, box_options_y, width - 20, text_h, TRUE);
 	box_options_y += text_h + 2;
 	
-	int box_options_h = box_options_y + 2;
+	MoveWindow(wh.opt_frame_type_lbl,  10,         box_options_y + edge, lbl_w, text_h, TRUE);
+	MoveWindow(wh.opt_frame_type,      15 + lbl_w, box_options_y,        ft_w,  height, TRUE);
+	box_options_y += edit_h + 2;
 	
-	MoveWindow(wh.box_options, 0, height - box_options_y - btn_h - 12, width, box_options_h, TRUE);
+	int box_options_h = box_options_y + 6;
+	
+	MoveWindow(wh.box_options, 0, height - box_options_y - btn_h - 16, width, box_options_h, TRUE);
 	
 	/* NICs
 	 * Fills available space between primary interface and options.
