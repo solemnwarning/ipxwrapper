@@ -17,6 +17,8 @@ src/common.c
 src/common.h
 src/config.c
 src/config.h
+src/ethernet.c
+src/ethernet.h
 src/directplay.c
 src/dpwsockx.def
 src/dpwsockx_stubs.txt
