@@ -518,6 +518,14 @@ static void _handle_pcap_frame(u_char *user, const struct pcap_pkthdr *pkt_heade
 			}
 			
 			break;
+			
+		case FRAME_TYPE_LLC:
+			if(!llc_frame_unpack(&ipx, &ipx_len, pkt_data, pkt_header->caplen))
+			{
+				return;
+			}
+			
+			break;
 	}
 	
 	if(ipx->checksum != 0xFFFF)

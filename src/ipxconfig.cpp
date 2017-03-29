@@ -636,6 +636,7 @@ static void main_window_init()
 		
 		ComboBox_AddString(wh.opt_frame_type, "Ethernet II");
 		ComboBox_AddString(wh.opt_frame_type, "Novell \"raw\" 802.3");
+		ComboBox_AddString(wh.opt_frame_type, "IEEE 802.2 (LLC)");
 		
 		ComboBox_SetCurSel(wh.opt_frame_type, main_config.frame_type - 1);
 		

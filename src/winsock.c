@@ -59,6 +59,9 @@ static int _max_ipx_payload(void)
 			case FRAME_TYPE_ETH_II:
 			case FRAME_TYPE_NOVELL:
 				return 1500 - (14 + sizeof(novell_ipx_packet));
+				
+			case FRAME_TYPE_LLC:
+				return 1500 - (17 + sizeof(novell_ipx_packet));
 		}
 		
 		abort();
@@ -1227,6 +1230,10 @@ static DWORD ipx_send_packet(
 				case FRAME_TYPE_NOVELL:
 					frame_size = novell_frame_size(data_size);
 					break;
+					
+				case FRAME_TYPE_LLC:
+					frame_size = llc_frame_size(data_size);
+					break;
 			}
 			
 			/* TODO: Check frame_size against interface MTU */
@@ -1262,6 +1269,14 @@ static DWORD ipx_send_packet(
 					
 				case FRAME_TYPE_NOVELL:
 					novell_frame_pack(frame,
+						type,
+						src_net,  src_node,  src_socket,
+						dest_net, dest_node, dest_socket,
+						data, data_size);
+					break;
+					
+				case FRAME_TYPE_LLC:
+					llc_frame_pack(frame,
 						type,
 						src_net,  src_node,  src_socket,
 						dest_net, dest_node, dest_socket,

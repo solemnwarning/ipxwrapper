@@ -62,6 +62,19 @@ struct ethernet_header
 	};
 } __attribute__((__packed__));
 
+#define LLC_SAP_NETWARE 0xE0
+
+typedef struct llc_header llc_header;
+
+struct llc_header
+{
+	uint8_t dsap;
+	uint8_t ssap;
+	
+	/* TODO: Support for 16-bit control fields? */
+	uint8_t control;
+} __attribute__((__packed__));
+
 static void _pack_ipx_packet(void *buf,
 	uint8_t type,
 	addr32_t src_net,  addr48_t src_node,  uint16_t src_socket,
@@ -205,6 +218,101 @@ bool novell_frame_unpack(const novell_ipx_packet **packet, size_t *packet_len, c
 	
 	*packet     = (const novell_ipx_packet*)(eth_h + 1);
 	*packet_len = payload_len;
+	
+	return true;
+}
+
+size_t llc_frame_size(size_t ipx_payload_len)
+{
+	static const size_t OVERHEAD
+		= sizeof(ethernet_header)
+		+ sizeof(llc_header)
+		+ sizeof(novell_ipx_packet);
+	
+	if(ipx_payload_len > NOVELL_IPX_PACKET_MAX_PAYLOAD
+		|| ipx_payload_len > (1500 - OVERHEAD))
+	{
+		return 0;
+	}
+	
+	return OVERHEAD + ipx_payload_len;
+}
+
+void llc_frame_pack(void *frame_buffer,
+	uint8_t type,
+	addr32_t src_net,  addr48_t src_node,  uint16_t src_socket,
+	addr32_t dst_net, addr48_t dst_node, uint16_t dst_socket,
+	const void *payload, size_t payload_len)
+{
+	ethernet_header *eth_h = frame_buffer;
+	
+	addr48_out(eth_h->dest_mac, dst_node);
+	addr48_out(eth_h->src_mac,  src_node);
+	eth_h->length = htons(sizeof(llc_header) + sizeof(novell_ipx_packet) + payload_len);
+	
+	llc_header *llc_h = (llc_header*)(eth_h + 1);
+	
+	llc_h->dsap    = LLC_SAP_NETWARE;
+	llc_h->ssap    = LLC_SAP_NETWARE;
+	llc_h->control = 0x03;
+	
+	_pack_ipx_packet(llc_h + 1,
+		type,
+		src_net, src_node, src_socket,
+		dst_net, dst_node, dst_socket,
+		payload, payload_len);
+}
+
+bool llc_frame_unpack(const novell_ipx_packet **packet, size_t *packet_len, const void *frame_data, size_t frame_len)
+{
+	if(frame_len < (sizeof(ethernet_header) + sizeof(llc_header) + sizeof(novell_ipx_packet)))
+	{
+		/* Frame is too small to contain all the necessary headers. */
+		return false;
+	}
+	
+	const ethernet_header *eth_h = frame_data;
+	const llc_header      *llc_h = (const llc_header*)(eth_h + 1);
+	
+	uint16_t payload_len = ntohs(eth_h->length);
+	
+	if(payload_len > 1500)
+	{
+		/* Payload length too big, probably an Ethernet II frame. */
+		return false;
+	}
+	else if(payload_len < (sizeof(llc_header) + sizeof(novell_ipx_packet)))
+	{
+		/* Payload length too short to hold all the headers required
+		 * for an IPX packet.
+		*/
+		return false;
+	}
+	else if(payload_len > (frame_len - sizeof(ethernet_header)))
+	{
+		/* Payload length runs past the end of frame_len, was the frame
+		 * somehow truncated?
+		*/
+		return false;
+	}
+	else{
+		/* Payload length looks good. */
+	}
+	
+	if(llc_h->dsap != LLC_SAP_NETWARE)
+	{
+		/* Not addressed to the Netware SAP. */
+		return false;
+	}
+	
+	if(llc_h->control != 0x03)
+	{
+		/* Some link layer control message. Probably. */
+		return false;
+	}
+	
+	*packet     = (const novell_ipx_packet*)(llc_h + 1);
+	*packet_len = payload_len - sizeof(llc_header);
 	
 	return true;
 }

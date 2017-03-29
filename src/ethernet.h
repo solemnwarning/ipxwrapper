@@ -85,4 +85,13 @@ void novell_frame_pack(void *frame_buffer,
 bool novell_frame_unpack(const novell_ipx_packet **packet, size_t *packet_len,
 	const void *frame_data, size_t frame_len);
 
+size_t llc_frame_size(size_t ipx_payload_len);
+void llc_frame_pack(void *frame_buffer,
+	uint8_t type,
+	addr32_t src_net,  addr48_t src_node,  uint16_t src_socket,
+	addr32_t dest_net, addr48_t dest_node, uint16_t dest_socket,
+	const void *payload, size_t payload_len);
+bool llc_frame_unpack(const novell_ipx_packet **packet, size_t *packet_len,
+	const void *frame_data, size_t frame_len);
+
 #endif /* !IPXWRAPPER_ETHERNET_H */

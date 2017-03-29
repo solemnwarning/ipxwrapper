@@ -503,5 +503,343 @@ int main()
 		0x04, 0xD2,                         /* Source socket */
 	);
 	
+	/* +----------------+
+	 * | llc_frame_size |
+	 * +----------------+
+	*/
+	
+	CHECK_FRAME_SIZE(llc_frame_size, 0,    47);
+	CHECK_FRAME_SIZE(llc_frame_size, 50,   97);
+	CHECK_FRAME_SIZE(llc_frame_size, 1453, 1500);
+	CHECK_FRAME_SIZE(llc_frame_size, 1454, 0);
+	
+	/* +================+
+	 * | llc_frame_pack |
+	 * +================+
+	*/
+	
+	{
+		uint8_t ptype = 0x42;
+		
+		addr32_t src_net    = addr32_in((unsigned char[]){ 0xDE, 0xAD, 0xBE, 0xEF });
+		addr48_t src_node   = addr48_in((unsigned char[]){ 0x0B, 0xAD, 0x0B, 0xEE, 0xF0, 0x0D });
+		uint16_t src_socket = htons(1234);
+		
+		addr32_t dst_net    = addr32_in((unsigned char[]){ 0xBE, 0xEF, 0x0D, 0xAD });
+		addr48_t dst_node   = addr48_in((unsigned char[]){ 0x99, 0xB0, 0x77, 0x1E, 0x50, 0x00 });
+		uint16_t dst_socket = htons(9876);
+		
+		static const char payload[] = { 0x00, 0xFF, 0x12, 0x34 };
+		
+		unsigned char buf[1024];
+		llc_frame_pack(&buf,
+			ptype,
+			src_net, src_node, src_socket,
+			dst_net, dst_node, dst_socket,
+			payload, sizeof(payload));
+		
+		static const unsigned char expect[] = {
+			/* Ethernet header */
+			0x99, 0xB0, 0x77, 0x1E, 0x50, 0x00, /* Destination MAC */
+			0x0B, 0xAD, 0x0B, 0xEE, 0xF0, 0x0D, /* Source MAC */
+			0x00, 0x25,                         /* Payload length */
+			
+			/* LLC header */
+			0xE0,                               /* DSAP */
+			0xE0,                               /* SSAP */
+			0x03,                               /* Control */
+			
+			/* IPX header */
+			0xFF, 0xFF,                         /* Checksum */
+			0x00, 0x22,                         /* Length */
+			0x00,                               /* Hops */
+			0x42,                               /* Type */
+			
+			0xBE, 0xEF, 0x0D, 0xAD,             /* Destination network */
+			0x99, 0xB0, 0x77, 0x1E, 0x50, 0x00, /* Destination node */
+			0x26, 0x94,                         /* Destination socket */
+			
+			0xDE, 0xAD, 0xBE, 0xEF,             /* Source network */
+			0x0B, 0xAD, 0x0B, 0xEE, 0xF0, 0x0D, /* Source node */
+			0x04, 0xD2,                         /* Source socket */
+			
+			/* Payload */
+			0x00, 0xFF, 0x12, 0x34,
+		};
+		
+		is_blob(expect, buf, sizeof(expect), "llc_frame_pack() serialises correctly");
+	}
+	
+	/* +------------------+
+	 * | llc_frame_unpack |
+	 * +------------------+
+	*/
+	
+	/* Frame with smallest possible IPX packet (30 bytes) */
+	UNPACK_GOOD_FRAME(llc_frame_unpack,
+		"frame with 30 byte packet",
+		
+		17, /* Offset of IPX packet */
+		30, /* Length of IPX packet */
+		
+		/* Frame length */
+		47,
+		
+		/* Ethernet header */
+		0x99, 0xB0, 0x77, 0x1E, 0x50, 0x00, /* Destination MAC */
+		0x0B, 0xAD, 0x0B, 0xEE, 0xF0, 0x0D, /* Source MAC */
+		0x00, 0x21,                         /* Payload length */
+		
+		/* LLC header */
+		0xE0,                               /* DSAP */
+		0xE0,                               /* SSAP */
+		0x03,                               /* Control */
+		
+		/* IPX header */
+		0xFF, 0xFF,                         /* Checksum */
+		0x00, 0x1E,                         /* Length */
+		0x00,                               /* Hops */
+		0x42,                               /* Type */
+		
+		0xBE, 0xEF, 0x0D, 0xAD,             /* Destination network */
+		0x99, 0xB0, 0x77, 0x1E, 0x50, 0x00, /* Destination node */
+		0x26, 0x94,                         /* Destination socket */
+		
+		0xDE, 0xAD, 0xBE, 0xEF,             /* Source network */
+		0x0B, 0xAD, 0x0B, 0xEE, 0xF0, 0x0D, /* Source node */
+		0x04, 0xD2,                         /* Source socket */
+	);
+	
+	/* Frame with an Ethernet II Ethertype rather than a length */
+	UNPACK_BAD_FRAME(llc_frame_unpack,
+		"frame with 30 byte packet and an Ethertype",
+		
+		/* Frame length */
+		47,
+		
+		/* Ethernet header */
+		0x99, 0xB0, 0x77, 0x1E, 0x50, 0x00, /* Destination MAC */
+		0x0B, 0xAD, 0x0B, 0xEE, 0xF0, 0x0D, /* Source MAC */
+		0x81, 0x37,                         /* Ethertype */
+		
+		/* LLC header */
+		0xE0,                               /* DSAP */
+		0xE0,                               /* SSAP */
+		0x03,                               /* Control */
+		
+		/* IPX header */
+		0xFF, 0xFF,                         /* Checksum */
+		0x00, 0x1E,                         /* Length */
+		0x00,                               /* Hops */
+		0x42,                               /* Type */
+		
+		0xBE, 0xEF, 0x0D, 0xAD,             /* Destination network */
+		0x99, 0xB0, 0x77, 0x1E, 0x50, 0x00, /* Destination node */
+		0x26, 0x94,                         /* Destination socket */
+		
+		0xDE, 0xAD, 0xBE, 0xEF,             /* Source network */
+		0x0B, 0xAD, 0x0B, 0xEE, 0xF0, 0x0D, /* Source node */
+		0x04, 0xD2,                         /* Source socket */
+	);
+	
+	/* Frame with largest allowable IPX packet (1497 bytes) */
+	UNPACK_GOOD_FRAME(llc_frame_unpack,
+		"frame with 1497 byte packet",
+		
+		17,   /* Offset of IPX packet */
+		1497, /* Length of IPX packet */
+		
+		/* Frame length */
+		1514,
+		
+		/* Ethernet header */
+		0x99, 0xB0, 0x77, 0x1E, 0x50, 0x00, /* Destination MAC */
+		0x0B, 0xAD, 0x0B, 0xEE, 0xF0, 0x0D, /* Source MAC */
+		0x05, 0xDC,                         /* Payload length */
+		
+		/* LLC header */
+		0xE0,                               /* DSAP */
+		0xE0,                               /* SSAP */
+		0x03,                               /* Control */
+		
+		/* IPX header */
+		0xFF, 0xFF,                         /* Checksum */
+		0x05, 0xD9,                         /* Length */
+		0x00,                               /* Hops */
+		0x42,                               /* Type */
+		
+		0xBE, 0xEF, 0x0D, 0xAD,             /* Destination network */
+		0x99, 0xB0, 0x77, 0x1E, 0x50, 0x00, /* Destination node */
+		0x26, 0x94,                         /* Destination socket */
+		
+		0xDE, 0xAD, 0xBE, 0xEF,             /* Source network */
+		0x0B, 0xAD, 0x0B, 0xEE, 0xF0, 0x0D, /* Source node */
+		0x04, 0xD2,                         /* Source socket */
+		
+		/* IPX payload (uninitialised) */
+	);
+	
+	/* Frame with 1501 length header (undefined behaviour) */
+	UNPACK_BAD_FRAME(llc_frame_unpack,
+		"frame with 1498 byte packet",
+		
+		/* Frame length */
+		1515,
+		
+		/* Ethernet header */
+		0x99, 0xB0, 0x77, 0x1E, 0x50, 0x00, /* Destination MAC */
+		0x0B, 0xAD, 0x0B, 0xEE, 0xF0, 0x0D, /* Source MAC */
+		0x05, 0xDD,                         /* Payload length */
+		
+		/* LLC header */
+		0xE0,                               /* DSAP */
+		0xE0,                               /* SSAP */
+		0x03,                               /* Control */
+		
+		/* IPX header */
+		0xFF, 0xFF,                         /* Checksum */
+		0x05, 0xDA,                         /* Length */
+		0x00,                               /* Hops */
+		0x42,                               /* Type */
+		
+		0xBE, 0xEF, 0x0D, 0xAD,             /* Destination network */
+		0x99, 0xB0, 0x77, 0x1E, 0x50, 0x00, /* Destination node */
+		0x26, 0x94,                         /* Destination socket */
+		
+		0xDE, 0xAD, 0xBE, 0xEF,             /* Source network */
+		0x0B, 0xAD, 0x0B, 0xEE, 0xF0, 0x0D, /* Source node */
+		0x04, 0xD2,                         /* Source socket */
+		
+		/* IPX payload (uninitialised) */
+	);
+	
+	/* Valid IPX packet within, but Ethernet payload length is too short */
+	UNPACK_BAD_FRAME(llc_frame_unpack,
+		"frame with valid packet but 32 bytes in length header",
+		
+		/* Frame length */
+		47,
+		
+		/* Ethernet header */
+		0x99, 0xB0, 0x77, 0x1E, 0x50, 0x00, /* Destination MAC */
+		0x0B, 0xAD, 0x0B, 0xEE, 0xF0, 0x0D, /* Source MAC */
+		0x00, 0x20,                         /* Payload length */
+		
+		/* LLC header */
+		0xE0,                               /* DSAP */
+		0xE0,                               /* SSAP */
+		0x03,                               /* Control */
+		
+		/* IPX header */
+		0xFF, 0xFF,                         /* Checksum */
+		0x00, 0x1E,                         /* Length */
+		0x00,                               /* Hops */
+		0x42,                               /* Type */
+		
+		0xBE, 0xEF, 0x0D, 0xAD,             /* Destination network */
+		0x99, 0xB0, 0x77, 0x1E, 0x50, 0x00, /* Destination node */
+		0x26, 0x94,                         /* Destination socket */
+		
+		0xDE, 0xAD, 0xBE, 0xEF,             /* Source network */
+		0x0B, 0xAD, 0x0B, 0xEE, 0xF0, 0x0D, /* Source node */
+		0x04, 0xD2,                         /* Source socket */
+	);
+	
+	/* Frame too short to hold all the headers */
+	UNPACK_BAD_FRAME(llc_frame_unpack,
+		"truncated frame - too short",
+		
+		/* Frame length */
+		46,
+		
+		/* Ethernet header */
+		0x99, 0xB0, 0x77, 0x1E, 0x50, 0x00, /* Destination MAC */
+		0x0B, 0xAD, 0x0B, 0xEE, 0xF0, 0x0D, /* Source MAC */
+		0x00, 0x20,                         /* Payload length */
+		
+		/* LLC header */
+		0xE0,                               /* DSAP */
+		0xE0,                               /* SSAP */
+		0x03,                               /* Control */
+		
+		/* IPX header */
+		0xFF, 0xFF,                         /* Checksum */
+		0x00, 0x1D,                         /* Length */
+		0x00,                               /* Hops */
+		0x42,                               /* Type */
+		
+		0xBE, 0xEF, 0x0D, 0xAD,             /* Destination network */
+		0x99, 0xB0, 0x77, 0x1E, 0x50, 0x00, /* Destination node */
+		0x26, 0x94,                         /* Destination socket */
+		
+		0xDE, 0xAD, 0xBE, 0xEF,             /* Source network */
+		0x0B, 0xAD, 0x0B, 0xEE, 0xF0, 0x0D, /* Source node */
+		0x04,                               /* Source socket (truncated) */
+	);
+	
+	/* Length runs past frame end */
+	UNPACK_BAD_FRAME(llc_frame_unpack,
+		"truncated frame - length runs past end",
+		
+		/* Frame length */
+		47,
+		
+		/* Ethernet header */
+		0x99, 0xB0, 0x77, 0x1E, 0x50, 0x00, /* Destination MAC */
+		0x0B, 0xAD, 0x0B, 0xEE, 0xF0, 0x0D, /* Source MAC */
+		0x00, 0x22,                         /* Payload length */
+		
+		/* LLC header */
+		0xE0,                               /* DSAP */
+		0xE0,                               /* SSAP */
+		0x03,                               /* Control */
+		
+		/* IPX header */
+		0xFF, 0xFF,                         /* Checksum */
+		0x00, 0x1F,                         /* Length */
+		0x00,                               /* Hops */
+		0x42,                               /* Type */
+		
+		0xBE, 0xEF, 0x0D, 0xAD,             /* Destination network */
+		0x99, 0xB0, 0x77, 0x1E, 0x50, 0x00, /* Destination node */
+		0x26, 0x94,                         /* Destination socket */
+		
+		0xDE, 0xAD, 0xBE, 0xEF,             /* Source network */
+		0x0B, 0xAD, 0x0B, 0xEE, 0xF0, 0x0D, /* Source node */
+		0x04, 0xD2,                         /* Source socket */
+	);
+	
+	/* Wrong DSAP */
+	UNPACK_BAD_FRAME(llc_frame_unpack,
+		"frame with wrong DSAP",
+		
+		/* Frame length */
+		47,
+		
+		/* Ethernet header */
+		0x99, 0xB0, 0x77, 0x1E, 0x50, 0x00, /* Destination MAC */
+		0x0B, 0xAD, 0x0B, 0xEE, 0xF0, 0x0D, /* Source MAC */
+		0x00, 0x21,                         /* Payload length */
+		
+		/* LLC header */
+		0xE1,                               /* DSAP */
+		0xE0,                               /* SSAP */
+		0x03,                               /* Control */
+		
+		/* IPX header */
+		0xFF, 0xFF,                         /* Checksum */
+		0x00, 0x1E,                         /* Length */
+		0x00,                               /* Hops */
+		0x42,                               /* Type */
+		
+		0xBE, 0xEF, 0x0D, 0xAD,             /* Destination network */
+		0x99, 0xB0, 0x77, 0x1E, 0x50, 0x00, /* Destination node */
+		0x26, 0x94,                         /* Destination socket */
+		
+		0xDE, 0xAD, 0xBE, 0xEF,             /* Source network */
+		0x0B, 0xAD, 0x0B, 0xEE, 0xF0, 0x0D, /* Source node */
+		0x04, 0xD2,                         /* Source socket */
+	);
+	
 	return 0;
 }
