@@ -107,6 +107,7 @@ void ethII_frame_pack(void *frame_buffer,
 	ethernet_header *eth_h = frame_buffer;
 	
 	addr48_out(eth_h->dest_mac, dst_node);
+	addr48_out(eth_h->src_mac,  src_node);
 	eth_h->ethertype = htons(ETHERTYPE_IPX);
 	
 	_pack_ipx_packet(eth_h + 1,
@@ -162,6 +163,7 @@ void novell_frame_pack(void *frame_buffer,
 	ethernet_header *eth_h = frame_buffer;
 	
 	addr48_out(eth_h->dest_mac, dst_node);
+	addr48_out(eth_h->src_mac,  src_node);
 	eth_h->length = htons(sizeof(novell_ipx_packet) + payload_len);
 	
 	_pack_ipx_packet(eth_h + 1,
