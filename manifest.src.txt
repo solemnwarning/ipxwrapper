@@ -73,6 +73,8 @@ tests/ethernet.c
 tests/ptype.pm
 
 tests/lib/IPXWrapper/Capture/IPX.pm
+tests/lib/IPXWrapper/Capture/IPXLLC.pm
+tests/lib/IPXWrapper/Capture/IPXNovell.pm
 tests/lib/IPXWrapper/Capture/IPXOverUDP.pm
 tests/lib/IPXWrapper/SPX.pm
 tests/lib/IPXWrapper/Tool/Bind.pm

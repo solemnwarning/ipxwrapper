@@ -23,6 +23,7 @@ use FindBin;
 use lib "$FindBin::Bin/lib/";
 
 use IPXWrapper::Capture::IPX;
+use IPXWrapper::Capture::IPXLLC;
 use IPXWrapper::Capture::IPXNovell;
 use IPXWrapper::Tool::IPXRecv;
 use IPXWrapper::Util;
@@ -558,6 +559,23 @@ describe "IPXWrapper using Novell Ethernet encapsulation" => sub
 		
 		$ipx_eth_capture_class = "IPXWrapper::Capture::IPXNovell";
 		$ipx_eth_send_func     = \&send_ipx_packet_novell;
+	};
+	
+	it_should_behave_like "ipx over ethernet";
+};
+
+describe "IPXWrapper using LLC (802.2) Ethernet encapsulation" => sub
+{
+	before all => sub
+	{
+		reg_delete_key($remote_ip_a, "HKCU\\Software\\IPXWrapper");
+		reg_set_dword( $remote_ip_a, "HKCU\\Software\\IPXWrapper", "use_pcap", 1);
+		reg_set_dword( $remote_ip_a, "HKCU\\Software\\IPXWrapper", "frame_type", 3);
+		reg_set_addr(  $remote_ip_a, "HKCU\\Software\\IPXWrapper\\$remote_mac_a", "net", "00:00:00:01");
+		reg_set_addr(  $remote_ip_a, "HKCU\\Software\\IPXWrapper\\$remote_mac_b", "net", "00:00:00:00");
+		
+		$ipx_eth_capture_class = "IPXWrapper::Capture::IPXLLC";
+		$ipx_eth_send_func     = \&send_ipx_packet_llc;
 	};
 	
 	it_should_behave_like "ipx over ethernet";
