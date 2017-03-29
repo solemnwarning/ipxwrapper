@@ -95,6 +95,8 @@ int is_string(const char *wanted, const char *seen, const char *format, ...)
     __attribute__((__format__(printf, 3, 4)));
 int is_hex(unsigned long wanted, unsigned long seen, const char *format, ...)
     __attribute__((__format__(printf, 3, 4)));
+int is_blob(const void *wanted, const void *seen, size_t len, const char *format, ...)
+    __attribute__((__format__(printf, 4, 5)));
 
 /* Bail out with an error.  sysbail appends strerror(errno). */
 void bail(const char *format, ...)

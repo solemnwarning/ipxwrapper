@@ -59,6 +59,7 @@ directplay-win32.reg
 directplay-win64.reg
 
 tests/05-addr.t
+tests/07-ethernet.t
 tests/10-socket.t
 tests/15-interfaces.t
 tests/20-bind.t
@@ -68,6 +69,7 @@ tests/40-ip-spx.t
 tests/50-dplay.t
 tests/addr.c
 tests/config.pm
+tests/ethernet.c
 tests/ptype.pm
 
 tests/lib/IPXWrapper/Capture/IPX.pm
