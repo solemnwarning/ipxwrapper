@@ -706,7 +706,8 @@ int ipx_interface_count(void)
 	return count;
 }
 
-#define PCAP_NAME_PREFIX "rpcap://\\Device\\NPF_"
+#define PCAP_NAME_PREFIX_OLD "rpcap://\\Device\\NPF_"
+#define PCAP_NAME_PREFIX_NEW "rpcap://"
 
 ipx_pcap_interface_t *ipx_get_pcap_interfaces(void)
 {
@@ -726,10 +727,23 @@ ipx_pcap_interface_t *ipx_get_pcap_interfaces(void)
 	
 	for(pcap_if_t *pcap_if = pcap_interfaces; pcap_if; pcap_if = pcap_if->next)
 	{
-		if(strncmp(pcap_if->name, PCAP_NAME_PREFIX, strlen(PCAP_NAME_PREFIX)) == 0)
+		const char *ifname = NULL;
+		
+		if(strncmp(pcap_if->name, PCAP_NAME_PREFIX_OLD, strlen(PCAP_NAME_PREFIX_OLD)) == 0)
 		{
-			char *ifname = pcap_if->name + strlen(PCAP_NAME_PREFIX);
-			
+			ifname = pcap_if->name + strlen(PCAP_NAME_PREFIX_OLD);
+		}
+		else if(strncmp(pcap_if->name, PCAP_NAME_PREFIX_NEW, strlen(PCAP_NAME_PREFIX_NEW)) == 0)
+		{
+			ifname = pcap_if->name + strlen(PCAP_NAME_PREFIX_NEW);
+		}
+		else{
+			log_printf(LOG_WARNING, "WinPcap interface with unexpected name format: '%s'", pcap_if->name);
+			log_printf(LOG_WARNING, "This interface will not be available for IPX use");
+		}
+		
+		if(ifname != NULL)
+		{
 			IP_ADAPTER_INFO *ip_if = ip_interfaces;
 			while(ip_if && strcmp(ip_if->AdapterName, ifname))
 			{
@@ -768,10 +782,6 @@ ipx_pcap_interface_t *ipx_get_pcap_interfaces(void)
 				log_printf(LOG_WARNING, "Could not determine MAC address of WinPcap interface '%s'", pcap_if->name);
 				log_printf(LOG_WARNING, "This interface will not be available for IPX use");
 			}
-		}
-		else{
-			log_printf(LOG_WARNING, "WinPcap interface with unexpected name format: '%s'", pcap_if->name);
-			log_printf(LOG_WARNING, "This interface will not be available for IPX use");
 		}
 	}
 	

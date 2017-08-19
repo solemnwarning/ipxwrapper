@@ -88,7 +88,9 @@ describe "A single DirectPlay client" => sub
 	{
 		my ($host, $client) = $single_client_common_init->();
 		
-		my $host_player    = $host->create_player("host");
+		my $host_player = $host->create_player("host");
+		sleep(PROP_TIME);
+		
 		my %client_players = $client->list_players();
 		
 		cmp_deeply(\%client_players, {
@@ -101,7 +103,9 @@ describe "A single DirectPlay client" => sub
 		my ($host, $client) = $single_client_common_init->();
 		
 		my $client_player = $client->create_player("client");
-		my %host_players  = $host->list_players();
+		sleep(PROP_TIME);
+		
+		my %host_players = $host->list_players();
 		
 		cmp_deeply(\%host_players, {
 			$client_player => "client",
@@ -114,6 +118,7 @@ describe "A single DirectPlay client" => sub
 		
 		my $host_player   = $host->create_player("host");
 		my $client_player = $client->create_player("client");
+		sleep(PROP_TIME);
 		
 		$host->send_message($host_player, $client_player, "foreordainment");
 		
@@ -142,6 +147,7 @@ describe "A single DirectPlay client" => sub
 		
 		my $host_player   = $host->create_player("host");
 		my $client_player = $client->create_player("client");
+		sleep(PROP_TIME);
 		
 		$client->send_message($client_player, $host_player, "iskenderun");
 		
@@ -250,6 +256,7 @@ describe "Concurrent DirectPlay clients" => sub
 		my $host_player = $host->create_player("host");
 		my $ca_player   = $client_a->create_player("client_a");
 		my $cb_player   = $client_b->create_player("client_b");
+		sleep(PROP_TIME);
 		
 		$host->send_message($host_player, $ca_player, "myrmecophilous");
 		$host->send_message($host_player, $cb_player, "indigestibly");
@@ -289,10 +296,9 @@ describe "Concurrent DirectPlay clients" => sub
 		my $host_player = $host->create_player("host");
 		my $ca_player   = $client_a->create_player("client_a");
 		my $cb_player   = $client_b->create_player("client_b");
-		
-		$client_a->send_message($ca_player, $host_player, "unvivid");
 		sleep(PROP_TIME);
 		
+		$client_a->send_message($ca_player, $host_player, "unvivid");
 		$client_b->send_message($cb_player, $host_player, "matrilateral");
 		sleep(PROP_TIME);
 		
@@ -328,6 +334,7 @@ describe "Concurrent DirectPlay clients" => sub
 		my $host_player = $host->create_player("host");
 		my $ca_player   = $client_a->create_player("client_a");
 		my $cb_player   = $client_b->create_player("client_b");
+		sleep(PROP_TIME);
 		
 		$client_a->send_message($ca_player, $cb_player, "postpuberty");
 		$client_b->send_message($cb_player, $ca_player, "veridic");
@@ -367,10 +374,9 @@ describe "Concurrent DirectPlay clients" => sub
 		my $host_player = $host->create_player("host");
 		my $ca_player   = $client_a->create_player("client_a");
 		my $cb_player   = $client_b->create_player("client_b");
-		
-		$client_a->send_message($ca_player, DPID_ALLPLAYERS, "kendrew");
 		sleep(PROP_TIME);
 		
+		$client_a->send_message($ca_player, DPID_ALLPLAYERS, "kendrew");
 		$client_b->send_message($cb_player, DPID_ALLPLAYERS, "derivation");
 		sleep(PROP_TIME);
 		

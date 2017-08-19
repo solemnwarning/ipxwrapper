@@ -59,9 +59,9 @@ static void init_cs(CRITICAL_SECTION *cs)
 	}
 }
 
-BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res)
+BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 {
-	if(why == DLL_PROCESS_ATTACH)
+	if(fdwReason == DLL_PROCESS_ATTACH)
 	{
 		log_open("ipxwrapper.log");
 		
@@ -105,8 +105,18 @@ BOOL WINAPI DllMain(HINSTANCE me, DWORD why, LPVOID res)
 		
 		router_init();
 	}
-	else if(why == DLL_PROCESS_DETACH)
+	else if(fdwReason == DLL_PROCESS_DETACH)
 	{
+		/* When the "lpvReserved" parameter is non-NULL, the process is terminating rather
+		 * than the DLL being unloaded dynamically and any threads will have been terminated
+		 * at unknown points, meaning any global data may be in an inconsistent state and we
+		 * cannot (safely) clean up. MSDN states we should do nothing.
+		*/
+		if(lpvReserved != NULL)
+		{
+			return TRUE;
+		}
+		
 		router_cleanup();
 		
 		WSACleanup();

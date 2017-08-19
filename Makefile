@@ -32,8 +32,8 @@ endif
 
 INCLUDE := -I./include/
 
-CFLAGS   := -std=c99 -Wall -D_WIN32_WINNT=0x0500 -DHAVE_REMOTE $(DBG_OPT) $(INCLUDE)
-CXXFLAGS := -std=c++0x -Wall -DHAVE_REMOTE $(DBG_OPT) $(INCLUDE)
+CFLAGS   := -std=c99 -mno-ms-bitfields -Wall -D_WIN32_WINNT=0x0500 -DHAVE_REMOTE $(DBG_OPT) $(INCLUDE)
+CXXFLAGS := -std=c++0x -mno-ms-bitfields -Wall -DHAVE_REMOTE $(DBG_OPT) $(INCLUDE)
 
 # Used by mkdeps.pl
 #
@@ -104,13 +104,13 @@ Makefile.dep: src/*.c src/*.cpp
 
 ipxwrapper.dll: $(IPXWRAPPER_DEPS)
 	echo 'const char *version_string = "$(VERSION)", *compile_time = "'`date`'";' | $(CC) -c -x c -o version.o -
-	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -shared -o ipxwrapper.dll $(IPXWRAPPER_DEPS) version.o -liphlpapi -lversion -lole32 -loleaut32
+	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -static-libgcc -shared -o ipxwrapper.dll $(IPXWRAPPER_DEPS) version.o -liphlpapi -lversion -lole32 -loleaut32
 
 ipxconfig.exe: src/ipxconfig.cpp icons/ipxconfig.o src/addr.o src/interface.o src/common.o src/config.o src/wpcap_stubs.o
 	$(CXX) $(CXXFLAGS) -Wl,--enable-stdcall-fixup -static-libgcc -static-libstdc++ -D_WIN32_IE=0x0500 -mwindows -o ipxconfig.exe $^ -liphlpapi -lcomctl32 -lws2_32
 
 dpwsockx.dll: src/directplay.o src/log.o src/dpwsockx_stubs.o src/common.o src/config.o src/addr.o src/dpwsockx.def
-	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -shared -o $@ $^ -lwsock32
+	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -static-libgcc -shared -o $@ $^ -lwsock32
 
 src/ipxwrapper_stubs.s: src/ipxwrapper_stubs.txt
 	perl mkstubs.pl src/ipxwrapper_stubs.txt src/ipxwrapper_stubs.s 0
@@ -131,7 +131,7 @@ icons/%.o: icons/%.rc icons/%.ico
 	$(WINDRES) $< -O coff -o $@
 
 %.dll: src/stubdll.o src/%_stubs.o src/log.o src/common.o src/config.o src/addr.o src/%.def
-	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -shared -o $@ $^
+	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -static-libgcc -shared -o $@ $^
 
 src/%_stubs.o: src/%_stubs.s
 	nasm -f win32 -o $@ $<
