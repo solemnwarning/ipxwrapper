@@ -44,6 +44,7 @@ my $node_c_net = "00:00:00:00";
 
 my $ipx_eth_capture_class;
 my $ipx_eth_send_func;
+my $max_payload_size;
 
 shared_examples_for "ipx over ethernet" => sub
 {
@@ -502,6 +503,96 @@ shared_examples_for "ipx over ethernet" => sub
 		};
 	};
 	
+	it "can transmit the largest possible packet" => sub
+	{
+		my $capture = $ipx_eth_capture_class->new($local_dev_a);
+		
+		run_remote_cmd(
+			$remote_ip_a, "Z:\\tools\\ipx-send.exe",
+			"-l" => $max_payload_size,
+			"-s" => "4324", "-h" => $remote_mac_a,
+			"00:00:00:01", $local_mac_a, "6789",
+		);
+		
+		sleep(1);
+		
+		my @packets = $capture->read_available();
+		
+		cmp_hashes_partial(\@packets, [
+			{
+				src_network => "00:00:00:01",
+				src_node    => $remote_mac_a,
+				src_socket  => 4324,
+				
+				dst_network => "00:00:00:01",
+				dst_node    => $local_mac_a,
+				dst_socket  => 6789,
+				
+				data => (chr(0xAA) x $max_payload_size),
+			},
+		]);
+	};
+	
+	it "refuses to transmit larger than the largest possible packet" => sub
+	{
+		my $capture = $ipx_eth_capture_class->new($local_dev_a);
+		
+		trap {
+			run_remote_cmd(
+				$remote_ip_a, "Z:\\tools\\ipx-send.exe",
+				"-l" => $max_payload_size + 1,
+				"-s" => "1111", "-h" => $remote_mac_a,
+				"00:00:00:01", $local_mac_a, "2222",
+			);
+		};
+		
+		sleep(1);
+		
+		# Ensure sendto() failed with WSAEMSGSIZE
+		like($trap->die(), qr/^sendto: 10040$/m);
+		
+		# Ensure no packets were transmitted.
+		my @packets = $capture->read_available();
+		cmp_hashes_partial(\@packets, []);
+	};
+	
+	it "can receive the largest possible packet" => sub
+	{
+		my $capture = IPXWrapper::Tool::IPXRecv->new(
+			$remote_ip_a,
+			"00:00:00:00", $remote_mac_a, "3456",
+		);
+		
+		$ipx_eth_send_func->($local_dev_a,
+			tc   => 0,
+			type => 0,
+			
+			dest_network => "00:00:00:01",
+			dest_node    => $remote_mac_a,
+			dest_socket  => 3456,
+			
+			src_network  => "00:00:00:01",
+			src_node     => $local_mac_a,
+			src_socket   => 4567,
+			
+			data => ("x" x $max_payload_size),
+		);
+		
+		sleep(1);
+		
+		my @packets = $capture->kill_and_read();
+		
+		cmp_hashes_partial(\@packets, [
+			{
+				src_network => "00:00:00:01",
+				src_node    => $local_mac_a,
+				src_socket  => 4567,
+				
+				data => ("x" x $max_payload_size),
+			},
+		]);
+	};
+	
 	before all => sub
 	{
 		$ptype_capture_class = $ipx_eth_capture_class;
@@ -542,6 +633,7 @@ describe "IPXWrapper using Ethernet encapsulation" => sub
 		
 		$ipx_eth_capture_class = "IPXWrapper::Capture::IPX";
 		$ipx_eth_send_func     = \&send_ipx_packet_ethernet;
+		$max_payload_size      = 1470;
 	};
 	
 	it_should_behave_like "ipx over ethernet";
@@ -559,6 +651,7 @@ describe "IPXWrapper using Novell Ethernet encapsulation" => sub
 		
 		$ipx_eth_capture_class = "IPXWrapper::Capture::IPXNovell";
 		$ipx_eth_send_func     = \&send_ipx_packet_novell;
+		$max_payload_size      = 1470;
 	};
 	
 	it_should_behave_like "ipx over ethernet";
@@ -576,6 +669,7 @@ describe "IPXWrapper using LLC (802.2) Ethernet encapsulation" => sub
 		
 		$ipx_eth_capture_class = "IPXWrapper::Capture::IPXLLC";
 		$ipx_eth_send_func     = \&send_ipx_packet_llc;
+		$max_payload_size      = 1467;
 	};
 	
 	it_should_behave_like "ipx over ethernet";

@@ -55,11 +55,13 @@ sub run_remote_cmd
 	note(join(" ", @command));
 	
 	my $output = "";
-	IPC::Run::run(\@command, ">&" => \$output)
-		or die("Failure running $exe_name:\n$output");
+	my $ok = IPC::Run::run(\@command, ">&" => \$output);
 	
 	# Oh line endings, how do I hate thee? Let me count the ways.
 	$output =~ s/\r//g;
+	
+	die("Failure running $exe_name:\n$output")
+		unless($ok);
 	
 	return $output;
 }

@@ -154,17 +154,15 @@ bool ethII_frame_unpack(const novell_ipx_packet **packet, size_t *packet_len, co
 
 size_t novell_frame_size(size_t ipx_payload_len)
 {
-	static const size_t OVERHEAD
-		= sizeof(ethernet_header)
-		+ sizeof(novell_ipx_packet);
-	
 	if(ipx_payload_len > NOVELL_IPX_PACKET_MAX_PAYLOAD
-		|| ipx_payload_len > (1500 - OVERHEAD))
+		|| ipx_payload_len > (1500 - sizeof(novell_ipx_packet)))
 	{
 		return 0;
 	}
 	
-	return OVERHEAD + ipx_payload_len;
+	return sizeof(ethernet_header)
+		+ sizeof(novell_ipx_packet)
+		+ ipx_payload_len;
 }
 
 void novell_frame_pack(void *frame_buffer,
@@ -224,18 +222,16 @@ bool novell_frame_unpack(const novell_ipx_packet **packet, size_t *packet_len, c
 
 size_t llc_frame_size(size_t ipx_payload_len)
 {
-	static const size_t OVERHEAD
-		= sizeof(ethernet_header)
-		+ sizeof(llc_header)
-		+ sizeof(novell_ipx_packet);
-	
 	if(ipx_payload_len > NOVELL_IPX_PACKET_MAX_PAYLOAD
-		|| ipx_payload_len > (1500 - OVERHEAD))
+		|| ipx_payload_len > (1500 - (sizeof(llc_header) + sizeof(novell_ipx_packet))))
 	{
 		return 0;
 	}
 	
-	return OVERHEAD + ipx_payload_len;
+	return sizeof(ethernet_header)
+		+ sizeof(llc_header)
+		+ sizeof(novell_ipx_packet)
+		+ ipx_payload_len;
 }
 
 void llc_frame_pack(void *frame_buffer,

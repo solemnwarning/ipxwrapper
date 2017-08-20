@@ -28,7 +28,7 @@ sub new
 	my ($class, $dev) = @_;
 	
 	my $err;
-	my $pcap = Net::Pcap::pcap_open_live($dev, 1500, 0, 1, \$err)
+	my $pcap = Net::Pcap::pcap_open_live($dev, 2000, 0, 1, \$err)
 		or die("Cannot open device $dev: $err");
 	
 	return bless(\$pcap, $class);

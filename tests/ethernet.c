@@ -241,8 +241,8 @@ int main()
 	
 	CHECK_FRAME_SIZE(novell_frame_size, 0,    44);
 	CHECK_FRAME_SIZE(novell_frame_size, 50,   94);
-	CHECK_FRAME_SIZE(novell_frame_size, 1456, 1500);
-	CHECK_FRAME_SIZE(novell_frame_size, 1457, 0);
+	CHECK_FRAME_SIZE(novell_frame_size, 1470, 1514);
+	CHECK_FRAME_SIZE(novell_frame_size, 1471, 0);
 	
 	/* +===================+
 	 * | novell_frame_pack |
@@ -510,8 +510,8 @@ int main()
 	
 	CHECK_FRAME_SIZE(llc_frame_size, 0,    47);
 	CHECK_FRAME_SIZE(llc_frame_size, 50,   97);
-	CHECK_FRAME_SIZE(llc_frame_size, 1453, 1500);
-	CHECK_FRAME_SIZE(llc_frame_size, 1454, 0);
+	CHECK_FRAME_SIZE(llc_frame_size, 1467, 1514);
+	CHECK_FRAME_SIZE(llc_frame_size, 1468, 0);
 	
 	/* +================+
 	 * | llc_frame_pack |
