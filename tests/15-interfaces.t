@@ -33,6 +33,7 @@ our ($remote_mac_b, $remote_ip_b);
 use constant {
 	IP_MAX_DATA_SIZE    => 8192,
 	ETHER_MAX_DATA_SIZE => 1470,
+	LLC_MAX_DATA_SIZE   => 1467,
 };
 
 my @expected_addrs;
@@ -173,6 +174,7 @@ describe "IPXWrapper" => sub
 		{
 			reg_delete_key($remote_ip_a, "HKCU\\Software\\IPXWrapper");
 			reg_set_dword( $remote_ip_a, "HKCU\\Software\\IPXWrapper", "use_pcap", 1);
+			reg_set_dword( $remote_ip_a, "HKCU\\Software\\IPXWrapper", "frame_type", 1);
 			reg_set_addr(  $remote_ip_a, "HKCU\\Software\\IPXWrapper\\$remote_mac_a", "net", "00:00:00:01");
 			reg_set_addr(  $remote_ip_a, "HKCU\\Software\\IPXWrapper\\$remote_mac_b", "net", "00:00:00:02");
 			
@@ -187,6 +189,68 @@ describe "IPXWrapper" => sub
 					net    => "00:00:00:02",
 					node   => $remote_mac_b,
 					maxpkt => ETHER_MAX_DATA_SIZE,
+				},
+			);
+		};
+		
+		describe "getsockopt" => sub
+		{
+			it_should_behave_like "getsockopt";
+		};
+	};
+	
+	describe "using Novell Ethernet encapsulation" => sub
+	{
+		before all => sub
+		{
+			reg_delete_key($remote_ip_a, "HKCU\\Software\\IPXWrapper");
+			reg_set_dword( $remote_ip_a, "HKCU\\Software\\IPXWrapper", "use_pcap", 1);
+			reg_set_dword( $remote_ip_a, "HKCU\\Software\\IPXWrapper", "frame_type", 2);
+			reg_set_addr(  $remote_ip_a, "HKCU\\Software\\IPXWrapper\\$remote_mac_a", "net", "00:00:00:01");
+			reg_set_addr(  $remote_ip_a, "HKCU\\Software\\IPXWrapper\\$remote_mac_b", "net", "00:00:00:02");
+			
+			@expected_addrs = (
+				{
+					net    => "00:00:00:01",
+					node   => $remote_mac_a,
+					maxpkt => ETHER_MAX_DATA_SIZE,
+				},
+				
+				{
+					net    => "00:00:00:02",
+					node   => $remote_mac_b,
+					maxpkt => ETHER_MAX_DATA_SIZE,
+				},
+			);
+		};
+		
+		describe "getsockopt" => sub
+		{
+			it_should_behave_like "getsockopt";
+		};
+	};
+	
+	describe "using LLC (802.2) Ethernet encapsulation" => sub
+	{
+		before all => sub
+		{
+			reg_delete_key($remote_ip_a, "HKCU\\Software\\IPXWrapper");
+			reg_set_dword( $remote_ip_a, "HKCU\\Software\\IPXWrapper", "use_pcap", 1);
+			reg_set_dword( $remote_ip_a, "HKCU\\Software\\IPXWrapper", "frame_type", 3);
+			reg_set_addr(  $remote_ip_a, "HKCU\\Software\\IPXWrapper\\$remote_mac_a", "net", "00:00:00:01");
+			reg_set_addr(  $remote_ip_a, "HKCU\\Software\\IPXWrapper\\$remote_mac_b", "net", "00:00:00:02");
+			
+			@expected_addrs = (
+				{
+					net    => "00:00:00:01",
+					node   => $remote_mac_a,
+					maxpkt => LLC_MAX_DATA_SIZE,
+				},
+				
+				{
+					net    => "00:00:00:02",
+					node   => $remote_mac_b,
+					maxpkt => LLC_MAX_DATA_SIZE,
 				},
 			);
 		};

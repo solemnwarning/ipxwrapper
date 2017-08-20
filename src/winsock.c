@@ -58,10 +58,10 @@ static int _max_ipx_payload(void)
 		{
 			case FRAME_TYPE_ETH_II:
 			case FRAME_TYPE_NOVELL:
-				return 1500 - (14 + sizeof(novell_ipx_packet));
+				return 1500 - sizeof(novell_ipx_packet);
 				
 			case FRAME_TYPE_LLC:
-				return 1500 - (17 + sizeof(novell_ipx_packet));
+				return 1500 - (3 + sizeof(novell_ipx_packet));
 		}
 		
 		abort();
