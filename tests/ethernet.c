@@ -33,9 +33,9 @@
 	const novell_ipx_packet *ipx; \
 	size_t ipx_len; \
 	\
-	ok(func(&ipx, &ipx_len, FRAME, frame_len), #func "(<" desc ">) succeeds"); \
-	ok((ipx == (FRAME + expect_ipx_off)),      #func "(<" desc ">) returns the correct payload address"); \
-	is_int(expect_ipx_len, ipx_len,            #func "(<" desc ">) returns the correct payload length"); \
+	ok(func(&ipx, &ipx_len, FRAME, frame_len),                #func "(<" desc ">) succeeds"); \
+	ok((ipx == (novell_ipx_packet*)(FRAME + expect_ipx_off)), #func "(<" desc ">) returns the correct payload address"); \
+	is_int(expect_ipx_len, ipx_len,                           #func "(<" desc ">) returns the correct payload length"); \
 }
 
 #define UNPACK_BAD_FRAME(func, desc, frame_len, ...) \

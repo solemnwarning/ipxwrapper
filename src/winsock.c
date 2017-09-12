@@ -184,7 +184,7 @@ static int do_EnumProtocols(LPINT protocols, LPVOID buf, LPDWORD bsptr, bool uni
 	
 	for(int i = 0; i < rval; ++i)
 	{
-		if(pinfo[i].lpProtocol >= buf && pinfo[i].lpProtocol < (char*)(buf) + bufsize)
+		if(pinfo[i].lpProtocol >= (char*)(buf) && pinfo[i].lpProtocol < (char*)(buf) + bufsize)
 		{
 			name_buf_size += strsize(pinfo[i].lpProtocol, unicode);
 		}
@@ -199,7 +199,7 @@ static int do_EnumProtocols(LPINT protocols, LPVOID buf, LPDWORD bsptr, bool uni
 	
 	for(int i = 0, off = 0; i < rval; ++i)
 	{
-		if(pinfo[i].lpProtocol >= buf && pinfo[i].lpProtocol < (char*)(buf) + bufsize)
+		if(pinfo[i].lpProtocol >= (char*)(buf) && pinfo[i].lpProtocol < (char*)(buf) + bufsize)
 		{
 			int len = strsize(pinfo[i].lpProtocol, unicode);
 			
