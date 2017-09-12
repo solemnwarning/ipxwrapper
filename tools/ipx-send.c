@@ -43,7 +43,7 @@ int main(int argc, char **argv)
 	BOOL reuse = FALSE;
 	
 	int opt;
-	while((opt = getopt(argc, argv, "n:h:s:t:d:br")) != -1)
+	while((opt = getopt(argc, argv, "n:h:s:t:d:l:br")) != -1)
 	{
 		if(opt == 'n')
 		{
@@ -64,6 +64,13 @@ int main(int argc, char **argv)
 		else if(opt == 'd')
 		{
 			data = optarg;
+		}
+		else if(opt == 'l')
+		{
+			int len = atoi(optarg);
+			assert((data = malloc(len)) != NULL);
+			
+			memset((char*)(data), 0xAA, len);
 		}
 		else if(opt == 'b')
 		{
@@ -87,6 +94,7 @@ int main(int argc, char **argv)
 			"[-s <local socket number>]\n"
 			"[-t <packet type>]\n"
 			"[-d <payload>]\n"
+			"[-l <payload length>]\n"
 			"[-b (enable SO_BROADCAST)]\n"
 			"[-r (enable SO_REUSEADDR)]\n"
 			"<remote network number>\n"
@@ -132,7 +140,14 @@ int main(int argc, char **argv)
 		printf("Bound to local address: %s\n", formatted_addr);
 	}
 	
-	assert(sendto(sock, data, strlen(data), 0, (struct sockaddr*)(&remote_addr), sizeof(remote_addr)) == strlen(data));
+	int sr = sendto(sock, data, strlen(data), 0, (struct sockaddr*)(&remote_addr), sizeof(remote_addr));
+	if(sr == -1)
+	{
+		fprintf(stderr, "sendto: %u\n", (unsigned int)(WSAGetLastError()));
+		return 1;
+	}
+	
+	assert(sr == strlen(data));
 	
 	closesocket(sock);
 	

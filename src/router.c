@@ -29,6 +29,7 @@
 #include "ipxwrapper.h"
 #include "interface.h"
 #include "addrcache.h"
+#include "ethernet.h"
 
 static bool router_running   = false;
 static WSAEVENT router_event = WSA_INVALID_EVENT;
@@ -497,67 +498,50 @@ static void _handle_pcap_frame(u_char *user, const struct pcap_pkthdr *pkt_heade
 {
 	ipx_interface_t *iface = (ipx_interface_t*)(user);
 	
-	if(pkt_header->caplen < sizeof(ethernet_frame_t))
+	const novell_ipx_packet *ipx;
+	size_t ipx_len;
+	
+	switch(main_config.frame_type)
 	{
-		/* Frame isn't big enough to contain a full IPX header. */
-		return;
+		case FRAME_TYPE_ETH_II:
+			if(!ethII_frame_unpack(&ipx, &ipx_len, pkt_data, pkt_header->caplen))
+			{
+				return;
+			}
+			
+			break;
+			
+		case FRAME_TYPE_NOVELL:
+			if(!novell_frame_unpack(&ipx, &ipx_len, pkt_data, pkt_header->caplen))
+			{
+				return;
+			}
+			
+			break;
+			
+		case FRAME_TYPE_LLC:
+			if(!llc_frame_unpack(&ipx, &ipx_len, pkt_data, pkt_header->caplen))
+			{
+				return;
+			}
+			
+			break;
 	}
 	
-	ethernet_frame_t *frame = (ethernet_frame_t*)(pkt_data);
-	
-	uint16_t ipx_packet_len = ntohs(frame->packet.length);
-	
-	if(main_config.frame_type == FRAME_TYPE_ETH_II)
-	{
-		/* Configured for standard Ethernet. */
-		
-		if(ntohs(frame->ethertype) != 0x8137)
-		{
-			/* The ethertype field isn't IPX. */
-			return;
-		}
-	}
-	else if(main_config.frame_type == FRAME_TYPE_NOVELL)
-	{
-		/* Configured for Novell "raw" Ethernet. */
-		
-		uint16_t eth_payload_len = ntohs(frame->length);
-		
-		if(eth_payload_len > 1500)
-		{
-			/* Too big, must be an Ethernet II frame (or garbage). */
-			return;
-		}
-		else if(eth_payload_len < sizeof(frame->packet))
-		{
-			/* Too small to hold an IPX header. */
-			return;
-		}
-		else if(eth_payload_len < ipx_packet_len)
-		{
-			/* Too small to hold the IPX payload within. */
-			return;
-		}
-	}
-	else{
-		/* Unknown frame type configured. */
-		abort();
-	}
-	
-	if(frame->packet.checksum != 0xFFFF)
+	if(ipx->checksum != 0xFFFF)
 	{
 		/* The "checksum" field doesn't have the magic IPX value. */
 		return;
 	}
 	
-	if(ipx_packet_len > (pkt_header->caplen - (sizeof(*frame) - sizeof(frame->packet))))
+	if(ntohs(ipx->length) > ipx_len)
 	{
 		/* The "length" field in the IPX header is too big. */
 		return;
 	}
 	
 	{
-		addr48_t dest  = addr48_in(frame->packet.dest_node);
+		addr48_t dest  = addr48_in(ipx->dest_node);
 		addr48_t bcast = addr48_in((unsigned char[]){0xFF,0xFF,0xFF,0xFF,0xFF,0xFF});
 		
 		if(dest != iface->mac_addr && dest != bcast)
@@ -569,17 +553,17 @@ static void _handle_pcap_frame(u_char *user, const struct pcap_pkthdr *pkt_heade
 		}
 	}
 	
-	_deliver_packet(frame->packet.type,
-		addr32_in(frame->packet.src_net),
-		addr48_in(frame->packet.src_node),
-		frame->packet.src_socket,
+	_deliver_packet(ipx->type,
+		addr32_in(ipx->src_net),
+		addr48_in(ipx->src_node),
+		ipx->src_socket,
 		
-		addr32_in(frame->packet.dest_net),
-		addr48_in(frame->packet.dest_node),
-		frame->packet.dest_socket,
+		addr32_in(ipx->dest_net),
+		addr48_in(ipx->dest_node),
+		ipx->dest_socket,
 		
-		frame->packet.data,
-		(ntohs(frame->packet.length) - sizeof(real_ipx_packet_t)));
+		ipx->data,
+		(ntohs(ipx->length) - sizeof(novell_ipx_packet)));
 }
 
 static DWORD router_main(void *arg)

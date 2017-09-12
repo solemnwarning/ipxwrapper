@@ -29,7 +29,8 @@ extern "C" {
 enum main_config_frame_type
 {
 	FRAME_TYPE_ETH_II = 1,
-	FRAME_TYPE_NOVELL = 2
+	FRAME_TYPE_NOVELL = 2,
+	FRAME_TYPE_LLC    = 3,
 };
 
 typedef struct main_config {

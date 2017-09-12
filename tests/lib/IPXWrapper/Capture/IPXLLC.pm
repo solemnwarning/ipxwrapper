@@ -1,5 +1,5 @@
 # IPXWrapper test suite
-# Copyright (C) 2016 Daniel Collins <solemnwarning@solemnwarning.net>
+# Copyright (C) 2017 Daniel Collins <solemnwarning@solemnwarning.net>
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License version 2 as published by
@@ -17,7 +17,7 @@
 use strict;
 use warnings;
 
-package IPXWrapper::Capture::IPXNovell;
+package IPXWrapper::Capture::IPXLLC;
 
 use Net::Pcap;
 use NetPacket::Ethernet;
@@ -46,9 +46,9 @@ sub read_available
 		
 		my $ether = NetPacket::Ethernet->decode($packet);
 		
-		if($ether->{type} <= 1500 && substr($ether->{data}, 0, 2) eq "\x{FF}\x{FF}")
+		if($ether->{type} <= 1500 && substr($ether->{data}, 0, 5) eq "\x{E0}\x{E0}\x{03}\x{FF}\x{FF}")
 		{
-			my $ipx = NetPacket::IPX->decode($ether->{data});
+			my $ipx = NetPacket::IPX->decode(substr($ether->{data}, 3));
 			
 			my %packet = (
 				src_mac => $ether->{src_mac},
@@ -69,7 +69,7 @@ sub read_available
 			);
 			
 			# Skip if the frame length is wrong.
-			return if(($ether->{type} - 30) != length($packet{data}));
+			return if(($ether->{type} - 33) != length($packet{data}));
 			
 			push(@packets, \%packet);
 		}

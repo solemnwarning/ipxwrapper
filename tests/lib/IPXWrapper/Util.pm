@@ -32,6 +32,7 @@ our @EXPORT = qw(
 	send_ipx_over_udp
 	send_ipx_packet_ethernet
 	send_ipx_packet_novell
+	send_ipx_packet_llc
 	
 	cmp_hashes_partial
 	
@@ -54,11 +55,13 @@ sub run_remote_cmd
 	note(join(" ", @command));
 	
 	my $output = "";
-	IPC::Run::run(\@command, ">&" => \$output)
-		or die("Failure running $exe_name:\n$output");
+	my $ok = IPC::Run::run(\@command, ">&" => \$output);
 	
 	# Oh line endings, how do I hate thee? Let me count the ways.
 	$output =~ s/\r//g;
+	
+	die("Failure running $exe_name:\n$output")
+		unless($ok);
 	
 	return $output;
 }
@@ -152,6 +155,21 @@ sub send_ipx_packet_novell
 	
 	my $packet     = NetPacket::IPX->new(%options);
 	my $enc_packet = $packet->encode();
+	
+	_send_ethernet_frame($dev,
+		$packet->{dest_node}, $packet->{src_node}, length($enc_packet),
+		$enc_packet);
+}
+
+sub send_ipx_packet_llc
+{
+	my ($dev, %options) = @_;
+	
+	my $packet     = NetPacket::IPX->new(%options);
+	my $enc_packet = $packet->encode();
+	
+	# Prefix IPX packet with LLC header
+	$enc_packet = pack("C3", 0xE0, 0xE0, 0x03).$enc_packet;
 	
 	_send_ethernet_frame($dev,
 		$packet->{dest_node}, $packet->{src_node}, length($enc_packet),

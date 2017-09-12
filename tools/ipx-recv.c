@@ -28,7 +28,7 @@
 #include "tools.h"
 
 const int MAX_SOCKETS = 32;
-const int BUFSIZE     = 64;
+const int BUFSIZE     = 2048;
 
 static void usage(const char *argv0)
 {

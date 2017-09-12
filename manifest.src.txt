@@ -17,6 +17,8 @@ src/common.c
 src/common.h
 src/config.c
 src/config.h
+src/ethernet.c
+src/ethernet.h
 src/directplay.c
 src/dpwsockx.def
 src/dpwsockx_stubs.txt
@@ -57,6 +59,7 @@ directplay-win32.reg
 directplay-win64.reg
 
 tests/05-addr.t
+tests/07-ethernet.t
 tests/10-socket.t
 tests/15-interfaces.t
 tests/20-bind.t
@@ -66,9 +69,12 @@ tests/40-ip-spx.t
 tests/50-dplay.t
 tests/addr.c
 tests/config.pm
+tests/ethernet.c
 tests/ptype.pm
 
 tests/lib/IPXWrapper/Capture/IPX.pm
+tests/lib/IPXWrapper/Capture/IPXLLC.pm
+tests/lib/IPXWrapper/Capture/IPXNovell.pm
 tests/lib/IPXWrapper/Capture/IPXOverUDP.pm
 tests/lib/IPXWrapper/SPX.pm
 tests/lib/IPXWrapper/Tool/Bind.pm

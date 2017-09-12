@@ -569,6 +569,43 @@ is_hex(unsigned long wanted, unsigned long seen, const char *format, ...)
 
 
 /*
+ * Takes pointers to an expected region of memory and a seen region of memory
+ * and assumes the test passes if the len bytes onwards from them match.
+ * Otherwise reports any bytes which didn't match.
+ */
+int
+is_blob(const void *wanted, const void *seen, size_t len, const char *format, ...)
+{
+    int success;
+    size_t i;
+
+    fflush(stderr);
+    check_diag_files();
+    success = (memcmp(wanted, seen, len) == 0);
+    if (success)
+        printf("ok %lu", testnum++);
+    else {
+        for(i = 0; i < len; ++i)
+        {
+            unsigned char wanted_b = ((unsigned char*)(wanted))[i];
+            unsigned char seen_b   = ((unsigned char*)(seen))[i];
+
+            if(wanted_b != seen_b)
+            {
+                diag("offset %x: wanted %02x, seen %02x",
+                    (unsigned)(i), (unsigned)(wanted_b), (unsigned)(seen_b));
+            }
+        }
+        printf("not ok %lu", testnum++);
+        _failed++;
+    }
+    PRINT_DESC(" - ", format);
+    putchar('\n');
+    return success;
+}
+
+
+/*
  * Bail out with an error.
  */
 void

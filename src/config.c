@@ -60,7 +60,8 @@ main_config_t get_main_config(void)
 	/* Check for valid frame_type */
 	
 	if(        config.frame_type != FRAME_TYPE_ETH_II
-		&& config.frame_type != FRAME_TYPE_NOVELL)
+		&& config.frame_type != FRAME_TYPE_NOVELL
+		&& config.frame_type != FRAME_TYPE_LLC)
 	{
 		
 		log_printf(LOG_WARNING, "Ignoring unknown frame_type %u",

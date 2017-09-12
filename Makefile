@@ -46,7 +46,7 @@ VERSION := git
 
 IPXWRAPPER_DEPS := src/ipxwrapper.o src/winsock.o src/ipxwrapper_stubs.o src/log.o src/common.o \
 	src/interface.o src/router.o src/ipxwrapper.def src/addrcache.o src/config.o src/addr.o \
-	src/firewall.o src/wpcap_stubs.o
+	src/firewall.o src/wpcap_stubs.o src/ethernet.o
 
 BIN_FILES := $(shell cat manifest.bin.txt)
 SRC_FILES := $(shell cat manifest.src.txt)
@@ -77,13 +77,16 @@ dist: all
 	zip -r ipxwrapper-$(VERSION)-src.zip ipxwrapper-$(VERSION)-src/
 	rm -r ipxwrapper-$(VERSION)-src/
 
-tools: $(TOOLS) tests/addr.exe ipxwrapper.dll wsock32.dll dpwsockx.dll
+tools: $(TOOLS) tests/addr.exe tests/ethernet.exe ipxwrapper.dll wsock32.dll dpwsockx.dll
 	cp ipxwrapper.dll wsock32.dll dpwsockx.dll tools/
 
 tools/%.exe: tools/%.c tools/tools.h src/addr.o
 	$(CC) $(CFLAGS) -I./src/ -o $@ $< src/addr.o -lwsock32 -lole32 -lrpcrt4
 
 tests/addr.exe: tests/addr.o tests/tap/basic.o src/addr.o
+	$(CC) $(CFLAGS) -I./ -o $@ $^ -lwsock32
+
+tests/ethernet.exe: tests/ethernet.o tests/tap/basic.o src/ethernet.o src/addr.o
 	$(CC) $(CFLAGS) -I./ -o $@ $^ -lwsock32
 
 tests/%.o: tests/%.c

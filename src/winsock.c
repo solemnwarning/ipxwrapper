@@ -29,6 +29,7 @@
 #include "interface.h"
 #include "router.h"
 #include "addrcache.h"
+#include "ethernet.h"
 
 struct sockaddr_ipx_ext {
 	short sa_family;
@@ -49,9 +50,25 @@ static size_t strsize(void *str, bool unicode)
 
 static int _max_ipx_payload(void)
 {
-	return ipx_use_pcap
-		? (ETHERNET_MTU - sizeof(real_ipx_packet_t))
-		: MAX_DATA_SIZE;
+	if(ipx_use_pcap)
+	{
+		/* TODO: Use real interface MTU */
+		
+		switch(main_config.frame_type)
+		{
+			case FRAME_TYPE_ETH_II:
+			case FRAME_TYPE_NOVELL:
+				return 1500 - sizeof(novell_ipx_packet);
+				
+			case FRAME_TYPE_LLC:
+				return 1500 - (3 + sizeof(novell_ipx_packet));
+		}
+		
+		abort();
+	}
+	else{
+		return MAX_DATA_SIZE;
+	}
 }
 
 #define PUSH_NAME(name) \
@@ -1198,64 +1215,76 @@ static DWORD ipx_send_packet(
 		ipx_interface_t *iface = ipx_interface_by_addr(src_net, src_node);
 		if(iface)
 		{
-			size_t packet_size = sizeof(real_ipx_packet_t) + data_size;
-			size_t frame_size  = sizeof(ethernet_frame_t)  + data_size;
-			ethernet_frame_t *frame = malloc(frame_size);
+			/* Calculate the frame size and check we can actually
+			 * fit this much data in it.
+			*/
+			
+			size_t frame_size;
+			
+			switch(main_config.frame_type)
+			{
+				case FRAME_TYPE_ETH_II:
+					frame_size = ethII_frame_size(data_size);
+					break;
+					
+				case FRAME_TYPE_NOVELL:
+					frame_size = novell_frame_size(data_size);
+					break;
+					
+				case FRAME_TYPE_LLC:
+					frame_size = llc_frame_size(data_size);
+					break;
+			}
+			
+			/* TODO: Check frame_size against interface MTU */
+			
+			if(frame_size == 0)
+			{
+				log_printf(LOG_ERROR,
+					"Tried sending a %u byte packet, too large for the selected frame type",
+					(unsigned int)(data_size));
+				
+				return WSAEMSGSIZE;
+			}
+			
+			log_printf(LOG_DEBUG, "...frame size = %u", (unsigned int)(frame_size));
+			
+			/* Serialise the frame. */
+			
+			void *frame = malloc(frame_size);
 			if(!frame)
 			{
 				return ERROR_OUTOFMEMORY;
 			}
 			
-			log_printf(LOG_DEBUG, "...packet size = %u, frame size = %u",
-				(unsigned int)(packet_size), (unsigned int)(frame_size));
-			
-			addr48_out(frame->dest_mac, dest_node);
-			addr48_out(frame->src_mac, iface->mac_addr);
-			
-			if(main_config.frame_type == FRAME_TYPE_ETH_II)
+			switch(main_config.frame_type)
 			{
-				/* Configured for standard Ethernet. */
-				frame->ethertype = htons(0x8137);
-			}
-			else if(main_config.frame_type == FRAME_TYPE_NOVELL)
-			{
-				/* Configured for Novell "raw" Ethernet. */
-				
-				if(packet_size > 1500)
-				{
-					/* Can't fit a payload this big into a
-					 * Novell Ethernet frame.
-					*/
+				case FRAME_TYPE_ETH_II:
+					ethII_frame_pack(frame,
+						type,
+						src_net,  src_node,  src_socket,
+						dest_net, dest_node, dest_socket,
+						data, data_size);
+					break;
 					
-					log_printf(LOG_ERROR,
-						"Tried sending a %u byte packet in a Novell (\"raw\") Ethernet frame",
-						(unsigned int)(packet_size));
+				case FRAME_TYPE_NOVELL:
+					novell_frame_pack(frame,
+						type,
+						src_net,  src_node,  src_socket,
+						dest_net, dest_node, dest_socket,
+						data, data_size);
+					break;
 					
-					free(frame);
-					return WSAEMSGSIZE;
-				}
-				
-				frame->length = htons(packet_size);
-			}
-			else{
-				/* Unknown frame type configured. */
-				abort();
+				case FRAME_TYPE_LLC:
+					llc_frame_pack(frame,
+						type,
+						src_net,  src_node,  src_socket,
+						dest_net, dest_node, dest_socket,
+						data, data_size);
+					break;
 			}
 			
-			frame->packet.checksum = 0xFFFF;
-			frame->packet.length   = htons(packet_size);
-			frame->packet.hops     = 0;
-			frame->packet.type     = type;
-			
-			addr32_out(frame->packet.dest_net, dest_net);
-			addr48_out(frame->packet.dest_node, dest_node);
-			frame->packet.dest_socket = dest_socket;
-			
-			addr32_out(frame->packet.src_net, src_net);
-			addr48_out(frame->packet.src_node, src_node);
-			frame->packet.src_socket = src_socket;
-			
-			memcpy(frame->packet.data, data, data_size);
+			/* Transmit the frame. */
 			
 			if(pcap_sendpacket(iface->pcap, (void*)(frame), frame_size) == 0)
 			{
