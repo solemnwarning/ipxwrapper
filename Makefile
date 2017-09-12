@@ -36,7 +36,7 @@ CFLAGS   := -std=c99   -mno-ms-bitfields -Wall $(DBG_OPT) $(INCLUDE)
 CXXFLAGS := -std=c++0x -mno-ms-bitfields -Wall $(DBG_OPT) $(INCLUDE)
 
 DEPDIR := .d
-$(shell mkdir -p $(DEPDIR)/src/ $(DEPDIR)/tools/ $(DEPDIR)/tests/)
+$(shell mkdir -p $(DEPDIR)/src/ $(DEPDIR)/tools/ $(DEPDIR)/tests/tap/)
 DEPFLAGS = -MT $@ -MMD -MP -MF $(DEPDIR)/$@.Td
 DEPPOST = @mv -f $(DEPDIR)/$@.Td $(DEPDIR)/$@.d && touch $@
 
