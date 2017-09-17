@@ -36,6 +36,7 @@ sub new
 	
 	my $self = bless({
 		pid     => $pid,
+		stdin   => $in,
 		sockets => [],
 	}, $class);
 	
@@ -72,8 +73,18 @@ sub DESTROY
 {
 	my ($self) = @_;
 	
-	kill(SIGKILL, $self->{pid});
+	# bind.exe will exit once it reads EOF.
+	delete $self->{stdin};
+	
+	local $SIG{ALRM} = sub
+	{
+		warn "Killing hung bind.exe process";
+		kill(SIGKILL, $self->{pid});
+	};
+	
+	alarm(5);
 	waitpid($self->{pid}, 0);
+	alarm(0);
 }
 
 sub result

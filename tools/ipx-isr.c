@@ -96,29 +96,54 @@ int main(int argc, char **argv)
 	
 	assert(bind(sock, (struct sockaddr*)(&local_addr), sizeof(local_addr)) == 0);
 	
-	assert(CreateThread(NULL, 0, &send_thread, &sock, 0, NULL));
+	HANDLE send_thread_h = CreateThread(NULL, 0, &send_thread, &sock, 0, NULL);
+	assert(send_thread_h != NULL);
 	
 	printf("Ready\n");
 	
 	char buf[1024];
 	while(1)
 	{
-		struct sockaddr_ipx recv_addr;
-		int addrlen = sizeof(recv_addr);
+		fd_set read_fds;
+		FD_ZERO(&read_fds);
+		FD_SET(sock, &read_fds);
 		
-		int r = recvfrom(sock, buf, sizeof(buf), 0, (struct sockaddr*)(&recv_addr), &addrlen);
-		assert(r > 0);
+		struct timeval timeout = {
+			.tv_sec = 0,
+			.tv_usec = 100000, /* 1/10th sec */
+		};
 		
-		buf[r] = '\0';
+		assert(select(sock + 1, &read_fds, NULL, NULL, &timeout) >= 0);
 		
-		char net_s[ADDR32_STRING_SIZE];
-		addr32_string(net_s, addr32_in(recv_addr.sa_netnum));
+		if(WaitForSingleObject(send_thread_h, 0) == WAIT_OBJECT_0)
+		{
+			/* Send thread ended, must've hit EOF. Time to exit */
+			break;
+		}
 		
-		char node_s[ADDR48_STRING_SIZE];
-		addr48_string(node_s, addr48_in(recv_addr.sa_nodenum));
-		
-		printf("%s %s %hu %s\n", net_s, node_s, ntohs(recv_addr.sa_socket), buf);
+		if(FD_ISSET(sock, &read_fds))
+		{
+			/* Packet waiting to be read. */
+			
+			struct sockaddr_ipx recv_addr;
+			int addrlen = sizeof(recv_addr);
+			
+			int r = recvfrom(sock, buf, sizeof(buf), 0, (struct sockaddr*)(&recv_addr), &addrlen);
+			assert(r > 0);
+			
+			buf[r] = '\0';
+			
+			char net_s[ADDR32_STRING_SIZE];
+			addr32_string(net_s, addr32_in(recv_addr.sa_netnum));
+			
+			char node_s[ADDR48_STRING_SIZE];
+			addr48_string(node_s, addr48_in(recv_addr.sa_nodenum));
+			
+			printf("%s %s %hu %s\n", net_s, node_s, ntohs(recv_addr.sa_socket), buf);
+		}
 	}
+	
+	CloseHandle(send_thread_h);
 	
 	closesocket(sock);
 	

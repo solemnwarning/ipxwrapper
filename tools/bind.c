@@ -97,13 +97,10 @@ int main(int argc, const char **argv)
 	*/
 	printf("Ready\n");
 	
-	/* Hang around until we're killed. This is to facilitate testing bind
-	 * behaviour in concurrent processes.
+	/* Hang around until something is written to our stdin. This is to
+	 * facilitate testing bind behaviour in concurrent processes.
 	*/
-	while(1)
-	{
-		Sleep(10000);
-	}
+	getchar();
 	
 	return 0;
 }

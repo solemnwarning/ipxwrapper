@@ -33,7 +33,10 @@ sub new
 	# No need for error checking here - open3 throws on failure.
 	my $pid = open3(my $in, my $out, undef, @command);
 	
-	my $self = bless(\$pid, $class);
+	my $self = bless({
+		pid => $pid,
+		in  => $in,
+	}, $class);
 	
 	my $output = "";
 	
@@ -56,8 +59,18 @@ sub DESTROY
 {
 	my ($self) = @_;
 	
-	kill(SIGKILL, $$self);
-	waitpid($$self, 0);
+	# Process should exit once it gets EOF
+	delete $self->{in};
+	
+	local $SIG{ALRM} = sub
+	{
+		warn "Killing hung process";
+		kill(SIGKILL, $self->{pid});
+	};
+	
+	alarm(5);
+	waitpid($self->{pid}, 0);
+	alarm(0);
 }
 
 1;

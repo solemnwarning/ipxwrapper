@@ -38,6 +38,12 @@ static void usage(const char *argv0)
 	exit(1);
 }
 
+static DWORD WINAPI getchar_thread_main(LPVOID lpParameter)
+{
+	getchar();
+	return 0;
+}
+
 int main(int argc, char **argv)
 {
 	setbuf(stdout, NULL);
@@ -128,6 +134,9 @@ int main(int argc, char **argv)
 		usage(argv[0]);
 	}
 	
+	HANDLE getchar_thread = CreateThread(NULL, 0, &getchar_thread_main, NULL, 0, NULL);
+	assert(getchar_thread != NULL);
+	
 	printf("Ready\n");
 	
 	while(1)
@@ -140,7 +149,18 @@ int main(int argc, char **argv)
 			FD_SET(sockets[i], &read_fds);
 		}
 		
-		assert(select(n_sockets, &read_fds, NULL, NULL, NULL) > 0);
+		struct timeval timeout = {
+			.tv_sec = 0,
+			.tv_usec = 100000, /* 1/10th sec */
+		};
+		
+		assert(select(n_sockets, &read_fds, NULL, NULL, &timeout) >= 0);
+		
+		if(WaitForSingleObject(getchar_thread, 0) == WAIT_OBJECT_0)
+		{
+			/* Input is available on stdin, time to exit. */
+			break;
+		}
 		
 		for(int i = 0; i < n_sockets; ++i)
 		{
@@ -164,6 +184,8 @@ int main(int argc, char **argv)
 			}
 		}
 	}
+	
+	CloseHandle(getchar_thread);
 	
 	for(int i = 0; i < n_sockets; ++i)
 	{

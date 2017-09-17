@@ -65,9 +65,30 @@ sub DESTROY
 	
 	if(defined($self->{pid}))
 	{
-		kill(SIGKILL, $self->{pid});
-		waitpid($self->{pid}, 0);
+		$self->_end();
 	}
+}
+
+sub _end
+{
+	my ($self) = @_;
+	
+	# ipx-isr.exe will exit when it reads EOF
+	delete $self->{in};
+	
+	local $SIG{ALRM} = sub
+	{
+		warn "Killing hung ipx-isr.exe process";
+		kill(SIGKILL, $self->{pid});
+	};
+	
+	alarm(5);
+	waitpid($self->{pid}, 0);
+	alarm(0);
+	
+	delete $self->{pid};
+	
+	return ($? == 0);
 }
 
 sub kill_and_read
@@ -82,9 +103,11 @@ sub kill_and_read
 	# Kill the child process so we can read EOF from the pipe once we have
 	# all the output.
 	
-	kill(SIGKILL, $self->{pid});
-	waitpid($self->{pid}, 0);
-	delete $self->{pid};
+	if(!$self->_end())
+	{
+		# Didn't exit properly, pipe might still have a writer.
+		die "ipx-isr.exe didn't exit cleanly";
+	}
 	
 	my $out = $self->{out};
 	my @packets = ();
