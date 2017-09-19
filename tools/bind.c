@@ -20,6 +20,7 @@
 #include <wsipx.h>
 #include <wsnwlink.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <assert.h>
 
@@ -38,6 +39,12 @@ int main(int argc, const char **argv)
 	
 	for(int i = 1; i < argc; i += 5)
 	{
+		if(strcmp(argv[i], "-e") == 0)
+		{
+			printf("Calling _exit\n");
+			_exit(0);
+		}
+		
 		BOOL reuse = FALSE;
 		if(strcmp(argv[i], "-r") == 0)
 		{
@@ -56,6 +63,7 @@ int main(int argc, const char **argv)
 		{
 			fprintf(stderr, "Usage: %s\n"
 				"\t[-r] [-c] <type> <protocol> <network number> <node number> <socket number>\n"
+				"\t[-e]\n"
 				"\t...\n", argv[0]);
 			return 1;
 		}
@@ -83,7 +91,7 @@ int main(int argc, const char **argv)
 			printf("Bound socket to %s\n", bound_addr);
 		}
 		else{
-			printf("Failed\n");
+			printf("Failed (%u)\n", (unsigned int)(WSAGetLastError()));
 		}
 		
 		if(close)

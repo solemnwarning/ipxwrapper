@@ -56,11 +56,11 @@ sub new
 				sock => $3,
 			});
 		}
-		elsif($line eq "Failed")
+		elsif($line =~ m/^Failed \(([0-9]+)\)$/)
 		{
-			push(@{ $self->{sockets} }, undef);
+			push(@{ $self->{sockets} }, { errno => $1 });
 		}
-		elsif($line eq "Ready")
+		elsif($line eq "Ready" || $line eq "Calling _exit")
 		{
 			return $self;
 		}

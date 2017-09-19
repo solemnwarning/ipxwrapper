@@ -38,6 +38,7 @@ use constant {
 	NSPROTO_IPX    => 1000,
 	NSPROTO_SPX    => 1256,
 	NSPROTO_SPXII  => 1257,
+	WSAEADDRINUSE  => 10048,
 };
 
 my ($bind_type_a, $bind_proto_a);
@@ -124,7 +125,7 @@ shared_examples_for "bind address selection/reuse for one protocol" => sub
 		
 		cmp_deeply(\@result, [
 			{ net => "00:00:00:01", node => $remote_mac_a, sock => 1 },
-			undef,
+			{ errno => WSAEADDRINUSE },
 		]);
 	};
 	
@@ -137,7 +138,7 @@ shared_examples_for "bind address selection/reuse for one protocol" => sub
 		
 		cmp_deeply(\@result, [
 			{ net => "00:00:00:01", node => $remote_mac_a, sock => 1 },
-			undef,
+			{ errno => WSAEADDRINUSE },
 		]);
 	};
 	
@@ -208,7 +209,7 @@ shared_examples_for "bind address selection/reuse for one protocol" => sub
 		]);
 		
 		cmp_deeply([ $bind_b->result() ], [
-			undef,
+			{ errno => WSAEADDRINUSE },
 		]);
 	};
 	
@@ -227,7 +228,7 @@ shared_examples_for "bind address selection/reuse for one protocol" => sub
 		]);
 		
 		cmp_deeply([ $bind_b->result() ], [
-			undef,
+			{ errno => WSAEADDRINUSE },
 		]);
 	};
 	
@@ -324,6 +325,26 @@ shared_examples_for "bind address selection/reuse for one protocol" => sub
 	{
 		my $bind_a = IPXWrapper::Tool::Bind->new($remote_ip_a,
 			"-c", $bind_type_a, $bind_proto_a, "00:00:00:00", $remote_mac_a, "1",
+		);
+		
+		my $bind_b = IPXWrapper::Tool::Bind->new($remote_ip_a,
+			$bind_type_b, $bind_proto_b, "00:00:00:00", $remote_mac_a, "1",
+		);
+		
+		cmp_deeply([ $bind_a->result() ], [
+			{ net => "00:00:00:01", node => $remote_mac_a, sock => 1 },
+		]);
+		
+		cmp_deeply([ $bind_b->result() ], [
+			{ net => "00:00:00:01", node => $remote_mac_a, sock => 1 },
+		]);
+	};
+	
+	it "allows address reuse (between processes) if first process exits uncleanly" => sub
+	{
+		my $bind_a = IPXWrapper::Tool::Bind->new($remote_ip_a,
+			$bind_type_a, $bind_proto_a, "00:00:00:00", $remote_mac_a, "1",
+			"-e", # Forces early _exit()
 		);
 		
 		my $bind_b = IPXWrapper::Tool::Bind->new($remote_ip_a,
