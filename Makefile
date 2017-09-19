@@ -46,7 +46,7 @@ BIN_FILES := $(shell cat manifest.bin.txt)
 SRC_FILES := $(shell cat manifest.src.txt)
 
 # Tests to compile before running the test suite.
-TESTS := tests/addr.exe tests/ethernet.exe
+TESTS := tests/addr.exe tests/addrcache.exe tests/ethernet.exe
 
 # Tools to compile before running the test suite.
 TOOLS := tools/socket.exe tools/list-interfaces.exe tools/bind.exe tools/ipx-send.exe \
@@ -168,6 +168,7 @@ test-prep: $(TESTS) $(TOOLS) $(TOOL_DLLS)
 .PHONY: tools test-prep
 
 tests/addr.exe: tests/addr.o tests/tap/basic.o src/addr.o
+tests/addrcache.exe: tests/addrcache.o tests/tap/basic.o src/addrcache.o src/addr.o
 tests/ethernet.exe: tests/ethernet.o tests/tap/basic.o src/ethernet.o src/addr.o
 
 tests/%.exe: tests/%.o

@@ -18,8 +18,8 @@
 #ifndef _ADDRCACHE_H
 #define _ADDRCACHE_H
 
-#include <windows.h>
 #include <winsock2.h>
+#include <windows.h>
 #include <stdint.h>
 
 #include "common.h"
