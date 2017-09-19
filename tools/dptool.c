@@ -100,7 +100,7 @@ static BOOL FAR PASCAL list_sessions_cb(
 	}
 	else{
 		/* Last session detected in this pass, return FALSE to make the
-		 * invoking IDirectPlayX_EnumConnections call return rather than
+		 * invoking IDirectPlayX_EnumSessions call return rather than
 		 * searching forever.
 		*/
 		return FALSE;
