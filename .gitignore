@@ -1,6 +1,6 @@
-Makefile.dep
 *.o
 *.s
 *.dll
 *.exe
 ipxwrapper.log
+/.d/
