@@ -46,17 +46,22 @@ The following have been reported to work:
  * Carmageddon
  * Carmageddon II
  * Command & Conquer: Red Alert 2
+ * Darkstone: Evil Reigns
  * Delta Force 2
  * Diablo
  * Heroes of Might and Magic III
+ * Need For Speed III - Hot Pursuit
  * Outlive
  * Rising Lands
  * Rival Realms
  * Sid Meier's Alpha Centauri
+ * Star Wars Episode I: Racer
+ * Star Wars Jedi Knight: Dark Forces II
  * Street Wars: Constructor Underworld/Mob Rule
  * Theme Hospital
  * Total Annihilation
  * Twisted Metal 2
+ * Virtua Cop
  * Warcraft II
  * War Wind
  * War Wind II: Human Onslaught
@@ -64,5 +69,5 @@ The following have been reported to work:
 License
 -------
 
-Copyright (C) 2008-2015 Daniel Collins <solemnwarning@solemnwarning.net>
+Copyright (C) 2008-2017 Daniel Collins <solemnwarning@solemnwarning.net>
 Read license.txt for licensing terms.
