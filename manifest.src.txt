@@ -6,7 +6,6 @@ readme.dev.txt
 Makefile
 manifest.bin.txt
 manifest.src.txt
-mkdeps.pl
 mkstubs.pl
 
 src/addr.c
@@ -59,6 +58,7 @@ directplay-win32.reg
 directplay-win64.reg
 
 tests/05-addr.t
+tests/07-addrcache.t
 tests/07-ethernet.t
 tests/10-socket.t
 tests/15-interfaces.t
@@ -68,6 +68,7 @@ tests/30-ip-ipx.t
 tests/40-ip-spx.t
 tests/50-dplay.t
 tests/addr.c
+tests/addrcache.c
 tests/config.pm
 tests/ethernet.c
 tests/ptype.pm
