@@ -1,3 +1,13 @@
+Version 0.6.1:
+	Added support for LLC and Novell "raw" 802.3 Ethernet frame formats.
+	
+	Fix crashes during exit on some systems.
+	
+	Added support for sending/receiving frames using Win10Pcap.
+	
+	Added missing DirectPlay registry keys to support games which enumerate
+	them (e.g. Virtua Cop).
+
 Version 0.6.0:
 	Feature: Implemented support for sending/receiving real IPX frames on
 	the wire using WinPcap.
