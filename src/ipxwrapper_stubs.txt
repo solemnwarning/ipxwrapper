@@ -1,37 +1,48 @@
-inet_addr:4
-WSAStartup:4
-WSACleanup:4
-WSASetLastError:4
-WSAGetLastError:4
-htonl:4
-ntohl:4
-htons:4
-ntohs:4
-select:4
-r_listen:4
-r_accept:4
-WSACreateEvent:4
-WSAEventSelect:4
-WSACloseEvent:4
-WSAResetEvent:4
-WSASetEvent:4
-r_EnumProtocolsA:2
-r_EnumProtocolsW:2
-r_WSARecvEx:2
-r_bind:4
-r_closesocket:4
-r_getsockname:4
-r_getsockopt:4
-r_recv:4
-r_recvfrom:4
-r_sendto:4
-r_setsockopt:4
-r_shutdown:4
-r_socket:4
-r_ioctlsocket:4
-r_connect:4
-r_send:4
-r_getpeername:4
-inet_ntoa:4
-__WSAFDIsSet:4
-r_WSAAsyncSelect:4
+Function name          Target DLL     Target function        Parameters (bytes)
+-------------------------------------------------------------------------------
+inet_addr              ws2_32.dll     inet_addr               4
+WSAStartup             ws2_32.dll     WSAStartup              8
+WSACleanup             ws2_32.dll     WSACleanup              0
+WSASetLastError        ws2_32.dll     WSASetLastError         4
+WSAGetLastError        ws2_32.dll     WSAGetLastError         0
+htonl                  ws2_32.dll     htonl                   4
+ntohl                  ws2_32.dll     ntohl                   4
+htons                  ws2_32.dll     htons                   4
+ntohs                  ws2_32.dll     ntohs                   4
+select                 ws2_32.dll     select                 20
+r_listen               ws2_32.dll     listen                  8
+r_accept               ws2_32.dll     accept                 12
+WSACreateEvent         ws2_32.dll     WSACreateEvent          0
+WSAEventSelect         ws2_32.dll     WSAEventSelect         12
+WSACloseEvent          ws2_32.dll     WSACloseEvent           4
+WSAResetEvent          ws2_32.dll     WSAResetEvent           4
+WSASetEvent            ws2_32.dll     WSASetEvent             4
+r_EnumProtocolsA       mswsock.dll    EnumProtocolsA         12
+r_EnumProtocolsW       mswsock.dll    EnumProtocolsW         12
+r_WSARecvEx            mswsock.dll    WSARecvEx              16
+r_bind                 ws2_32.dll     bind                   12
+r_closesocket          ws2_32.dll     closesocket             4
+r_getsockname          ws2_32.dll     getsockname            12
+r_getsockopt           ws2_32.dll     getsockopt             20
+r_recv                 ws2_32.dll     recv                   16
+r_recvfrom             ws2_32.dll     recvfrom               24
+r_sendto               ws2_32.dll     sendto                 24
+r_setsockopt           ws2_32.dll     setsockopt             20
+r_shutdown             ws2_32.dll     shutdown                8
+r_socket               ws2_32.dll     socket                 12
+r_ioctlsocket          ws2_32.dll     ioctlsocket            12
+r_connect              ws2_32.dll     connect                12
+r_send                 ws2_32.dll     send                   16
+r_getpeername          ws2_32.dll     getpeername            12
+inet_ntoa              ws2_32.dll     inet_ntoa               4
+__WSAFDIsSet           ws2_32.dll     __WSAFDIsSet            8
+r_WSAAsyncSelect       ws2_32.dll     WSAAsyncSelect         16
+
+pcap_open              wpcap.dll      pcap_open
+pcap_close             wpcap.dll      pcap_close
+pcap_findalldevs_ex    wpcap.dll      pcap_findalldevs_ex
+pcap_freealldevs       wpcap.dll      pcap_freealldevs
+pcap_getevent          wpcap.dll      pcap_getevent
+pcap_dispatch          wpcap.dll      pcap_dispatch
+pcap_geterr            wpcap.dll      pcap_geterr
+pcap_sendpacket        wpcap.dll      pcap_sendpacket

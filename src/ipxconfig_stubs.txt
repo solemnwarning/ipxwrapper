@@ -1,0 +1,10 @@
+Function name          Target DLL   Target function        Parameters (bytes)
+-----------------------------------------------------------------------------
+pcap_open              wpcap.dll    pcap_open
+pcap_close             wpcap.dll    pcap_close
+pcap_findalldevs_ex    wpcap.dll    pcap_findalldevs_ex
+pcap_freealldevs       wpcap.dll    pcap_freealldevs
+pcap_getevent          wpcap.dll    pcap_getevent
+pcap_dispatch          wpcap.dll    pcap_dispatch
+pcap_geterr            wpcap.dll    pcap_geterr
+pcap_sendpacket        wpcap.dll    pcap_sendpacket

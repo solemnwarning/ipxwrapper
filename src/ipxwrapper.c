@@ -1,5 +1,5 @@
 /* ipxwrapper - Library functions
- * Copyright (C) 2008-2014 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2008-2019 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -63,6 +63,8 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 {
 	if(fdwReason == DLL_PROCESS_ATTACH)
 	{
+		fprof_init(stub_fstats, num_stubs);
+		
 		log_open("ipxwrapper.log");
 		
 		log_printf(LOG_INFO, "IPXWrapper %s", version_string);
@@ -136,6 +138,8 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 			FreeLibrary(kernel32);
 			kernel32 = NULL;
 		}
+		
+		fprof_cleanup(stub_fstats, num_stubs);
 	}
 	
 	return TRUE;

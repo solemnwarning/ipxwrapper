@@ -1,5 +1,5 @@
 /* IPXWrapper - Common functions
- * Copyright (C) 2011 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2011-2019 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -23,6 +23,7 @@
 
 enum ipx_log_level min_log_level = LOG_INFO;
 
+/* Must be kept in sync with DLL_INDICES in mkstubs.pl! */
 static const char *dll_names[] = {
 	"ipxwrapper.dll",
 	"wsock32.dll",

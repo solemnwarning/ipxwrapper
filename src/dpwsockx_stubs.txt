@@ -1,9 +1,10 @@
-r_SPInit
-DPWS_GetEnumPort
-DPWS_BuildIPMessageHeader
-
-WSACreateEvent:4
-WSACloseEvent:4
-WSAEventSelect:4
-WSAResetEvent:4
-WSASetEvent:4
+Function name                Target DLL      Target function
+------------------------------------------------------------
+r_SPInit                     dpwsockx.dll    SPInit
+DPWS_GetEnumPort             dpwsockx.dll    DPWS_GetEnumPort
+DPWS_BuildIPMessageHeader    dpwsockx.dll    DPWS_BuildIPMessageHeader
+WSACreateEvent               ws2_32.dll      WSACreateEvent
+WSACloseEvent                ws2_32.dll      WSACloseEvent
+WSAEventSelect               ws2_32.dll      WSAEventSelect
+WSAResetEvent                ws2_32.dll      WSAResetEvent
+WSASetEvent                  ws2_32.dll      WSASetEvent

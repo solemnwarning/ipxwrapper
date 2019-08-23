@@ -1,5 +1,5 @@
 # IPXWrapper - Generate assembly stub functions
-# Copyright (C) 2008-2011 Daniel Collins <solemnwarning@solemnwarning.net>
+# Copyright (C) 2008-2019 Daniel Collins <solemnwarning@solemnwarning.net>
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License version 2 as published by
@@ -17,75 +17,239 @@
 use strict;
 use warnings;
 
-if(@ARGV != 3) {
-	print STDERR "Usage: mkdll.pl <function list> <output file> <dll number>\n";
+if(@ARGV != 2) {
+	print STDERR "Usage: mkdll.pl <stub definitions file> <asm output file>\n";
 	exit(1);
 }
 
+# Must be kept in sync with dll_names in common.c!
+my %DLL_INDICES = (
+	"ipxwrapper.dll" => 0,
+	"wsock32.dll"    => 1,
+	"mswsock.dll"    => 2,
+	"dpwsockx.dll"   => 3,
+	"ws2_32.dll"     => 4,
+	"wpcap.dll"      => 5,
+);
+
 my $stub_file = $ARGV[0];
 my $asm_file = $ARGV[1];
-my $dllnum = $ARGV[2];
-my $do_logging = ($dllnum != 0);
 
 open(STUBS, "<$stub_file") or die("Cannot open $stub_file: $!");
 open(CODE, ">$asm_file") or die("Cannot open $asm_file: $!");
 
 my @stubs = ();
-my @stubs_dll = ();
 
-foreach my $line(<STUBS>) {
+# Skip over header
+(scalar <STUBS>);
+(scalar <STUBS>);
+
+# Read in stub definitions
+foreach my $line(<STUBS>)
+{
 	$line =~ s/[\r\n]//g;
 	
 	if($line ne "") {
-		my ($func, $dn) = split(/:/, $line);
-		$dn = $dllnum if(!defined($dn));
+		my ($name, $target_dll, $target_func, $params) = split(/\s+/, $line);
 		
-		my $sym = $func;
-		$sym =~ s/^r_//;
+		my $target_dll_index = $DLL_INDICES{$target_dll}
+			// die "Unknown DLL: $target_dll\n";
 		
-		push(@stubs, {"name" => $func, "sym" => $sym, "dllnum" => $dn});
+		push(@stubs, {
+			name             => $name,
+			target_dll       => $target_dll,
+			target_dll_index => $target_dll_index,
+			target_func      => $target_func,
+			params           => $params,
+		});
 	}
 }
 
-print CODE "section .rdata:\n";
+print CODE <<"END";
+extern _QueryPerformanceCounter\@4
 
-foreach my $func(@stubs) {
-	print CODE "\t".$func->{"name"}."_sym:\tdb\t'".$func->{"sym"}."', 0\n";
+extern _find_sym
+extern _log_call
+extern _fprof_record_timed
+extern _fprof_record_untimed
+
+struc FuncStats
+	.func_name:   resd 1
+	.min_time:    resd 1
+	.max_time:    resd 1
+	.total_time:  resd 1
+	.n_calls:     resd 1
+
+	.cs:  resb 24
+endstruc
+END
+
+print CODE <<"END";
+section .rdata
+END
+
+foreach my $func(@stubs)
+{
+	print CODE <<"END";
+		$func->{name}_name:         db '$func->{name}', 0
+		$func->{name}_target_func:  db '$func->{target_func}', 0
+END
 }
 
-print CODE "\nsection .data\n";
+print CODE <<"END";
+section .data
+END
 
-foreach my $func(@stubs) {
-	print CODE "\t".$func->{"name"}."_addr:\tdd\t0\n";
+foreach my $func(@stubs)
+{
+	print CODE <<"END";
+		$func->{name}_addr:  dd 0
+END
 }
 
-print CODE "\nsection .text\n";
-print CODE "\textern\t_find_sym\n";
-print CODE "\textern\t_log_call\n" if($do_logging);
+print CODE <<"END";
+global _stub_fstats
+_stub_fstats:
+END
 
-foreach my $func(@stubs) {
-	my $f_name = $func->{"name"};
-	
-	print CODE "\nglobal\t_$f_name\n";
-	print CODE "_$f_name:\n";
-	
-	if($do_logging) {
-		print CODE "\tpush\tdword ".$func->{"dllnum"}."\n";
-		print CODE "\tpush\t$f_name\_sym\n";
-		print CODE "\tpush\tdword $dllnum\n";
-		print CODE "\tcall\t_log_call\n";
+foreach my $func(@stubs)
+{
+	print CODE <<"END";
+		$func->{name}_fstats:
+			istruc FuncStats
+			at FuncStats.func_name, dd $func->{name}_name
+			iend
+END
+}
+
+my $num_funcs = (scalar @stubs);
+
+print CODE <<"END";
+global _num_stubs
+_num_stubs: dd $num_funcs
+END
+
+print CODE <<"END";
+section .text
+END
+
+foreach my $func(@stubs)
+{
+	if(defined $func->{params})
+	{
+		my $to_copy = $func->{params};
+		
+		print CODE <<"END";
+			global _$func->{name}
+			_$func->{name}:
+				; Check if we have address cached
+				cmp dword [$func->{name}_addr], 0
+				jne $func->{name}_go
+				
+				; Fetch target function address
+				push $func->{name}_target_func
+				push dword $func->{target_dll_index}
+				call _find_sym
+				mov dword [$func->{name}_addr], eax
+				
+				$func->{name}_go:
+				
+				push ebp
+				mov ebp, esp
+				
+				; Push tick count onto stack (ebp - 8)
+				sub esp, 8
+				push esp
+				call _QueryPerformanceCounter\@4
+				
+				; Copy original arguments ($to_copy bytes)
+END
+		
+		for(; $to_copy >= 4;)
+		{
+			$to_copy -= 4;
+			print CODE <<"END";
+				push dword [ebp + 4 + 4 + $to_copy]
+END
+		}
+		
+		for(; $to_copy >= 2;)
+		{
+			$to_copy -= 2;
+			print CODE <<"END";
+				push word [ebp + 4 + 4 + $to_copy]
+END
+		}
+		
+		for(; $to_copy >= 1;)
+		{
+			$to_copy -= 1;
+			print CODE <<"END";
+				push byte [ebp + 4 + 4 + $to_copy]
+END
+		}
+		
+		print CODE <<"END";
+				
+				; Call target function
+				call [$func->{name}_addr]
+				
+				; Push target function return value onto stack (ebp - 12)
+				push eax
+				
+				; Push tick count onto stack (ebp - 20)
+				sub esp, 8
+				push esp
+				call _QueryPerformanceCounter\@4
+				
+				; End tick parameter to _fprof_record_timed
+				push dword ebp
+				sub dword [esp], 20
+				
+				; Start tick parameter to _fprof_record_untimed
+				push dword ebp
+				sub dword [esp], 8
+				
+				; FuncStats parameter to _fprof_record_untimed
+				push dword $func->{name}_fstats
+				
+				; Record profiling data
+				call _fprof_record_timed
+				
+				add esp, 8  ; Pop end tick count
+				pop eax     ; Pop return value
+				add esp, 8  ; Pop start tick count
+				
+				pop ebp ; Restore caller's ebp
+				
+				ret $func->{params}
+END
 	}
-	
-	print CODE "\tcmp\tdword [$f_name\_addr], 0\n";
-	print CODE "\tjne\t$f_name\_jmp\n";
-	
-	print CODE "\tpush\t$f_name\_sym\n";
-	print CODE "\tpush\tdword ".$func->{"dllnum"}."\n";
-	print CODE "\tcall\t_find_sym\n";
-	print CODE "\tmov\t[$f_name\_addr], eax\n";
-	
-	print CODE "\t$f_name\_jmp:\n";
-	print CODE "\tjmp\t[$f_name\_addr]\n";
+	else{
+		print CODE <<"END";
+			global _$func->{name}
+			_$func->{name}:
+				; Check if we have address cached
+				cmp dword [$func->{name}_addr], 0
+				jne $func->{name}_go
+				
+				; Fetch target function address
+				push $func->{name}_target_func
+				push dword $func->{target_dll_index}
+				call _find_sym
+				mov dword [$func->{name}_addr], eax
+				
+				$func->{name}_go:
+				
+				; Record that we were called
+				push dword $func->{name}_fstats
+				call _fprof_record_untimed
+				
+				; Jump into target function. We have left the stack as we found it
+				; so it can take over our frame.
+				jmp [$func->{name}_addr]
+END
+	}
 }
 
 close(CODE);

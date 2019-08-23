@@ -1,5 +1,5 @@
 /* IPXWrapper - Common header
- * Copyright (C) 2011 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2011-2019 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -24,6 +24,7 @@
 #include <stdbool.h>
 
 #include "addr.h"
+#include "funcprof.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -38,6 +39,10 @@ enum ipx_log_level {
 };
 
 extern enum ipx_log_level min_log_level;
+
+/* Defined by stubs */
+extern struct FuncStats stub_fstats[];
+extern unsigned int num_stubs;
 
 const char *w32_error(DWORD errnum);
 

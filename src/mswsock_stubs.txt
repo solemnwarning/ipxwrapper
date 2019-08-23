@@ -1,35 +1,37 @@
-ServiceMain
-SvchostPushServiceGlobals
-AcceptEx
-EnumProtocolsA:0
-EnumProtocolsW:0
-GetAcceptExSockaddrs
-GetAddressByNameA
-GetAddressByNameW
-GetNameByTypeA
-GetNameByTypeW
-GetServiceA
-GetServiceW
-GetTypeByNameA
-GetTypeByNameW
-MigrateWinsockConfiguration
-NPLoadNameSpaces
-NSPStartup
-SetServiceA
-SetServiceW
-StartWsdpService
-StopWsdpService
-TransmitFile
-WSARecvEx:0
-WSPStartup
-dn_expand
-getnetbyname
-inet_network
-rcmd
-rexec
-rresvport
-s_perror
-sethostname
-inet_addr
-WSHEnumProtocols:0
-ntohs:1
+Function name                  Target DLL        Target function                Parameters (bytes)
+--------------------------------------------------------------------------------------------------
+ServiceMain                    mswsock.dll       ServiceMain
+SvchostPushServiceGlobals      mswsock.dll       SvchostPushServiceGlobals
+AcceptEx                       mswsock.dll       AcceptEx                       32
+EnumProtocolsA                 ipxwrapper.dll    EnumProtocolsA                 12
+EnumProtocolsW                 ipxwrapper.dll    EnumProtocolsW                 12
+GetAcceptExSockaddrs           mswsock.dll       GetAcceptExSockaddrs           32
+GetAddressByNameA              mswsock.dll       GetAddressByNameA              40
+GetAddressByNameW              mswsock.dll       GetAddressByNameW              40
+GetNameByTypeA                 mswsock.dll       GetNameByTypeA                 12
+GetNameByTypeW                 mswsock.dll       GetNameByTypeW                 12
+GetServiceA                    mswsock.dll       GetServiceA                    28
+GetServiceW                    mswsock.dll       GetServiceW                    28
+GetTypeByNameA                 mswsock.dll       GetTypeByNameA                  8
+GetTypeByNameW                 mswsock.dll       GetTypeByNameW                  8
+MigrateWinsockConfiguration    mswsock.dll       MigrateWinsockConfiguration
+NPLoadNameSpaces               mswsock.dll       NPLoadNameSpaces
+NSPStartup                     mswsock.dll       NSPStartup                      8
+SetServiceA                    mswsock.dll       SetServiceA                    24
+SetServiceW                    mswsock.dll       SetServiceW                    24
+StartWsdpService               mswsock.dll       StartWsdpService
+StopWsdpService                mswsock.dll       StopWsdpService
+TransmitFile                   mswsock.dll       TransmitFile                   28
+WSARecvEx                      ipxwrapper.dll    WSARecvEx                      16
+WSPStartup                     mswsock.dll       WSPStartup                     76
+dn_expand                      mswsock.dll       dn_expand
+getnetbyname                   mswsock.dll       getnetbyname
+inet_network                   mswsock.dll       inet_network
+rcmd                           mswsock.dll       rcmd
+rexec                          mswsock.dll       rexec
+rresvport                      mswsock.dll       rresvport
+s_perror                       mswsock.dll       s_perror
+sethostname                    mswsock.dll       sethostname
+inet_addr                      mswsock.dll       inet_addr                       4
+WSHEnumProtocols               ipxwrapper.dll    WSHEnumProtocols               16
+ntohs                          wsock32.dll       ntohs                           4

@@ -1,5 +1,5 @@
 /* ipxwrapper - DirectPlay service provider
- * Copyright (C) 2011 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2011-2019 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -725,6 +725,8 @@ HRESULT WINAPI SPInit(LPSPINITDATA data) {
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
 	if(fdwReason == DLL_PROCESS_ATTACH)
 	{
+		fprof_init(stub_fstats, num_stubs);
+		
 		log_open("ipxwrapper.log");
 		
 		min_log_level = get_main_config().log_level;
@@ -743,6 +745,8 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
 		
 		unload_dlls();
 		log_close();
+		
+		fprof_cleanup(stub_fstats, num_stubs);
 	}
 	
 	return TRUE;
