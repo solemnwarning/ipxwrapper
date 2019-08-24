@@ -725,7 +725,7 @@ HRESULT WINAPI SPInit(LPSPINITDATA data) {
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
 	if(fdwReason == DLL_PROCESS_ATTACH)
 	{
-		fprof_init(stub_fstats, num_stubs);
+		fprof_init(stub_fstats, NUM_STUBS);
 		
 		log_open("ipxwrapper.log");
 		
@@ -746,7 +746,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
 		unload_dlls();
 		log_close();
 		
-		fprof_cleanup(stub_fstats, num_stubs);
+		fprof_cleanup(stub_fstats, NUM_STUBS);
 	}
 	
 	return TRUE;

@@ -42,7 +42,8 @@ extern enum ipx_log_level min_log_level;
 
 /* Defined by stubs */
 extern struct FuncStats stub_fstats[];
-extern unsigned int num_stubs;
+extern const unsigned int NUM_STUBS;
+extern const char *STUBS_DLL_NAME;
 
 const char *w32_error(DWORD errnum);
 

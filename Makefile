@@ -93,7 +93,7 @@ ipxwrapper.dll: $(IPXWRAPPER_OBJS)
 	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -static-libgcc -shared -o $@ $^ version.o -liphlpapi -lversion -lole32 -loleaut32
 
 src/ipxwrapper_stubs.s: src/ipxwrapper_stubs.txt
-	perl mkstubs.pl src/ipxwrapper_stubs.txt src/ipxwrapper_stubs.s
+	perl mkstubs.pl src/ipxwrapper_stubs.txt src/ipxwrapper_stubs.s ipxwrapper.dll
 
 #
 # WSOCK32.DLL
@@ -103,7 +103,7 @@ wsock32.dll: src/stubdll.o src/wsock32_stubs.o src/log.o src/common.o src/config
 	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -static-libgcc -shared -o $@ $^
 
 src/wsock32_stubs.s: src/wsock32_stubs.txt
-	perl mkstubs.pl src/wsock32_stubs.txt src/wsock32_stubs.s
+	perl mkstubs.pl src/wsock32_stubs.txt src/wsock32_stubs.s wsock32.dll
 
 #
 # MSWSOCK.DLL
@@ -113,7 +113,7 @@ mswsock.dll: src/stubdll.o src/mswsock_stubs.o src/log.o src/common.o src/config
 	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -static-libgcc -shared -o $@ $^
 
 src/mswsock_stubs.s: src/mswsock_stubs.txt
-	perl mkstubs.pl src/mswsock_stubs.txt src/mswsock_stubs.s
+	perl mkstubs.pl src/mswsock_stubs.txt src/mswsock_stubs.s mswsock.dll
 
 #
 # DPWSOCKX.DLL
@@ -123,7 +123,7 @@ dpwsockx.dll: src/directplay.o src/log.o src/dpwsockx_stubs.o src/common.o src/c
 	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -static-libgcc -shared -o $@ $^ -lwsock32
 
 src/dpwsockx_stubs.s: src/dpwsockx_stubs.txt
-	perl mkstubs.pl src/dpwsockx_stubs.txt src/dpwsockx_stubs.s
+	perl mkstubs.pl src/dpwsockx_stubs.txt src/dpwsockx_stubs.s dpwsockx.dll
 
 #
 # IPXCONFIG.EXE
@@ -136,7 +136,7 @@ ipxconfig.exe: $(IPXCONFIG_OBJS)
 	$(CXX) $(CXXFLAGS) -Wl,--enable-stdcall-fixup -static-libgcc -static-libstdc++ -mwindows -o $@ $^ -liphlpapi -lcomctl32 -lws2_32
 
 src/ipxconfig_stubs.s: src/ipxwrapper_stubs.txt
-	perl mkstubs.pl src/ipxconfig_stubs.txt src/ipxconfig_stubs.s
+	perl mkstubs.pl src/ipxconfig_stubs.txt src/ipxconfig_stubs.s ipxconfig.exe
 
 #
 # SHARED TARGETS

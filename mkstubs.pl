@@ -17,8 +17,8 @@
 use strict;
 use warnings;
 
-if(@ARGV != 2) {
-	print STDERR "Usage: mkdll.pl <stub definitions file> <asm output file>\n";
+if(@ARGV != 3) {
+	print STDERR "Usage: mkdll.pl <stub definitions file> <asm output file> <dll name>\n";
 	exit(1);
 }
 
@@ -32,8 +32,7 @@ my %DLL_INDICES = (
 	"wpcap.dll"      => 5,
 );
 
-my $stub_file = $ARGV[0];
-my $asm_file = $ARGV[1];
+my ($stub_file, $asm_file, $dll_name) = @ARGV;
 
 open(STUBS, "<$stub_file") or die("Cannot open $stub_file: $!");
 open(CODE, ">$asm_file") or die("Cannot open $asm_file: $!");
@@ -96,6 +95,17 @@ foreach my $func(@stubs)
 END
 }
 
+my $num_funcs = (scalar @stubs);
+
+print CODE <<"END";
+global _NUM_STUBS
+_NUM_STUBS: dd $num_funcs
+
+DLL_NAME: db '$dll_name', 0
+global _STUBS_DLL_NAME
+_STUBS_DLL_NAME: dd DLL_NAME
+END
+
 print CODE <<"END";
 section .data
 END
@@ -121,13 +131,6 @@ foreach my $func(@stubs)
 			iend
 END
 }
-
-my $num_funcs = (scalar @stubs);
-
-print CODE <<"END";
-global _num_stubs
-_num_stubs: dd $num_funcs
-END
 
 print CODE <<"END";
 section .text
