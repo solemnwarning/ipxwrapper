@@ -20,6 +20,10 @@
 
 #include <windows.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct FuncStats
 {
 	const char *func_name;
@@ -35,5 +39,9 @@ __stdcall void fprof_record_timed(struct FuncStats *fstats, const LARGE_INTEGER 
 __stdcall void fprof_record_untimed(struct FuncStats *fstats);
 
 void fprof_report(const char *dll_name, struct FuncStats *fstats, size_t n_fstats);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* !IPXWRAPPER_FUNCPROF_H */

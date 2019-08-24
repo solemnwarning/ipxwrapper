@@ -1,5 +1,5 @@
 /* IPXWrapper - Configuration tool
- * Copyright (C) 2011-2014 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2011-2019 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -242,6 +242,8 @@ static LRESULT CALLBACK groupbox_wproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
 
 int main()
 {
+	fprof_init(stub_fstats, NUM_STUBS);
+	
 	INITCOMMONCONTROLSEX common_controls;
 	common_controls.dwSize = sizeof(common_controls);
 	common_controls.dwICC  = ICC_LISTVIEW_CLASSES;
@@ -299,6 +301,8 @@ int main()
 			inv_window = NULL;
 		}
 	}
+	
+	fprof_cleanup(stub_fstats, NUM_STUBS);
 	
 	return msg.wParam;
 }
