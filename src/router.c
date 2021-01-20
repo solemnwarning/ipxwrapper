@@ -26,6 +26,7 @@
 
 #include "router.h"
 #include "common.h"
+#include "funcprof.h"
 #include "ipxwrapper.h"
 #include "interface.h"
 #include "addrcache.h"
@@ -197,6 +198,8 @@ static void _deliver_packet(
 	const void *data,
 	size_t data_size)
 {
+	FPROF_RECORD_SCOPE(&(ipxwrapper_fstats[IPXWRAPPER_FSTATS__deliver_packet]));
+	
 	{
 		IPX_STRING_ADDR(src_addr, src_net, src_node, src_socket);
 		IPX_STRING_ADDR(dest_addr, dest_net, dest_node, dest_socket);
@@ -320,6 +323,8 @@ static void _deliver_packet(
 
 static void _handle_udp_recv(ipx_packet *packet, size_t packet_size, struct sockaddr_in src_ip)
 {
+	FPROF_RECORD_SCOPE(&(ipxwrapper_fstats[IPXWRAPPER_FSTATS__handle_udp_recv]));
+	
 	size_t data_size = ntohs(packet->size);
 	
 	if(packet_size < sizeof(ipx_packet) - 1 || data_size > MAX_DATA_SIZE || data_size + sizeof(ipx_packet) - 1 != packet_size)

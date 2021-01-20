@@ -30,6 +30,7 @@
 
 #include "ipxwrapper.h"
 #include "common.h"
+#include "funcprof.h"
 #include "interface.h"
 #include "router.h"
 #include "addrcache.h"
@@ -50,6 +51,14 @@ static CRITICAL_SECTION sockets_cs;
 typedef ULONGLONG WINAPI (*GetTickCount64_t)(void);
 static HMODULE kernel32 = NULL;
 
+struct FuncStats ipxwrapper_fstats[] = {
+	#define FPROF_DECL(func) { #func },
+	#include "ipxwrapper_prof_defs.h"
+	#undef FPROF_DECL
+};
+
+const unsigned int ipxwrapper_fstats_size = sizeof(ipxwrapper_fstats) / sizeof(*ipxwrapper_fstats);
+
 static void init_cs(CRITICAL_SECTION *cs)
 {
 	if(!InitializeCriticalSectionAndSpinCount(cs, 0x80000000))
@@ -69,6 +78,7 @@ static DWORD WINAPI prof_thread_main(LPVOID lpParameter)
 	while(WaitForSingleObject(prof_thread_exit, PROF_INTERVAL_MS) == WAIT_TIMEOUT)
 	{
 		fprof_report(STUBS_DLL_NAME, stub_fstats, NUM_STUBS);
+		fprof_report("ipxwrapper.dll", ipxwrapper_fstats, ipxwrapper_fstats_size);
 	}
 	
 	return 0;
@@ -79,6 +89,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 	if(fdwReason == DLL_PROCESS_ATTACH)
 	{
 		fprof_init(stub_fstats, NUM_STUBS);
+		fprof_init(ipxwrapper_fstats, ipxwrapper_fstats_size);
 		
 		log_open("ipxwrapper.log");
 		
@@ -187,6 +198,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 		unload_dlls();
 		
 		fprof_report(STUBS_DLL_NAME, stub_fstats, NUM_STUBS);
+		fprof_report("ipxwrapper.dll", ipxwrapper_fstats, ipxwrapper_fstats_size);
 		
 		log_close();
 		
@@ -196,6 +208,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 			kernel32 = NULL;
 		}
 		
+		fprof_cleanup(ipxwrapper_fstats, ipxwrapper_fstats_size);
 		fprof_cleanup(stub_fstats, NUM_STUBS);
 	}
 	
@@ -225,6 +238,7 @@ ipx_socket *get_socket(SOCKET sockfd)
 /* Lock the mutex */
 void lock_sockets(void)
 {
+	FPROF_RECORD_SCOPE(&(ipxwrapper_fstats[IPXWRAPPER_FSTATS_lock_sockets]));
 	EnterCriticalSection(&sockets_cs);
 }
 
