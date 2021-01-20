@@ -40,6 +40,23 @@ __stdcall void fprof_record_untimed(struct FuncStats *fstats);
 
 void fprof_report(const char *dll_name, struct FuncStats *fstats, size_t n_fstats);
 
+#define FPROF_RECORD_SCOPE(fstats) \
+	__attribute__((cleanup (_fprof_record_scope_exit))) struct _fprof_record_scope_ctx fstats_scoped_ctx = { fstats }; \
+	QueryPerformanceCounter(&(fstats_scoped_ctx.enter_time));
+
+struct _fprof_record_scope_ctx {
+	struct FuncStats *fstats;
+	LARGE_INTEGER enter_time;
+};
+
+static inline void _fprof_record_scope_exit(struct _fprof_record_scope_ctx *ctx)
+{
+	LARGE_INTEGER leave_time;
+	QueryPerformanceCounter(&leave_time);
+	
+	fprof_record_timed(ctx->fstats, &(ctx->enter_time), &leave_time);
+}
+
 #ifdef __cplusplus
 }
 #endif
