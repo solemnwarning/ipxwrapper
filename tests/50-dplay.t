@@ -1,5 +1,5 @@
 # IPXWrapper test suite
-# Copyright (C) 2015 Daniel Collins <solemnwarning@solemnwarning.net>
+# Copyright (C) 2015-2019 Daniel Collins <solemnwarning@solemnwarning.net>
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License version 2 as published by
@@ -26,12 +26,18 @@ use FindBin;
 use lib "$FindBin::Bin/lib/";
 
 use IPXWrapper::Tool::DPTool;
+use IPXWrapper::Util;
 
 require "$FindBin::Bin/config.pm";
 our ($remote_ip_a, $remote_b_ip, $remote_c_ip);
 
 # Nicked from dplay.h
 use constant DPID_ALLPLAYERS => 0;
+
+# Reset IPXWrapper configuration to defaults
+reg_delete_key($remote_ip_a, "HKCU\\Software\\IPXWrapper");
+reg_delete_key($remote_b_ip, "HKCU\\Software\\IPXWrapper");
+reg_delete_key($remote_c_ip, "HKCU\\Software\\IPXWrapper");
 
 describe "A single DirectPlay client" => sub
 {
