@@ -1,5 +1,5 @@
 /* ipxwrapper - Library functions
- * Copyright (C) 2008-2014 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2008-2021 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -81,7 +81,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 		
 		main_config = get_main_config();
 		min_log_level = main_config.log_level;
-		ipx_use_pcap  = main_config.use_pcap;
+		ipx_use_pcap  = main_config.encap_type == ENCAP_TYPE_PCAP;
 		
 		if(main_config.fw_except)
 		{
