@@ -1,5 +1,5 @@
 /* IPXWrapper - Interface functions
- * Copyright (C) 2011 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2011-2021 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -232,6 +232,7 @@ ipx_interface_t *load_ipx_interfaces(void)
 		
 		if(!(wc_iface = _new_iface(wc_config.netnum, wc_config.nodenum)))
 		{
+			free(ifroot);
 			return NULL;
 		}
 		
@@ -249,6 +250,7 @@ ipx_interface_t *load_ipx_interfaces(void)
 		if(wc_iface && !_push_addr(wc_iface, &(ifptr->IpAddressList)))
 		{
 			free_ipx_interface_list(&nics);
+			free(ifroot);
 			return NULL;
 		}
 		
@@ -262,6 +264,7 @@ ipx_interface_t *load_ipx_interfaces(void)
 		if(!iface)
 		{
 			free_ipx_interface_list(&nics);
+			free(ifroot);
 			return NULL;
 		}
 		
@@ -279,6 +282,7 @@ ipx_interface_t *load_ipx_interfaces(void)
 		if(!_push_addr(iface, &(ifptr->IpAddressList)))
 		{
 			free_ipx_interface_list(&nics);
+			free(ifroot);
 			return NULL;
 		}
 	}
