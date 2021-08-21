@@ -52,8 +52,6 @@ enum {
 	
 	ID_DOSBOX_SERVER_ADDR = 51,
 	ID_DOSBOX_SERVER_PORT = 52,
-	ID_DOSBOX_NET = 53,
-	ID_DOSBOX_NODE = 54,
 	ID_DOSBOX_FW_EXCEPT = 55,
 	
 	ID_IPXWRAPPER_PORT = 61,
@@ -134,10 +132,6 @@ static struct {
 	HWND dosbox_server_addr;
 	HWND dosbox_server_port_lbl;
 	HWND dosbox_server_port;
-	HWND dosbox_net_lbl;
-	HWND dosbox_net;
-	HWND dosbox_node_lbl;
-	HWND dosbox_node;
 	HWND dosbox_fw_except;
 	
 	HWND box_ipx_options;
@@ -478,8 +472,6 @@ static bool stash_nic_config()
 
 static bool save_config()
 {
-	iface_config wildcard_iface_config = get_iface_config(WILDCARD_IFACE_HWADDR);
-	
 	if(main_config.encap_type == ENCAP_TYPE_IPXWRAPPER || main_config.encap_type == ENCAP_TYPE_PCAP)
 	{
 		int pri_index = ComboBox_GetCurSel(wh.primary);
@@ -562,33 +554,6 @@ static bool save_config()
 			return false;
 		}
 		
-		char net[32], node[32];
-		
-		GetWindowText(wh.dosbox_net, net, 32);
-		GetWindowText(wh.dosbox_node, node, 32);
-		
-		if(!addr32_from_string(&(wildcard_iface_config.netnum), net))
-		{
-			MessageBox(wh.main, "Network number is invalid.\n"
-			                    "Valid network numbers are in the format XX:XX:XX:XX", "Error", MB_OK);
-			
-			SetFocus(wh.dosbox_net);
-			Edit_SetSel(wh.dosbox_net, 0, Edit_GetTextLength(wh.dosbox_net));
-			
-			return false;
-		}
-		
-		if(!addr48_from_string(&(wildcard_iface_config.nodenum), node))
-		{
-			MessageBox(wh.main, "Node number is invalid.\n"
-			                    "Valid numbers are in the format XX:XX:XX:XX:XX:XX", "Error", MB_OK);
-			
-			SetFocus(wh.dosbox_node);
-			Edit_SetSel(wh.dosbox_node, 0, Edit_GetTextLength(wh.dosbox_node));
-			
-			return false;
-		}
-		
 		free(main_config.dosbox_server_addr);
 		
 		main_config.dosbox_server_addr = strdup(server);
@@ -627,13 +592,6 @@ static bool save_config()
 			{
 				return false;
 			}
-		}
-	}
-	else if(main_config.encap_type == ENCAP_TYPE_DOSBOX)
-	{
-		if(!set_iface_config(WILDCARD_IFACE_HWADDR, &wildcard_iface_config))
-		{
-			return false;
 		}
 	}
 	
@@ -779,9 +737,6 @@ static void main_window_init()
 	 * |   DOSBox IPX server address | foo.bar.com       |       |
 	 * |      DOSBox IPX server port | 213               |       |
 	 * |                                                         |
-	 * |          IPX Network number | AA:BB:CC:DD       |       |
-	 * |             IPX Node number | AA:BB:CC:DD:EE:FF |       |
-	 * |                                                         |
 	 * | □ Automatically create Windows Firewall exceptions      |
 	 * +---------------------------------------------------------+
 	*/
@@ -797,12 +752,6 @@ static void main_window_init()
 		wh.dosbox_server_port_lbl = create_STATIC(wh.box_dosbox_options, "DOSBox IPX server port");
 		wh.dosbox_server_port     = create_child(wh.box_dosbox_options, "EDIT", "", WS_TABSTOP, WS_EX_CLIENTEDGE, ID_DOSBOX_SERVER_PORT);
 		
-		wh.dosbox_net_lbl = create_STATIC(wh.box_dosbox_options, "IPX network number");
-		wh.dosbox_net     = create_child(wh.box_dosbox_options, "EDIT", "", WS_TABSTOP, WS_EX_CLIENTEDGE, ID_DOSBOX_NET);
-		
-		wh.dosbox_node_lbl = create_STATIC(wh.box_dosbox_options, "IPX network number");
-		wh.dosbox_node     = create_child(wh.box_dosbox_options, "EDIT", "", WS_TABSTOP, WS_EX_CLIENTEDGE, ID_DOSBOX_NODE);
-		
 		wh.dosbox_fw_except = create_checkbox(wh.box_dosbox_options, "Automatically create Windows Firewall exceptions", ID_DOSBOX_FW_EXCEPT);
 		
 		/* Initialise controls. */
@@ -813,16 +762,6 @@ static void main_window_init()
 		
 		sprintf(port_s, "%hu", main_config.dosbox_server_port);
 		SetWindowText(wh.dosbox_server_port, port_s);
-		
-		iface_config wildcard_iface_config = get_iface_config(WILDCARD_IFACE_HWADDR);
-		
-		char net_s[ADDR32_STRING_SIZE];
-		addr32_string(net_s, wildcard_iface_config.netnum);
-		SetWindowText(wh.dosbox_net, net_s);
-		
-		char node_s[ADDR48_STRING_SIZE];
-		addr48_string(node_s, wildcard_iface_config.nodenum);
-		SetWindowText(wh.dosbox_node, node_s);
 		
 		set_checkbox(wh.dosbox_fw_except, main_config.fw_except);
 	}
@@ -984,16 +923,6 @@ static void main_window_init()
 		
 		MoveWindow(wh.dosbox_server_port_lbl, BOX_SIDE_PAD, box_dosbox_options_y, lbl_w2, text_h, TRUE);
 		MoveWindow(wh.dosbox_server_port, 15 + lbl_w2, box_dosbox_options_y, port_w, edit_h, TRUE);
-		box_dosbox_options_y += edit_h;
-		
-		box_dosbox_options_y += text_h; /* Padding. */
-		
-		MoveWindow(wh.dosbox_net_lbl, BOX_SIDE_PAD, box_dosbox_options_y, lbl_w, text_h, TRUE);
-		MoveWindow(wh.dosbox_net, 15 + lbl_w, box_dosbox_options_y, node_w, edit_h, TRUE);
-		box_dosbox_options_y += edit_h;
-		
-		MoveWindow(wh.dosbox_node_lbl, BOX_SIDE_PAD, box_dosbox_options_y, lbl_w, text_h, TRUE);
-		MoveWindow(wh.dosbox_node, 15 + lbl_w, box_dosbox_options_y, node_w, edit_h, TRUE);
 		box_dosbox_options_y += edit_h;
 		
 		box_dosbox_options_y += text_h; /* Padding. */
