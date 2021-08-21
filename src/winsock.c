@@ -1,5 +1,5 @@
 /* ipxwrapper - Winsock functions
- * Copyright (C) 2008-2014 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2008-2021 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -50,7 +50,7 @@ static size_t strsize(void *str, bool unicode)
 
 static int _max_ipx_payload(void)
 {
-	if(ipx_use_pcap)
+	if(ipx_encap_type == ENCAP_TYPE_PCAP)
 	{
 		/* TODO: Use real interface MTU */
 		
@@ -65,6 +65,11 @@ static int _max_ipx_payload(void)
 		}
 		
 		abort();
+	}
+	else if(ipx_encap_type == ENCAP_TYPE_DOSBOX)
+	{
+		// TODO: DOXBox MTU
+		return 1500;
 	}
 	else{
 		return MAX_DATA_SIZE;
@@ -331,9 +336,16 @@ SOCKET WSAAPI socket(int af, int type, int protocol)
 		}
 		else if(type == SOCK_STREAM)
 		{
-			if(ipx_use_pcap)
+			if(ipx_encap_type == ENCAP_TYPE_PCAP)
 			{
 				log_printf(LOG_WARNING, "Application attempted to create an SPX socket, this isn't supported when using Ethernet encapsulation");
+				
+				WSASetLastError(WSAEPROTONOSUPPORT);
+				return -1;
+			}
+			else if(ipx_encap_type == ENCAP_TYPE_DOSBOX)
+			{
+				log_printf(LOG_WARNING, "Application attempted to create an SPX socket, this isn't supported when using DOSBox encapsulation");
 				
 				WSASetLastError(WSAEPROTONOSUPPORT);
 				return -1;
@@ -1210,7 +1222,7 @@ static DWORD ipx_send_packet(
 			(unsigned int)(data_size), src_addr, dest_addr);
 	}
 	
-	if(ipx_use_pcap)
+	if(ipx_encap_type == ENCAP_TYPE_PCAP)
 	{
 		ipx_interface_t *iface = ipx_interface_by_addr(src_net, src_node);
 		if(iface)
@@ -1301,6 +1313,53 @@ static DWORD ipx_send_packet(
 		else{
 			/* It's a bug if we actually hit this. */
 			return WSAENETDOWN;
+		}
+	}
+	else if(ipx_encap_type == ENCAP_TYPE_DOSBOX)
+	{
+		if(dosbox_state != DOSBOX_CONNECTED)
+		{
+			return WSAENETDOWN;
+		}
+		else if(src_net != dosbox_local_netnum || src_node != dosbox_local_nodenum)
+		{
+			return WSAENETDOWN;
+		}
+		else{
+			size_t packet_size = sizeof(novell_ipx_packet) + data_size;
+			
+			novell_ipx_packet *packet = malloc(packet_size);
+			if(packet == NULL)
+			{
+				return ERROR_OUTOFMEMORY;
+			}
+			
+			packet->checksum = 0xFFFF;
+			packet->length = htons(sizeof(novell_ipx_packet) + data_size);
+			packet->hops = 0;
+			packet->type = type;
+			
+			addr32_out(packet->dest_net, dest_net);
+			addr48_out(packet->dest_node, dest_node);
+			packet->dest_socket = dest_socket;
+			
+			addr32_out(packet->src_net, src_net);
+			addr48_out(packet->src_node, src_node);
+			packet->src_socket = src_socket;
+			
+			memcpy(packet->data, data, data_size);
+			
+			DWORD error = ERROR_SUCCESS;
+			
+			if(r_send(private_socket, (const void*)(packet), packet_size, 0) < 0)
+			{
+				error = WSAGetLastError();
+				log_printf(LOG_ERROR, "Error sending DOSBox IPX packet: %s", w32_error(error));
+			}
+			
+			free(packet);
+			
+			return error;
 		}
 	}
 	else{

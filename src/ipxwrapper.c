@@ -81,7 +81,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 		
 		main_config = get_main_config();
 		min_log_level = main_config.log_level;
-		ipx_use_pcap  = main_config.encap_type == ENCAP_TYPE_PCAP;
+		ipx_encap_type = main_config.encap_type;
 		
 		if(main_config.fw_except)
 		{

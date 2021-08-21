@@ -1,5 +1,5 @@
 /* IPXWrapper - Router code
- * Copyright (C) 2011 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2011-2021 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -38,23 +38,32 @@ static HANDLE router_thread  = NULL;
 /* The shared socket uses the UDP port number specified in the configuration,
  * every IPXWrapper instance will share it and use it to receive broadcast
  * packets.
- * 
+ *
  * The private socket uses a randomly allocated UDP port number and is used to
  * send packets and receive unicast, it is unique to a single IPXWrapper
  * instance.
- * 
+ *
  * When running in WinPcap mode, only the private socket will be opened and it
  * will be bound to loopback rather than INADDR_ANY since it is only used for
  * forwarding IPX packets on to local sockets.
+ *
+ * When running in DOSBox mode, only the private socket will be opened and it
+ * will be "connected" to the DOSBox server address.
 */
 
 SOCKET shared_socket  = -1;
 SOCKET private_socket = -1;
 
+#define DOSBOX_CONNECT_TIMEOUT_SECS 10
+
+static struct sockaddr_in dosbox_server_addr;
+static time_t dosbox_connect_begin;
+
+static void _send_dosbox_registration_request(void);
 static DWORD router_main(void *arg);
 
 /* Initialise a UDP socket. */
-static void _init_socket(SOCKET *sock, uint16_t port, BOOL reuseaddr)
+static void _init_socket(SOCKET *sock, uint16_t port, BOOL broadcast, BOOL reuseaddr)
 {
 	/* Socket used for sending and receiving packets on the network. */
 	
@@ -65,8 +74,6 @@ static void _init_socket(SOCKET *sock, uint16_t port, BOOL reuseaddr)
 	}
 	
 	/* Enable broadcast and address reuse. */
-	
-	BOOL broadcast = TRUE;
 	
 	setsockopt(*sock, SOL_SOCKET, SO_BROADCAST, (char*)&broadcast, sizeof(BOOL));
 	setsockopt(*sock, SOL_SOCKET, SO_REUSEADDR, (char*)&reuseaddr, sizeof(BOOL));
@@ -110,7 +117,7 @@ void router_init(void)
 		abort();
 	}
 	
-	if(ipx_use_pcap)
+	if(ipx_encap_type == ENCAP_TYPE_PCAP)
 	{
 		if((private_socket = socket(AF_INET, SOCK_DGRAM, 0)) == -1)
 		{
@@ -129,9 +136,29 @@ void router_init(void)
 			abort();
 		}
 	}
+	else if(ipx_encap_type == ENCAP_TYPE_DOSBOX)
+	{
+		/* TODO: Support DNS. Do this async somewhere within router_main. */
+		
+		dosbox_server_addr.sin_family = AF_INET;
+		dosbox_server_addr.sin_addr.s_addr = inet_addr(main_config.dosbox_server_addr);
+		dosbox_server_addr.sin_port = htons(main_config.dosbox_server_port);
+		
+		if(connect(private_socket, (struct sockaddr*)(&dosbox_server_addr), sizeof(dosbox_server_addr)) != 0)
+		{
+			log_printf(LOG_ERROR, "Error connecting private socket: %s", w32_error(WSAGetLastError()));
+			abort();
+		}
+		
+		_send_dosbox_registration_request();
+		
+		dosbox_state = DOSBOX_REGISTERING;
+		
+		_init_socket(&private_socket, 0, FALSE, FALSE);
+	}
 	else{
-		_init_socket(&shared_socket, main_config.udp_port, TRUE);
-		_init_socket(&private_socket, 0, FALSE);
+		_init_socket(&shared_socket, main_config.udp_port, TRUE, TRUE);
+		_init_socket(&private_socket, 0, TRUE, FALSE);
 	}
 	
 	router_running = true;
@@ -472,6 +499,68 @@ static void _handle_udp_recv(ipx_packet *packet, size_t packet_size, struct sock
 		data_size);
 }
 
+static void _handle_dosbox_registration_response(novell_ipx_packet *packet, size_t packet_size)
+{
+	if(packet_size < sizeof(novell_ipx_packet)
+		|| ntohs(packet->length) != packet_size
+		|| ntohs(packet->checksum) != 0xFFFF
+		|| ntohs(packet->type) != 2)
+	{
+		/* Doesn't look valid. */
+		log_printf(LOG_ERROR, "Got invalid registration response from DOSBox server!");
+		abort();
+	}
+	
+	dosbox_local_netnum  = addr32_in(packet->dest_net);
+	dosbox_local_nodenum = addr48_in(packet->dest_node);
+	
+	dosbox_state = DOSBOX_CONNECTED;
+	
+	ipx_interfaces_reload();
+	
+	char local_netnum_s[ADDR32_STRING_SIZE];
+	addr32_string(local_netnum_s, dosbox_local_netnum);
+	
+	char local_nodenum_s[ADDR48_STRING_SIZE];
+	addr48_string(local_nodenum_s, dosbox_local_nodenum);
+	
+	log_printf(LOG_INFO, "Connected to DOSBox server, local address: %s/%s", local_netnum_s, local_nodenum_s);
+}
+
+static void _handle_dosbox_recv(novell_ipx_packet *packet, size_t packet_size)
+{
+	if(packet_size < sizeof(novell_ipx_packet) || ntohs(packet->length) != packet_size)
+	{
+		/* Doesn't look valid. */
+		log_printf(LOG_ERROR, "Recieved invalid IPX packet from DOSBox server, dropping");
+		return;
+	}
+	
+	if(min_log_level <= LOG_DEBUG)
+	{
+		IPX_STRING_ADDR(src_addr, addr32_in(packet->src_net), addr48_in(packet->src_node), packet->src_socket);
+		IPX_STRING_ADDR(dest_addr, addr32_in(packet->dest_net), addr48_in(packet->dest_node), packet->dest_socket);
+		
+		log_printf(LOG_DEBUG, "Recieved packet from %s for %s", src_addr, dest_addr);
+	}
+	
+	size_t data_size = ntohs(packet->length) - sizeof(novell_ipx_packet);
+	
+	_deliver_packet(
+		packet->type,
+		
+		addr32_in(packet->src_net),
+		addr48_in(packet->src_node),
+		packet->src_socket,
+		
+		addr32_in(packet->dest_net),
+		addr48_in(packet->dest_node),
+		packet->dest_socket,
+		
+		packet->data,
+		data_size);
+}
+
 static bool _do_udp_recv(int fd)
 {
 	struct sockaddr_in addr;
@@ -489,7 +578,24 @@ static bool _do_udp_recv(int fd)
 		return false;
 	}
 	
-	_handle_udp_recv((ipx_packet*)(buf), len, addr);
+	if(ipx_encap_type == ENCAP_TYPE_DOSBOX)
+	{
+		if(dosbox_state == DOSBOX_REGISTERING)
+		{
+			_handle_dosbox_registration_response((novell_ipx_packet*)(buf), len);
+		}
+		else if(dosbox_state == DOSBOX_CONNECTED)
+		{
+			_handle_dosbox_recv((novell_ipx_packet*)(buf), len);
+		}
+		else{
+			/* Unreachable. */
+			abort();
+		}
+	}
+	else{
+		_handle_udp_recv((ipx_packet*)(buf), len, addr);
+	}
 	
 	return true;
 }
@@ -566,6 +672,29 @@ static void _handle_pcap_frame(u_char *user, const struct pcap_pkthdr *pkt_heade
 		(ntohs(ipx->length) - sizeof(novell_ipx_packet)));
 }
 
+static void _send_dosbox_registration_request(void)
+{
+	novell_ipx_packet reg_pkt;
+	
+	reg_pkt.checksum = 0xFFFF;
+	reg_pkt.length = htons(sizeof(novell_ipx_packet));
+	reg_pkt.hops = 0;
+	reg_pkt.type = 2;
+	
+	memset(reg_pkt.dest_net, 0, sizeof(reg_pkt.dest_net));
+	memset(reg_pkt.dest_node, 0, sizeof(reg_pkt.dest_node));
+	reg_pkt.dest_socket = 0;
+	
+	memset(reg_pkt.src_net, 0, sizeof(reg_pkt.src_net));
+	memset(reg_pkt.src_node, 0, sizeof(reg_pkt.src_node));
+	reg_pkt.src_socket = 0;
+	
+	if(send(private_socket, (const void*)(&reg_pkt), sizeof(reg_pkt), 0) < 0)
+	{
+		log_printf(LOG_ERROR, "Error sending DOSBox IPX registration request: %s", w32_error(WSAGetLastError()));
+	}
+}
+
 static DWORD router_main(void *arg)
 {
 	DWORD exit_status = 0;
@@ -575,7 +704,7 @@ static DWORD router_main(void *arg)
 	HANDLE *wait_events = &router_event;
 	int n_events = 1;
 	
-	if(ipx_use_pcap)
+	if(ipx_encap_type == ENCAP_TYPE_PCAP)
 	{
 		interfaces = get_ipx_interfaces();
 		ipx_interface_t *i;
@@ -613,7 +742,7 @@ static DWORD router_main(void *arg)
 			break;
 		}
 		
-		if(ipx_use_pcap)
+		if(ipx_encap_type == ENCAP_TYPE_PCAP)
 		{
 			ipx_interface_t *i;
 			DL_FOREACH(interfaces, i)
@@ -628,6 +757,14 @@ static DWORD router_main(void *arg)
 				}
 			}
 		}
+		else if(ipx_encap_type == ENCAP_TYPE_DOSBOX)
+		{
+			if(!_do_udp_recv(private_socket))
+			{
+				exit_status = 1;
+				break;
+			}
+		}
 		else{
 			if(!_do_udp_recv(shared_socket) || !_do_udp_recv(private_socket))
 			{
@@ -637,7 +774,7 @@ static DWORD router_main(void *arg)
 		}
 	}
 	
-	if(ipx_use_pcap)
+	if(ipx_encap_type == ENCAP_TYPE_PCAP)
 	{
 		free(wait_events);
 		free_ipx_interface_list(&interfaces);

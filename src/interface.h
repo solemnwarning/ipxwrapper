@@ -1,5 +1,5 @@
 /* IPXWrapper - Interface header
- * Copyright (C) 2011 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2011-2021 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -23,6 +23,7 @@
 #include <utlist.h>
 #include <pcap.h>
 
+#include "config.h"
 #include "common.h"
 
 #ifdef __cplusplus
@@ -75,7 +76,19 @@ struct ipx_pcap_interface {
 	ipx_pcap_interface_t *next;
 };
 
-extern BOOL ipx_use_pcap;
+extern enum main_config_encap_type ipx_encap_type;
+
+enum dosbox_state
+{
+	DOSBOX_DISCONNECTED,
+	DOSBOX_RESOLVING,
+	DOSBOX_REGISTERING,
+	DOSBOX_CONNECTED,
+};
+
+extern enum dosbox_state dosbox_state;
+extern addr32_t dosbox_local_netnum;
+extern addr48_t dosbox_local_nodenum;
 
 IP_ADAPTER_INFO *load_sys_interfaces(void);
 ipx_interface_t *load_ipx_interfaces(void);
@@ -88,6 +101,7 @@ void free_ipx_interface_list(ipx_interface_t **list);
 
 void ipx_interfaces_init(void);
 void ipx_interfaces_cleanup(void);
+void ipx_interfaces_reload(void);
 
 ipx_interface_t *get_ipx_interfaces(void);
 ipx_interface_t *ipx_interface_by_addr(addr32_t net, addr48_t node);
@@ -97,6 +111,8 @@ int ipx_interface_count(void);
 
 ipx_pcap_interface_t *ipx_get_pcap_interfaces(void);
 void ipx_free_pcap_interfaces(ipx_pcap_interface_t **interfaces);
+
+ipx_interface_t *load_dosbox_interfaces(void);
 
 #ifdef __cplusplus
 }

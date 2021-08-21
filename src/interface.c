@@ -29,12 +29,19 @@
 
 #define INTERFACE_CACHE_TTL 5
 
-BOOL ipx_use_pcap;
+enum main_config_encap_type ipx_encap_type;
+
+enum dosbox_state dosbox_state = DOSBOX_DISCONNECTED;
+
+addr32_t dosbox_local_netnum;
+addr48_t dosbox_local_nodenum;
 
 static CRITICAL_SECTION interface_cache_cs;
 
 static ipx_interface_t *interface_cache = NULL;
 static time_t interface_cache_ctime = 0;
+
+static void renew_interface_cache(bool force);
 
 /* Fetch a list of network interfaces available on the system.
  *
@@ -465,11 +472,12 @@ void ipx_interfaces_init(void)
 	
 	log_printf(LOG_INFO, "--");
 	
-	if(ipx_use_pcap)
+	if(ipx_encap_type == ENCAP_TYPE_PCAP)
 	{
 		_init_pcap_interfaces();
 	}
-	else{
+	else if(ipx_encap_type == ENCAP_TYPE_IPXWRAPPER)
+	{
 		/* IP interfaces... */
 		
 		IP_ADAPTER_INFO *ip_ifaces = load_sys_interfaces(), *ip;
@@ -559,7 +567,7 @@ void ipx_interfaces_cleanup(void)
 {
 	DeleteCriticalSection(&interface_cache_cs);
 	
-	if(ipx_use_pcap)
+	if(ipx_encap_type == ENCAP_TYPE_PCAP)
 	{
 		for(ipx_interface_t *i = interface_cache; i; i = i->next)
 		{
@@ -570,12 +578,18 @@ void ipx_interfaces_cleanup(void)
 	free_ipx_interface_list(&interface_cache);
 }
 
+/* Flush and repopulate the interface cache. */
+void ipx_interfaces_reload(void)
+{
+	renew_interface_cache(true);
+}
+
 /* Check the age of the IPX interface cache and reload it if necessary.
  * Ensure you hold interface_cache_cs before calling.
 */
-static void renew_interface_cache(void)
+static void renew_interface_cache(bool force)
 {
-	if(ipx_use_pcap)
+	if(ipx_encap_type == ENCAP_TYPE_PCAP)
 	{
 		/* interface_cache is initialised during init when pcap is in
 		 * use and survives for the lifetime of the program.
@@ -583,11 +597,18 @@ static void renew_interface_cache(void)
 		return;
 	}
 	
-	if(time(NULL) - interface_cache_ctime > INTERFACE_CACHE_TTL)
+	if(force || time(NULL) - interface_cache_ctime > INTERFACE_CACHE_TTL)
 	{
 		free_ipx_interface_list(&interface_cache);
 		
-		interface_cache       = load_ipx_interfaces();
+		if(ipx_encap_type == ENCAP_TYPE_DOSBOX)
+		{
+			interface_cache = load_dosbox_interfaces();
+		}
+		else{
+			interface_cache = load_ipx_interfaces();
+		}
+		
 		interface_cache_ctime = time(NULL);
 	}
 }
@@ -599,7 +620,7 @@ ipx_interface_t *get_ipx_interfaces(void)
 {
 	EnterCriticalSection(&interface_cache_cs);
 	
-	renew_interface_cache();
+	renew_interface_cache(false);
 	
 	ipx_interface_t *copy = copy_ipx_interface_list(interface_cache);
 	
@@ -615,7 +636,7 @@ ipx_interface_t *ipx_interface_by_addr(addr32_t net, addr48_t node)
 {
 	EnterCriticalSection(&interface_cache_cs);
 	
-	renew_interface_cache();
+	renew_interface_cache(false);
 	
 	ipx_interface_t *iface;
 	
@@ -640,7 +661,7 @@ ipx_interface_t *ipx_interface_by_subnet(uint32_t ipaddr)
 {
 	EnterCriticalSection(&interface_cache_cs);
 	
-	renew_interface_cache();
+	renew_interface_cache(false);
 	
 	ipx_interface_t *iface;
 	
@@ -671,7 +692,7 @@ ipx_interface_t *ipx_interface_by_index(int index)
 {
 	EnterCriticalSection(&interface_cache_cs);
 	
-	renew_interface_cache();
+	renew_interface_cache(false);
 	
 	int iface_index = 0;
 	ipx_interface_t *iface;
@@ -695,7 +716,7 @@ int ipx_interface_count(void)
 {
 	EnterCriticalSection(&interface_cache_cs);
 	
-	renew_interface_cache();
+	renew_interface_cache(false);
 	
 	int count = 0;
 	ipx_interface_t *iface;
@@ -806,4 +827,20 @@ void ipx_free_pcap_interfaces(ipx_pcap_interface_t **interfaces)
 		free(p->desc);
 		free(p);
 	}
+}
+
+ipx_interface_t *load_dosbox_interfaces(void)
+{
+	ipx_interface_t *nics = NULL;
+	
+	if(dosbox_state == DOSBOX_CONNECTED)
+	{
+		ipx_interface_t *dosbox_iface = _new_iface(dosbox_local_netnum, dosbox_local_nodenum);
+		if(dosbox_iface)
+		{
+			DL_APPEND(nics, dosbox_iface);
+		}
+	}
+	
+	return nics;
 }
