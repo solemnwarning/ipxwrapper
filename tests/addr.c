@@ -1,5 +1,5 @@
 /* IPXWrapper test suite
- * Copyright (C) 2014 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2014-2023 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -18,8 +18,8 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "tests/tap/basic.h"
-#include "src/addr.h"
+#include "tap/basic.h"
+#include "../src/addr.h"
 
 static char *dump32(const void *p)
 {
