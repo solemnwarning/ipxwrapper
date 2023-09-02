@@ -1,5 +1,5 @@
 /* IPXWrapper - Router code
- * Copyright (C) 2011-2021 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2011-2023 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -30,6 +30,8 @@
 #include "interface.h"
 #include "addrcache.h"
 #include "ethernet.h"
+
+#define IPX_SOCK_ECHO 2
 
 static bool router_running   = false;
 static WSAEVENT router_event = WSA_INVALID_EVENT;
@@ -140,6 +142,8 @@ void router_init(void)
 	{
 		/* TODO: Support DNS. Do this async somewhere within router_main. */
 		
+		_init_socket(&private_socket, 0, FALSE, FALSE);
+		
 		dosbox_server_addr.sin_family = AF_INET;
 		dosbox_server_addr.sin_addr.s_addr = inet_addr(main_config.dosbox_server_addr);
 		dosbox_server_addr.sin_port = htons(main_config.dosbox_server_port);
@@ -153,8 +157,6 @@ void router_init(void)
 		_send_dosbox_registration_request();
 		
 		dosbox_state = DOSBOX_REGISTERING;
-		
-		_init_socket(&private_socket, 0, FALSE, FALSE);
 	}
 	else{
 		_init_socket(&shared_socket, main_config.udp_port, TRUE, TRUE);
@@ -503,8 +505,8 @@ static void _handle_dosbox_registration_response(novell_ipx_packet *packet, size
 {
 	if(packet_size < sizeof(novell_ipx_packet)
 		|| ntohs(packet->length) != packet_size
-		|| ntohs(packet->checksum) != 0xFFFF
-		|| ntohs(packet->type) != 2)
+		|| ntohs(packet->checksum) != 0xFFFF)
+		/* || packet->type != 2) */
 	{
 		/* Doesn't look valid. */
 		log_printf(LOG_ERROR, "Got invalid registration response from DOSBox server!");
@@ -683,11 +685,11 @@ static void _send_dosbox_registration_request(void)
 	
 	memset(reg_pkt.dest_net, 0, sizeof(reg_pkt.dest_net));
 	memset(reg_pkt.dest_node, 0, sizeof(reg_pkt.dest_node));
-	reg_pkt.dest_socket = 0;
+	reg_pkt.dest_socket = htons(IPX_SOCK_ECHO);
 	
 	memset(reg_pkt.src_net, 0, sizeof(reg_pkt.src_net));
 	memset(reg_pkt.src_node, 0, sizeof(reg_pkt.src_node));
-	reg_pkt.src_socket = 0;
+	reg_pkt.src_socket = htons(IPX_SOCK_ECHO);
 	
 	if(send(private_socket, (const void*)(&reg_pkt), sizeof(reg_pkt), 0) < 0)
 	{
