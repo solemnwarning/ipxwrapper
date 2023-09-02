@@ -1,5 +1,5 @@
 # IPXWrapper - Makefile
-# Copyright (C) 2011-2017 Daniel Collins <solemnwarning@solemnwarning.net>
+# Copyright (C) 2011-2023 Daniel Collins <solemnwarning@solemnwarning.net>
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License version 2 as published by
@@ -30,7 +30,7 @@ else
 DBG_OPT := -Wl,-s
 endif
 
-INCLUDE := -I./include/ -D_WIN32_WINNT=0x0500 -D_WIN32_IE=0x0500 -DHAVE_REMOTE
+INCLUDE := -I./include/ -I./winpcap/include/ -D_WIN32_WINNT=0x0500 -D_WIN32_IE=0x0500 -DHAVE_REMOTE
 
 CFLAGS   := -std=c99   -mno-ms-bitfields -Wall $(DBG_OPT) $(INCLUDE)
 CXXFLAGS := -std=c++0x -mno-ms-bitfields -Wall $(DBG_OPT) $(INCLUDE)
