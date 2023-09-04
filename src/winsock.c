@@ -68,8 +68,11 @@ static int _max_ipx_payload(void)
 	}
 	else if(ipx_encap_type == ENCAP_TYPE_DOSBOX)
 	{
-		// TODO: DOXBox MTU
-		return 1500;
+		/* include/ipx.h in DOSBox:
+		 * #define IPXBUFFERSIZE 1424
+		*/
+		
+		return 1424;
 	}
 	else{
 		return MAX_DATA_SIZE;
