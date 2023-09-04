@@ -1351,7 +1351,7 @@ static DWORD ipx_send_packet(
 			
 			DWORD error = ERROR_SUCCESS;
 			
-			if(r_send(private_socket, (const void*)(packet), packet_size, 0) < 0)
+			if(r_sendto(private_socket, (const void*)(packet), packet_size, 0, (struct sockaddr*)(&dosbox_server_addr), sizeof(dosbox_server_addr)) < 0)
 			{
 				error = WSAGetLastError();
 				log_printf(LOG_ERROR, "Error sending DOSBox IPX packet: %s", w32_error(error));

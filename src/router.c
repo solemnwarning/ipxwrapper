@@ -49,8 +49,9 @@ static HANDLE router_thread  = NULL;
  * will be bound to loopback rather than INADDR_ANY since it is only used for
  * forwarding IPX packets on to local sockets.
  *
- * When running in DOSBox mode, only the private socket will be opened and it
- * will be "connected" to the DOSBox server address.
+ * When running in DOSBox mode, only the private socket will be opened and
+ * bound to a random port on INADDR_ANY to communicate with the DOSBox server
+ * and also relay packets to local sockets.
 */
 
 SOCKET shared_socket  = -1;
@@ -58,7 +59,7 @@ SOCKET private_socket = -1;
 
 #define DOSBOX_CONNECT_TIMEOUT_SECS 10
 
-static struct sockaddr_in dosbox_server_addr;
+struct sockaddr_in dosbox_server_addr;
 static time_t dosbox_connect_begin;
 
 static void _send_dosbox_registration_request(void);
@@ -147,12 +148,6 @@ void router_init(void)
 		dosbox_server_addr.sin_family = AF_INET;
 		dosbox_server_addr.sin_addr.s_addr = inet_addr(main_config.dosbox_server_addr);
 		dosbox_server_addr.sin_port = htons(main_config.dosbox_server_port);
-		
-		if(connect(private_socket, (struct sockaddr*)(&dosbox_server_addr), sizeof(dosbox_server_addr)) != 0)
-		{
-			log_printf(LOG_ERROR, "Error connecting private socket: %s", w32_error(WSAGetLastError()));
-			abort();
-		}
 		
 		_send_dosbox_registration_request();
 		
@@ -582,6 +577,14 @@ static bool _do_udp_recv(int fd)
 	
 	if(ipx_encap_type == ENCAP_TYPE_DOSBOX)
 	{
+		if(addr.sin_family != dosbox_server_addr.sin_family
+			|| memcmp(&(addr.sin_addr), &(dosbox_server_addr.sin_addr), sizeof(struct in_addr)) != 0
+			|| addr.sin_port != dosbox_server_addr.sin_port)
+		{
+			/* Ignore packet from wrong address. */
+			return true;
+		}
+		
 		if(dosbox_state == DOSBOX_REGISTERING)
 		{
 			_handle_dosbox_registration_response((novell_ipx_packet*)(buf), len);
@@ -691,7 +694,7 @@ static void _send_dosbox_registration_request(void)
 	memset(reg_pkt.src_node, 0, sizeof(reg_pkt.src_node));
 	reg_pkt.src_socket = htons(IPX_SOCK_ECHO);
 	
-	if(send(private_socket, (const void*)(&reg_pkt), sizeof(reg_pkt), 0) < 0)
+	if(sendto(private_socket, (const void*)(&reg_pkt), sizeof(reg_pkt), 0, (struct sockaddr*)(&dosbox_server_addr), sizeof(dosbox_server_addr)) < 0)
 	{
 		log_printf(LOG_ERROR, "Error sending DOSBox IPX registration request: %s", w32_error(WSAGetLastError()));
 	}
