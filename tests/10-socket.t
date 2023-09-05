@@ -1,5 +1,5 @@
 # IPXWrapper test suite
-# Copyright (C) 2014 Daniel Collins <solemnwarning@solemnwarning.net>
+# Copyright (C) 2014-2023 Daniel Collins <solemnwarning@solemnwarning.net>
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License version 2 as published by
@@ -22,12 +22,15 @@ use Test::Spec;
 use FindBin;
 use lib "$FindBin::Bin/lib/";
 
+use IPXWrapper::DOSBoxServer;
 use IPXWrapper::Util;
 
 require "$FindBin::Bin/config.pm";
 
+our ($local_ip_a);
 our ($remote_mac_a, $remote_ip_a);
 our ($remote_mac_b, $remote_ip_b);
+our ($dosbox_port);
 
 # NOTE: These constants are the values used on Windows, not the host.
 use constant {
@@ -118,6 +121,48 @@ describe "IPXWrapper" => sub
 		{
 			reg_delete_key($remote_ip_a, "HKCU\\Software\\IPXWrapper");
 			reg_set_dword( $remote_ip_a, "HKCU\\Software\\IPXWrapper", "use_pcap", 1);
+		};
+		
+		it_should_behave_like "socket initialisation";
+		
+		it "socket(AF_IPX, SOCK_STREAM, NSPROTO_SPX) fails" => sub
+		{
+			my $output = run_remote_cmd(
+				$remote_ip_a, "Z:\\tools\\socket.exe",
+				AF_IPX, SOCK_STREAM, NSPROTO_SPX,
+			);
+			
+			like($output, qr/^socket: -1$/m);
+		};
+		
+		it "socket(AF_IPX, SOCK_STREAM, NSPROTO_SPXII) fails" => sub
+		{
+			my $output = run_remote_cmd(
+				$remote_ip_a, "Z:\\tools\\socket.exe",
+				AF_IPX, SOCK_STREAM, NSPROTO_SPXII,
+			);
+			
+			like($output, qr/^socket: -1$/m);
+		};
+	};
+	
+	describe "using a DOSBox server" => sub
+	{
+		my $dosbox_server;
+		
+		before all => sub
+		{
+			reg_delete_key($remote_ip_a, "HKCU\\Software\\IPXWrapper");
+			reg_set_dword( $remote_ip_a, "HKCU\\Software\\IPXWrapper", "use_pcap", ENCAP_TYPE_DOSBOX);
+			reg_set_string($remote_ip_a, "HKCU\\Software\\IPXWrapper", "dosbox_server_addr", $local_ip_a);
+			reg_set_dword( $remote_ip_a, "HKCU\\Software\\IPXWrapper", "dosbox_server_port", $dosbox_port);
+			
+			# $dosbox_server = IPXWrapper::Tool::DOSBoxServer->new($dosbox_port);
+		};
+		
+		after all => sub
+		{
+			$dosbox_server = undef;
 		};
 		
 		it_should_behave_like "socket initialisation";

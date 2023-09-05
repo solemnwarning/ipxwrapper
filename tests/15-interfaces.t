@@ -22,18 +22,22 @@ use Test::Spec;
 use FindBin;
 use lib "$FindBin::Bin/lib/";
 
+use IPXWrapper::DOSBoxServer;
 use IPXWrapper::Tool::Bind;
 use IPXWrapper::Util;
 
 require "$FindBin::Bin/config.pm";
 
+our ($local_ip_a);
 our ($remote_mac_a, $remote_ip_a);
 our ($remote_mac_b, $remote_ip_b);
+our ($dosbox_port);
 
 use constant {
-	IP_MAX_DATA_SIZE    => 8192,
-	ETHER_MAX_DATA_SIZE => 1470,
-	LLC_MAX_DATA_SIZE   => 1467,
+	IP_MAX_DATA_SIZE     => 8192,
+	ETHER_MAX_DATA_SIZE  => 1470,
+	LLC_MAX_DATA_SIZE    => 1467,
+	DOSBOX_MAX_DATA_SIZE => 1424,
 };
 
 my @expected_addrs;
@@ -64,13 +68,14 @@ shared_examples_for "getsockopt" => sub
 		reg_set_addr($remote_ip_a, "HKCU\\Software\\IPXWrapper", "primary", $remote_mac_b);
 		my $first_b = get_first_addr_node() // "";
 		
-		ok($first_a eq $remote_mac_a && $first_b eq $remote_mac_b);
+		is($first_a, $remote_mac_a);
+		is($first_b, $remote_mac_b);
 	};
 };
 
 describe "IPXWrapper" => sub
 {
-	describe "using IP encapsulation" => sub
+	describe "using IPXWrapper IP encapsulation" => sub
 	{
 		before all => sub
 		{
@@ -258,6 +263,57 @@ describe "IPXWrapper" => sub
 		describe "getsockopt" => sub
 		{
 			it_should_behave_like "getsockopt";
+		};
+	};
+	
+	describe "using DOSBox UDP encapsulation" => sub
+	{
+		my $dosbox_server;
+		
+		before all => sub
+		{
+			reg_delete_key($remote_ip_a, "HKCU\\Software\\IPXWrapper");
+			reg_set_dword( $remote_ip_a, "HKCU\\Software\\IPXWrapper", "use_pcap", ENCAP_TYPE_DOSBOX);
+			reg_set_string($remote_ip_a, "HKCU\\Software\\IPXWrapper", "dosbox_server_addr", $local_ip_a);
+			reg_set_dword( $remote_ip_a, "HKCU\\Software\\IPXWrapper", "dosbox_server_port", $dosbox_port);
+			
+			$dosbox_server = IPXWrapper::DOSBoxServer->new($dosbox_port);
+			
+			@expected_addrs = (
+				{
+					# The node number is randomly selected by the DOSBox server
+					# when each client connects.
+					
+					net    => "00:00:00:00",
+					maxpkt => DOSBOX_MAX_DATA_SIZE,
+				},
+			);
+		};
+		
+		after all => sub
+		{
+			$dosbox_server = undef;
+		};
+		
+		# Duplicate of common getsockopt block to skip the default interface selection
+		# logic test (because there is only ever one interface here).
+		describe "getsockopt" => sub
+		{
+			it "returns correct addresses" => sub
+			{
+				my @addrs = getsockopt_interfaces($remote_ip_a);
+				cmp_hashes_partial(\@addrs, \@expected_addrs);
+			};
+			
+			it "returns correct IPX_MAX_ADAPTER_NUM" => sub
+			{
+				my @addrs = getsockopt_interfaces($remote_ip_a);
+				
+				my $output = run_remote_cmd($remote_ip_a, "Z:\\tools\\list-interfaces.exe");
+				my ($got_num) = ($output =~ m/^IPX_MAX_ADAPTER_NUM = (\d+)$/m);
+				
+				is($got_num, (scalar @addrs));
+			};
 		};
 	};
 };
