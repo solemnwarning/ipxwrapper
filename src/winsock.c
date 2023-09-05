@@ -542,6 +542,8 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen)
 	
 	if(sock)
 	{
+		wait_for_ready(IPX_READY_TIMEOUT);
+		
 		struct sockaddr_ipx ipxaddr;
 		
 		if(addrlen < sizeof(ipxaddr) || addr->sa_family != AF_IPX)
@@ -940,6 +942,8 @@ int WSAAPI getsockopt(SOCKET fd, int level, int optname, char FAR *optval, int F
 	
 	if(sock)
 	{
+		wait_for_ready(IPX_READY_TIMEOUT);
+		
 		if(level == NSPROTO_IPX)
 		{
 			if(optname == IPX_PTYPE)
@@ -1477,6 +1481,8 @@ int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct s
 	
 	if(sock)
 	{
+		wait_for_ready(IPX_READY_TIMEOUT);
+		
 		if(sock->flags & IPX_IS_SPX)
 		{
 			unlock_sockets();

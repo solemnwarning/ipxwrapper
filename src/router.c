@@ -61,6 +61,7 @@ SOCKET private_socket = -1;
 
 struct sockaddr_in dosbox_server_addr;
 static time_t dosbox_connect_begin;
+static HANDLE dosbox_ready_event = NULL;
 
 static void _send_dosbox_registration_request(void);
 static DWORD router_main(void *arg);
@@ -141,6 +142,13 @@ void router_init(void)
 	}
 	else if(ipx_encap_type == ENCAP_TYPE_DOSBOX)
 	{
+		dosbox_ready_event = CreateEvent(NULL, TRUE, FALSE, NULL);
+		if(dosbox_ready_event == NULL)
+		{
+			log_printf(LOG_ERROR, "Error creating event object: %s", w32_error(GetLastError()));
+			abort();
+		}
+		
 		/* TODO: Support DNS. Do this async somewhere within router_main. */
 		
 		_init_socket(&private_socket, 0, FALSE, FALSE);
@@ -522,6 +530,8 @@ static void _handle_dosbox_registration_response(novell_ipx_packet *packet, size
 	addr48_string(local_nodenum_s, dosbox_local_nodenum);
 	
 	log_printf(LOG_INFO, "Connected to DOSBox server, local address: %s/%s", local_netnum_s, local_nodenum_s);
+	
+	SetEvent(dosbox_ready_event);
 }
 
 static void _handle_dosbox_recv(novell_ipx_packet *packet, size_t packet_size)
@@ -786,4 +796,12 @@ static DWORD router_main(void *arg)
 	}
 	
 	return exit_status;
+}
+
+void wait_for_ready(DWORD timeout)
+{
+	if(dosbox_ready_event != NULL)
+	{
+		WaitForSingleObject(dosbox_ready_event, timeout);
+	}
 }

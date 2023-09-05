@@ -36,6 +36,13 @@
 #define IPX_CONNECT_TIMEOUT 6
 #define IPX_CONNECT_TRIES   3
 
+/* Maximum number of milliseconds to block waiting for IPX networking to be ready.
+ *
+ * This blocks functions which usually don't block (e.g. bind()) so that they don't fail right as
+ * the process is starting up because we are still connecting to a DOSBox IPX server.
+*/
+#define IPX_READY_TIMEOUT 3000
+
 #define IPX_FILTER	(int)(1<<0)
 #define IPX_BOUND	(int)(1<<1)
 #define IPX_BROADCAST	(int)(1<<2)
