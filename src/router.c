@@ -63,6 +63,12 @@ struct sockaddr_in dosbox_server_addr;
 static time_t dosbox_connect_begin;
 static HANDLE dosbox_ready_event = NULL;
 
+static int dosbox_next_registration_request_at;
+static int dosbox_registration_retry_interval_ms;
+
+static const int INITIAL_DOSBOX_REGISTRATION_RETRY_INTERVAL_MS = 250;
+static const int MAX_DOSBOX_REGISTRATION_RETRY_INTERVAL_MS = 8000;
+
 static void _send_dosbox_registration_request(void);
 static DWORD router_main(void *arg);
 
@@ -157,7 +163,8 @@ void router_init(void)
 		dosbox_server_addr.sin_addr.s_addr = inet_addr(main_config.dosbox_server_addr);
 		dosbox_server_addr.sin_port = htons(main_config.dosbox_server_port);
 		
-		_send_dosbox_registration_request();
+		dosbox_next_registration_request_at = 0;
+		dosbox_registration_retry_interval_ms = INITIAL_DOSBOX_REGISTRATION_RETRY_INTERVAL_MS;
 		
 		dosbox_state = DOSBOX_REGISTERING;
 	}
@@ -749,7 +756,27 @@ static DWORD router_main(void *arg)
 	
 	while(1)
 	{
-		WaitForMultipleObjects(n_events, wait_events, FALSE, 1000);
+		DWORD wait_ms = 1000;
+		
+		if(ipx_encap_type == ENCAP_TYPE_DOSBOX && dosbox_state == DOSBOX_REGISTERING)
+		{
+			uint64_t now = get_ticks();
+			
+			if(now >= dosbox_next_registration_request_at)
+			{
+				wait_ms = 0;
+			}
+			else{
+				wait_ms = dosbox_next_registration_request_at - 1;
+				
+				if(wait_ms > 1000)
+				{
+					wait_ms = 1000;
+				}
+			}
+		}
+		
+		WaitForMultipleObjects(n_events, wait_events, FALSE, wait_ms);
 		WSAResetEvent(router_event);
 		
 		if(!router_running)
@@ -785,6 +812,21 @@ static DWORD router_main(void *arg)
 			{
 				exit_status = 1;
 				break;
+			}
+		}
+		
+		if(ipx_encap_type == ENCAP_TYPE_DOSBOX && dosbox_state == DOSBOX_REGISTERING)
+		{
+			uint64_t now = get_ticks();
+			
+			if(now >= dosbox_next_registration_request_at)
+			{
+				_send_dosbox_registration_request();
+				
+				dosbox_next_registration_request_at = now + dosbox_registration_retry_interval_ms;
+				
+				dosbox_registration_retry_interval_ms *= 2;
+				dosbox_registration_retry_interval_ms = min(dosbox_registration_retry_interval_ms, MAX_DOSBOX_REGISTRATION_RETRY_INTERVAL_MS);
 			}
 		}
 	}
