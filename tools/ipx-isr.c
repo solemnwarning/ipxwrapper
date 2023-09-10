@@ -1,5 +1,5 @@
 /* IPXWrapper test tools
- * Copyright (C) 2014 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2014-2023 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -99,7 +99,18 @@ int main(int argc, char **argv)
 	HANDLE send_thread_h = CreateThread(NULL, 0, &send_thread, &sock, 0, NULL);
 	assert(send_thread_h != NULL);
 	
-	printf("Ready\n");
+	{
+		int addrlen = sizeof(local_addr);
+		assert(getsockname(sock, (struct sockaddr*)(&local_addr), &addrlen) == 0);
+		
+		char net_s[ADDR32_STRING_SIZE];
+		addr32_string(net_s, addr32_in(local_addr.sa_netnum));
+		
+		char node_s[ADDR48_STRING_SIZE];
+		addr48_string(node_s, addr48_in(local_addr.sa_nodenum));
+		
+		printf("Ready %s %s %hu\n", net_s, node_s, ntohs(local_addr.sa_socket));
+	}
 	
 	char buf[1024];
 	while(1)
