@@ -1,5 +1,5 @@
 /* ipxwrapper - Winsock functions
- * Copyright (C) 2008-2021 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2008-2023 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -538,12 +538,10 @@ static bool _resolve_bind_address(ipx_socket *sock, const struct sockaddr_ipx *a
 
 int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen)
 {
-	ipx_socket *sock = get_socket(fd);
+	ipx_socket *sock = get_socket_wait_for_ready(fd, IPX_READY_TIMEOUT);
 	
 	if(sock)
 	{
-		wait_for_ready(IPX_READY_TIMEOUT);
-		
 		struct sockaddr_ipx ipxaddr;
 		
 		if(addrlen < sizeof(ipxaddr) || addr->sa_family != AF_IPX)
@@ -938,12 +936,10 @@ int PASCAL WSARecvEx(SOCKET fd, char *buf, int len, int *flags)
 
 int WSAAPI getsockopt(SOCKET fd, int level, int optname, char FAR *optval, int FAR *optlen)
 {
-	ipx_socket *sock = get_socket(fd);
+	ipx_socket *sock = get_socket_wait_for_ready(fd, IPX_READY_TIMEOUT);
 	
 	if(sock)
 	{
-		wait_for_ready(IPX_READY_TIMEOUT);
-		
 		if(level == NSPROTO_IPX)
 		{
 			if(optname == IPX_PTYPE)
@@ -1477,12 +1473,10 @@ int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct s
 {
 	struct sockaddr_ipx_ext *ipxaddr = (struct sockaddr_ipx_ext*)addr;
 	
-	ipx_socket *sock = get_socket(fd);
+	ipx_socket *sock = get_socket_wait_for_ready(fd, IPX_READY_TIMEOUT);
 	
 	if(sock)
 	{
-		wait_for_ready(IPX_READY_TIMEOUT);
-		
 		if(sock->flags & IPX_IS_SPX)
 		{
 			unlock_sockets();

@@ -1,5 +1,5 @@
 /* ipxwrapper - Library header
- * Copyright (C) 2008-2014 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2008-2023 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -138,6 +138,7 @@ extern ipx_socket *sockets;
 extern main_config_t main_config;
 
 ipx_socket *get_socket(SOCKET sockfd);
+ipx_socket *get_socket_wait_for_ready(SOCKET sockfd, int timeout_ms);
 void lock_sockets(void);
 void unlock_sockets(void);
 uint64_t get_ticks(void);
