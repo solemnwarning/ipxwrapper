@@ -45,7 +45,7 @@ describe "IPXWrapper using DOSBox UDP encapsulation" => sub
 	{
 		reg_delete_key($remote_ip_a, "HKCU\\Software\\IPXWrapper");
 		reg_set_dword( $remote_ip_a, "HKCU\\Software\\IPXWrapper", "use_pcap", ENCAP_TYPE_DOSBOX);
-		reg_set_string($remote_ip_a, "HKCU\\Software\\IPXWrapper", "dosbox_server_addr", $local_ip_a);
+		reg_set_string($remote_ip_a, "HKCU\\Software\\IPXWrapper", "dosbox_server_addr", "dosbox-ipv4.com");
 		reg_set_dword( $remote_ip_a, "HKCU\\Software\\IPXWrapper", "dosbox_server_port", $dosbox_port);
 	};
 	

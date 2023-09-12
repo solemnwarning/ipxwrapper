@@ -1,5 +1,5 @@
 /* IPXWrapper - Interface functions
- * Copyright (C) 2011-2021 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2011-2023 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -24,6 +24,7 @@
 #include <pcap.h>
 
 #include "interface.h"
+#include "ipxwrapper.h"
 #include "common.h"
 #include "config.h"
 
@@ -523,43 +524,50 @@ void ipx_interfaces_init(void)
 		free(ip_ifaces);
 	}
 	
-	/* Virtual IPX interfaces... */
-	
-	log_printf(LOG_INFO, "Listing IPX interfaces:");
-	log_printf(LOG_INFO, "--");
-	
-	ipx_interface_t *ipx_root = get_ipx_interfaces(), *ipx;
-	
-	if(!ipx_root)
+	if(ipx_encap_type == ENCAP_TYPE_DOSBOX)
 	{
-		log_printf(LOG_INFO, "No IPX interfaces detected!");
-		log_printf(LOG_INFO, "--");
+		log_printf(LOG_INFO, "Using DOSBox server: %s port %hu",
+			main_config.dosbox_server_addr, main_config.dosbox_server_port);
 	}
-	
-	DL_FOREACH(ipx_root, ipx)
-	{
-		char net[ADDR32_STRING_SIZE];
-		addr32_string(net, ipx->ipx_net);
+	else{
+		/* Virtual IPX interfaces... */
 		
-		char node[ADDR48_STRING_SIZE];
-		addr48_string(node, ipx->ipx_node);
+		log_printf(LOG_INFO, "Listing IPX interfaces:");
+		log_printf(LOG_INFO, "--");
 		
-		log_printf(LOG_INFO, "Network:    %s", net);
-		log_printf(LOG_INFO, "Node:       %s", node);
+		ipx_interface_t *ipx_root = get_ipx_interfaces(), *ipx;
 		
-		ipx_interface_ip_t *ip;
-		
-		DL_FOREACH(ipx->ipaddr, ip)
+		if(!ipx_root)
 		{
-			log_printf(LOG_INFO, "IP address: %s", inet_ntoa(*((struct in_addr*)&(ip->ipaddr))));
-			log_printf(LOG_INFO, "Netmask:    %s", inet_ntoa(*((struct in_addr*)&(ip->netmask))));
-			log_printf(LOG_INFO, "Broadcast:  %s", inet_ntoa(*((struct in_addr*)&(ip->bcast))));
+			log_printf(LOG_INFO, "No IPX interfaces detected!");
+			log_printf(LOG_INFO, "--");
 		}
 		
-		log_printf(LOG_INFO, "--");
+		DL_FOREACH(ipx_root, ipx)
+		{
+			char net[ADDR32_STRING_SIZE];
+			addr32_string(net, ipx->ipx_net);
+			
+			char node[ADDR48_STRING_SIZE];
+			addr48_string(node, ipx->ipx_node);
+			
+			log_printf(LOG_INFO, "Network:    %s", net);
+			log_printf(LOG_INFO, "Node:       %s", node);
+			
+			ipx_interface_ip_t *ip;
+			
+			DL_FOREACH(ipx->ipaddr, ip)
+			{
+				log_printf(LOG_INFO, "IP address: %s", inet_ntoa(*((struct in_addr*)&(ip->ipaddr))));
+				log_printf(LOG_INFO, "Netmask:    %s", inet_ntoa(*((struct in_addr*)&(ip->netmask))));
+				log_printf(LOG_INFO, "Broadcast:  %s", inet_ntoa(*((struct in_addr*)&(ip->bcast))));
+			}
+			
+			log_printf(LOG_INFO, "--");
+		}
+		
+		free_ipx_interface_list(&ipx_root);
 	}
-	
-	free_ipx_interface_list(&ipx_root);
 }
 
 /* Release any resources used by the IPX interface cache. */

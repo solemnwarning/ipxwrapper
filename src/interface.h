@@ -1,5 +1,5 @@
 /* IPXWrapper - Interface header
- * Copyright (C) 2011-2021 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2011-2023 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -81,7 +81,7 @@ extern enum main_config_encap_type ipx_encap_type;
 enum dosbox_state
 {
 	DOSBOX_DISCONNECTED,
-	DOSBOX_RESOLVING,
+	/* DOSBOX_RESOLVING, */
 	DOSBOX_REGISTERING,
 	DOSBOX_CONNECTED,
 };

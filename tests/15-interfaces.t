@@ -266,10 +266,10 @@ describe "IPXWrapper" => sub
 		};
 	};
 	
-	describe "using DOSBox UDP encapsulation" => sub
+	my $dosbox_server;
+	
+	describe "using DOSBox UDP encapsulation (via IP address)" => sub
 	{
-		my $dosbox_server;
-		
 		before all => sub
 		{
 			reg_delete_key($remote_ip_a, "HKCU\\Software\\IPXWrapper");
@@ -277,6 +277,7 @@ describe "IPXWrapper" => sub
 			reg_set_string($remote_ip_a, "HKCU\\Software\\IPXWrapper", "dosbox_server_addr", $local_ip_a);
 			reg_set_dword( $remote_ip_a, "HKCU\\Software\\IPXWrapper", "dosbox_server_port", $dosbox_port);
 			
+			$dosbox_server = undef;
 			$dosbox_server = IPXWrapper::DOSBoxServer->new($dosbox_port);
 			
 			@expected_addrs = (
@@ -313,6 +314,90 @@ describe "IPXWrapper" => sub
 				my ($got_num) = ($output =~ m/^IPX_MAX_ADAPTER_NUM = (\d+)$/m);
 				
 				is($got_num, (scalar @addrs));
+			};
+		};
+	};
+	
+	describe "using DOSBox UDP encapsulation (via DNS name)" => sub
+	{
+		before all => sub
+		{
+			reg_delete_key($remote_ip_a, "HKCU\\Software\\IPXWrapper");
+			reg_set_dword( $remote_ip_a, "HKCU\\Software\\IPXWrapper", "use_pcap", ENCAP_TYPE_DOSBOX);
+			reg_set_string($remote_ip_a, "HKCU\\Software\\IPXWrapper", "dosbox_server_addr", "dosbox-ipv4.com");
+			reg_set_dword( $remote_ip_a, "HKCU\\Software\\IPXWrapper", "dosbox_server_port", $dosbox_port);
+			
+			$dosbox_server = undef;
+			$dosbox_server = IPXWrapper::DOSBoxServer->new($dosbox_port);
+			
+			@expected_addrs = (
+				{
+					# The node number is randomly selected by the DOSBox server
+					# when each client connects.
+					
+					net    => "00:00:00:00",
+					maxpkt => DOSBOX_MAX_DATA_SIZE,
+				},
+			);
+		};
+		
+		after all => sub
+		{
+			$dosbox_server = undef;
+		};
+		
+		# Duplicate of common getsockopt block to skip the default interface selection
+		# logic test (because there is only ever one interface here).
+		describe "getsockopt" => sub
+		{
+			it "returns correct addresses" => sub
+			{
+				my @addrs = getsockopt_interfaces($remote_ip_a);
+				cmp_hashes_partial(\@addrs, \@expected_addrs);
+			};
+			
+			it "returns correct IPX_MAX_ADAPTER_NUM" => sub
+			{
+				my @addrs = getsockopt_interfaces($remote_ip_a);
+				
+				my $output = run_remote_cmd($remote_ip_a, "Z:\\tools\\list-interfaces.exe");
+				my ($got_num) = ($output =~ m/^IPX_MAX_ADAPTER_NUM = (\d+)$/m);
+				
+				is($got_num, (scalar @addrs));
+			};
+		};
+	};
+	
+	describe "using DOSBox UDP encapsulation (server is down)" => sub
+	{
+		before all => sub
+		{
+			reg_delete_key($remote_ip_a, "HKCU\\Software\\IPXWrapper");
+			reg_set_dword( $remote_ip_a, "HKCU\\Software\\IPXWrapper", "use_pcap", ENCAP_TYPE_DOSBOX);
+			reg_set_string($remote_ip_a, "HKCU\\Software\\IPXWrapper", "dosbox_server_addr", $local_ip_a);
+			reg_set_dword( $remote_ip_a, "HKCU\\Software\\IPXWrapper", "dosbox_server_port", $dosbox_port);
+			
+			$dosbox_server = undef;
+		};
+		
+		# Duplicate of common getsockopt block to skip the default interface selection
+		# logic test (because there is only ever one interface here).
+		describe "getsockopt" => sub
+		{
+			it "returns no addresses" => sub
+			{
+				my @addrs = getsockopt_interfaces($remote_ip_a);
+				cmp_deeply(\@addrs, []);
+			};
+			
+			it "returns correct IPX_MAX_ADAPTER_NUM" => sub
+			{
+				my @addrs = getsockopt_interfaces($remote_ip_a);
+				
+				my $output = run_remote_cmd($remote_ip_a, "Z:\\tools\\list-interfaces.exe");
+				my ($got_num) = ($output =~ m/^IPX_MAX_ADAPTER_NUM = (\d+)$/m);
+				
+				is($got_num, 0);
 			};
 		};
 	};

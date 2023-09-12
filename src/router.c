@@ -57,17 +57,20 @@ static HANDLE router_thread  = NULL;
 SOCKET shared_socket  = -1;
 SOCKET private_socket = -1;
 
-#define DOSBOX_CONNECT_TIMEOUT_SECS 10
-
 struct sockaddr_in dosbox_server_addr;
-static time_t dosbox_connect_begin;
 static HANDLE dosbox_ready_event = NULL;
 
-static int dosbox_next_registration_request_at;
-static int dosbox_registration_retry_interval_ms;
+static uint64_t dosbox_next_connection_attempt_at;
+static const unsigned int dosbox_connect_retry_interval_ms = 10000;
 
-static const int INITIAL_DOSBOX_REGISTRATION_RETRY_INTERVAL_MS = 250;
-static const int MAX_DOSBOX_REGISTRATION_RETRY_INTERVAL_MS = 8000;
+static uint64_t dosbox_next_registration_request_at;
+static unsigned int dosbox_registration_retry_interval_ms;
+static uint64_t dosbox_registration_timeout_at;
+
+static const unsigned int INITIAL_DOSBOX_REGISTRATION_RETRY_INTERVAL_MS = 250;
+static const unsigned int MAX_DOSBOX_REGISTRATION_RETRY_INTERVAL_MS = 8000;
+
+static const unsigned int DOSBOX_REGISTRATION_TIMEOUT_MS = 30000;
 
 static void _send_dosbox_registration_request(void);
 static DWORD router_main(void *arg);
@@ -155,18 +158,9 @@ void router_init(void)
 			abort();
 		}
 		
-		/* TODO: Support DNS. Do this async somewhere within router_main. */
-		
 		_init_socket(&private_socket, 0, FALSE, FALSE);
 		
-		dosbox_server_addr.sin_family = AF_INET;
-		dosbox_server_addr.sin_addr.s_addr = inet_addr(main_config.dosbox_server_addr);
-		dosbox_server_addr.sin_port = htons(main_config.dosbox_server_port);
-		
-		dosbox_next_registration_request_at = 0;
-		dosbox_registration_retry_interval_ms = INITIAL_DOSBOX_REGISTRATION_RETRY_INTERVAL_MS;
-		
-		dosbox_state = DOSBOX_REGISTERING;
+		dosbox_next_connection_attempt_at = 0;
 	}
 	else{
 		_init_socket(&shared_socket, main_config.udp_port, TRUE, TRUE);
@@ -519,8 +513,7 @@ static void _handle_dosbox_registration_response(novell_ipx_packet *packet, size
 		/* || packet->type != 2) */
 	{
 		/* Doesn't look valid. */
-		log_printf(LOG_ERROR, "Got invalid registration response from DOSBox server!");
-		abort();
+		log_printf(LOG_ERROR, "Got invalid registration response from DOSBox server, ignoring");
 	}
 	
 	dosbox_local_netnum  = addr32_in(packet->dest_net);
@@ -546,7 +539,7 @@ static void _handle_dosbox_recv(novell_ipx_packet *packet, size_t packet_size)
 	if(packet_size < sizeof(novell_ipx_packet) || ntohs(packet->length) != packet_size)
 	{
 		/* Doesn't look valid. */
-		log_printf(LOG_ERROR, "Recieved invalid IPX packet from DOSBox server, dropping");
+		log_printf(LOG_ERROR, "Recieved invalid IPX packet from DOSBox server, ignoring");
 		return;
 	}
 	
@@ -758,20 +751,32 @@ static DWORD router_main(void *arg)
 	{
 		DWORD wait_ms = 1000;
 		
-		if(ipx_encap_type == ENCAP_TYPE_DOSBOX && dosbox_state == DOSBOX_REGISTERING)
+		if(ipx_encap_type == ENCAP_TYPE_DOSBOX)
 		{
-			uint64_t now = get_ticks();
-			
-			if(now >= dosbox_next_registration_request_at)
+			if(dosbox_state == DOSBOX_DISCONNECTED)
 			{
-				wait_ms = 0;
-			}
-			else{
-				wait_ms = dosbox_next_registration_request_at - 1;
+				uint64_t now = get_ticks();
 				
-				if(wait_ms > 1000)
+				if(now >= dosbox_next_connection_attempt_at)
 				{
-					wait_ms = 1000;
+					wait_ms = 0;
+				}
+				else{
+					wait_ms = dosbox_next_connection_attempt_at - now;
+					wait_ms = min(wait_ms, 1000);
+				}
+			}
+			else if(dosbox_state == DOSBOX_REGISTERING)
+			{
+				uint64_t now = get_ticks();
+				
+				if(now >= dosbox_next_registration_request_at)
+				{
+					wait_ms = 0;
+				}
+				else{
+					wait_ms = dosbox_next_registration_request_at - now;
+					wait_ms = min(wait_ms, 1000);
 				}
 			}
 		}
@@ -815,10 +820,48 @@ static DWORD router_main(void *arg)
 			}
 		}
 		
+		if(ipx_encap_type == ENCAP_TYPE_DOSBOX && dosbox_state == DOSBOX_DISCONNECTED)
+		{
+			if(get_ticks() >= dosbox_next_connection_attempt_at)
+			{
+				struct hostent *host = gethostbyname(main_config.dosbox_server_addr);
+				
+				uint64_t now = get_ticks();
+				
+				if(host != NULL)
+				{
+					dosbox_server_addr.sin_family = AF_INET;
+					memcpy(&(dosbox_server_addr.sin_addr), host->h_addr, 4);
+					dosbox_server_addr.sin_port = htons(main_config.dosbox_server_port);
+					
+					log_printf(LOG_INFO, "Resolved DOSBox server address %s, connecting...\n", inet_ntoa(dosbox_server_addr.sin_addr));
+					
+					dosbox_next_registration_request_at = 0;
+					dosbox_registration_retry_interval_ms = INITIAL_DOSBOX_REGISTRATION_RETRY_INTERVAL_MS;
+					
+					dosbox_registration_timeout_at = now + DOSBOX_REGISTRATION_TIMEOUT_MS;
+					
+					dosbox_state = DOSBOX_REGISTERING;
+				}
+				else{
+					DWORD error = WSAGetLastError();
+					log_printf(LOG_ERROR, "Error resolving %s: %s (%u)",
+						main_config.dosbox_server_addr, w32_error(error), (unsigned int)(error));
+					
+					dosbox_next_connection_attempt_at = now + dosbox_connect_retry_interval_ms;
+				}
+			}
+		}
+		
 		if(ipx_encap_type == ENCAP_TYPE_DOSBOX && dosbox_state == DOSBOX_REGISTERING)
 		{
 			uint64_t now = get_ticks();
 			
+			if(now >= dosbox_registration_timeout_at)
+			{
+				log_printf(LOG_ERROR, "Connection to DOSBox server %s timed out", inet_ntoa(dosbox_server_addr.sin_addr));
+				dosbox_state = DOSBOX_DISCONNECTED;
+			}
 			if(now >= dosbox_next_registration_request_at)
 			{
 				_send_dosbox_registration_request();

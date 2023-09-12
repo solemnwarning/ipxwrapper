@@ -35,3 +35,4 @@ r_getpeername:4
 inet_ntoa:4
 __WSAFDIsSet:4
 r_WSAAsyncSelect:4
+gethostbyname:4
