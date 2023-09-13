@@ -1,5 +1,5 @@
 /* IPXWrapper - Configuration tool
- * Copyright (C) 2011-2021 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2011-2022 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -27,7 +27,7 @@
 #include <set>
 
 #include "config.h"
-#include "interface.h"
+#include "interface2.h"
 #include "addr.h"
 
 const char *IPXCONFIG_WINDOW_CLASS = "ipxconfig_class";

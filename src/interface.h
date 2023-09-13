@@ -25,6 +25,7 @@
 
 #include "config.h"
 #include "common.h"
+#include "interface2.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -32,11 +33,6 @@ extern "C" {
 
 /* TODO: Dynamic MTU, per interface. */
 #define ETHERNET_MTU 1500
-
-#define WILDCARD_IFACE_HWADDR ({ \
-	const unsigned char x[] = {0x00,0x00,0x00,0x00,0x00,0x00}; \
-	addr48_in(x); \
-})
 
 typedef struct ipx_interface_ip ipx_interface_ip_t;
 
@@ -64,18 +60,6 @@ struct ipx_interface {
 	ipx_interface_t *next;
 };
 
-typedef struct ipx_pcap_interface ipx_pcap_interface_t;
-
-struct ipx_pcap_interface {
-	char *name;
-	char *desc;
-	
-	addr48_t mac_addr;
-	
-	ipx_pcap_interface_t *prev;
-	ipx_pcap_interface_t *next;
-};
-
 extern enum main_config_encap_type ipx_encap_type;
 
 enum dosbox_state
@@ -90,7 +74,6 @@ extern enum dosbox_state dosbox_state;
 extern addr32_t dosbox_local_netnum;
 extern addr48_t dosbox_local_nodenum;
 
-IP_ADAPTER_INFO *load_sys_interfaces(void);
 ipx_interface_t *load_ipx_interfaces(void);
 
 ipx_interface_t *copy_ipx_interface(const ipx_interface_t *src);
@@ -108,9 +91,6 @@ ipx_interface_t *ipx_interface_by_addr(addr32_t net, addr48_t node);
 ipx_interface_t *ipx_interface_by_subnet(uint32_t ipaddr);
 ipx_interface_t *ipx_interface_by_index(int index);
 int ipx_interface_count(void);
-
-ipx_pcap_interface_t *ipx_get_pcap_interfaces(void);
-void ipx_free_pcap_interfaces(ipx_pcap_interface_t **interfaces);
 
 ipx_interface_t *load_dosbox_interfaces(void);
 
