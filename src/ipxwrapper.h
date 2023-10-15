@@ -60,6 +60,55 @@
 typedef struct ipx_socket ipx_socket;
 typedef struct ipx_packet ipx_packet;
 
+#define RECV_QUEUE_MAX_PACKETS 32
+
+#define IPX_RECV_QUEUE_FREE -1
+#define IPX_RECV_QUEUE_LOCKED -2
+
+/* Any AF_IPX IPX socket has an associated recv_queue.
+ *
+ * When a recv_pump() operation is running, the sockets lock has to be released
+ * in case the recv() blocks, which means the socket could be closed before it
+ * regains the lock.
+ *
+ * An ipx_recv_queue isn't destroyed until the refcount reaches zero. The
+ * ipx_socket holds one reference and each in-progress recv_pump() also holds a
+ * reference while the sockets lock isn't held.
+ *
+ * Access to the refcount is protected by refcount_lock.
+ *
+ * data[] holds an array of buffers for each queued packet, the status and size
+ * of which is indicated by the sizes[] array.
+ *
+ * If sizes[x] is IPX_RECV_QUEUE_FREE, the buffer is available to be claimed by
+ * a recv_pump() operation, which then sets it to IPX_RECV_QUEUE_LOCKED until
+ * it completes, which prevents a recv_pump() in another thread from trying to
+ * use the same receive buffer. Once a packet is read in, sizes[x] is set to
+ * the size of the packet and x is added to the end of the ready[] array.
+ *
+ * When a read is requested, the packet will be read from the data[] index
+ * stored in ready[0], and unless MSG_PEEK was used, that slot will then be
+ * released (sizes[x] set to IPX_RECV_QUEUE_FREE) and any subsequent slots in
+ * read[] will be advanced for the next read to pick up from ready[0].
+ *
+ * Access to the ready, n_ready and sizes members is only permitted when a
+ * thread holds the main sockets lock.
+*/
+
+struct ipx_recv_queue
+{
+	CRITICAL_SECTION refcount_lock;
+	int refcount;
+	
+	int ready[RECV_QUEUE_MAX_PACKETS];
+	int n_ready;
+	
+	unsigned char data[RECV_QUEUE_MAX_PACKETS][MAX_PKT_SIZE];
+	int sizes[RECV_QUEUE_MAX_PACKETS];
+};
+
+typedef struct ipx_recv_queue ipx_recv_queue;
+
 struct ipx_socket {
 	SOCKET fd;
 	
@@ -78,6 +127,8 @@ struct ipx_socket {
 	
 	/* Address used with connect call, only set when IPX_CONNECTED is */
 	struct sockaddr_ipx remote_addr;
+	
+	struct ipx_recv_queue *recv_queue;
 	
 	UT_hash_handle hh;
 };
@@ -165,5 +216,6 @@ int PASCAL r_getpeername(SOCKET fd, struct sockaddr *addr, int *addrlen);
 int PASCAL r_listen(SOCKET s, int backlog);
 SOCKET PASCAL r_accept(SOCKET s, struct sockaddr *addr, int *addrlen);
 int PASCAL r_WSAAsyncSelect(SOCKET s, HWND hWnd, unsigned int wMsg, long lEvent);
+int WSAAPI r_select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, const PTIMEVAL timeout);
 
 #endif /* !IPXWRAPPER_H */

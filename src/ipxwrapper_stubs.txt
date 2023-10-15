@@ -7,7 +7,7 @@ htonl:4
 ntohl:4
 htons:4
 ntohs:4
-select:4
+r_select:4
 r_listen:4
 r_accept:4
 WSACreateEvent:4
