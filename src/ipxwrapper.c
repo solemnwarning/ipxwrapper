@@ -1,5 +1,5 @@
 /* ipxwrapper - Library functions
- * Copyright (C) 2008-2014 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2008-2023 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -81,7 +81,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 		
 		main_config = get_main_config();
 		min_log_level = main_config.log_level;
-		ipx_use_pcap  = main_config.use_pcap;
+		ipx_encap_type = main_config.encap_type;
 		
 		if(main_config.fw_except)
 		{
@@ -142,7 +142,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 }
 
 /* Lock the sockets table and search for one by file descriptor.
- * 
+ *
  * Returns an ipx_socket pointer on success, unlocks the sockets table and
  * returns NULL if no match is found.
 */
@@ -159,6 +159,23 @@ ipx_socket *get_socket(SOCKET sockfd)
 	}
 	
 	return sock;
+}
+
+/* Like get_socket(), but also calls wait_for_ready() if an IPX socket was found. */
+ipx_socket *get_socket_wait_for_ready(SOCKET sockfd, int timeout_ms)
+{
+	ipx_socket *sock = get_socket(sockfd);
+	
+	if(sock)
+	{
+		unlock_sockets();
+		wait_for_ready(timeout_ms);
+		
+		sock = get_socket(sockfd);
+	}
+	
+	return sock;
+	lock_sockets();
 }
 
 /* Lock the mutex */

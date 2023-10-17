@@ -1,5 +1,5 @@
 /* ipxwrapper - Configuration header
- * Copyright (C) 2011-2013 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2011-2021 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -26,6 +26,13 @@
 extern "C" {
 #endif
 
+enum main_config_encap_type
+{
+	ENCAP_TYPE_IPXWRAPPER = 0,
+	ENCAP_TYPE_PCAP = 1,
+	ENCAP_TYPE_DOSBOX = 2,
+};
+
 enum main_config_frame_type
 {
 	FRAME_TYPE_ETH_II = 1,
@@ -38,8 +45,11 @@ typedef struct main_config {
 	
 	bool w95_bug;
 	bool fw_except;
-	bool use_pcap;
+	enum main_config_encap_type encap_type;
 	enum main_config_frame_type frame_type;
+	
+	char *dosbox_server_addr;
+	uint16_t dosbox_server_port;
 	
 	enum ipx_log_level log_level;
 } main_config_t;

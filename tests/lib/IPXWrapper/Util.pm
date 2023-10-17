@@ -21,11 +21,18 @@ package IPXWrapper::Util;
 
 use Exporter qw(import);
 
+use constant {
+	ENCAP_TYPE_DOSBOX => 2,
+};
+
 our @EXPORT = qw(
+	ENCAP_TYPE_DOSBOX
+	
 	run_remote_cmd
 	
 	reg_set_dword
 	reg_set_addr
+	reg_set_string
 	reg_delete_key
 	reg_delete_value
 	
@@ -33,6 +40,7 @@ our @EXPORT = qw(
 	send_ipx_packet_ethernet
 	send_ipx_packet_novell
 	send_ipx_packet_llc
+	send_ipx_packet_rfc1234
 	
 	cmp_hashes_partial
 	
@@ -79,6 +87,13 @@ sub reg_set_addr
 	
 	$data =~ s/://g;
 	run_remote_cmd($host_ip, "REG", "ADD", $key, "/v", $value, "/t", "REG_BINARY", "/d", $data, "/f");
+}
+
+sub reg_set_string
+{
+	my ($host_ip, $key, $value, $data) = @_;
+	
+	run_remote_cmd($host_ip, "REG", "ADD", $key, "/v", $value, "/t", "REG_SZ", "/d", $data, "/f");
 }
 
 sub reg_delete_key
@@ -174,6 +189,23 @@ sub send_ipx_packet_llc
 	_send_ethernet_frame($dev,
 		$packet->{dest_node}, $packet->{src_node}, length($enc_packet),
 		$enc_packet);
+}
+
+sub send_ipx_packet_rfc1234
+{
+	my (%options) = @_;
+	
+	my $packet     = NetPacket::IPX->new(%options);
+	my $enc_packet = $packet->encode();
+	
+	my $sock = IO::Socket::INET->new(
+		Proto     => "udp",
+		PeerAddr  => $options{dest_ip},
+		PeerPort  => $options{dest_port},
+	) or die("Can't create socket: $!");
+	
+	$sock->send($enc_packet)
+		or die("Can't send data: $!");
 }
 
 sub cmp_hashes_partial

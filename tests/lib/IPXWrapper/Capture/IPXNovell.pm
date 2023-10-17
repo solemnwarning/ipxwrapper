@@ -1,5 +1,5 @@
 # IPXWrapper test suite
-# Copyright (C) 2016 Daniel Collins <solemnwarning@solemnwarning.net>
+# Copyright (C) 2016-2023 Daniel Collins <solemnwarning@solemnwarning.net>
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License version 2 as published by
@@ -30,6 +30,8 @@ sub new
 	my $err;
 	my $pcap = Net::Pcap::pcap_open_live($dev, 2000, 0, 1, \$err)
 		or die("Cannot open device $dev: $err");
+	
+	Net::Pcap::pcap_setnonblock($pcap, 1, \$err);
 	
 	return bless(\$pcap, $class);
 }

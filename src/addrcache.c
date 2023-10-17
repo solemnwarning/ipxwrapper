@@ -1,5 +1,5 @@
 /* IPXWrapper - Address cache
- * Copyright (C) 2008-2012 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2008-2023 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -43,6 +43,15 @@ struct host_table {
 	SOCKADDR_STORAGE addr;
 	size_t addrlen;
 };
+
+/* time() wrapper function to enable the unit tests to mock it. */
+
+static time_t addrcache_time_impl(void)
+{
+	return time(NULL);
+}
+
+time_t (*addrcache_time)(void) = &addrcache_time_impl;
 
 typedef struct host_table host_table_t;
 typedef struct host_table_key host_table_key_t;
@@ -127,7 +136,7 @@ int addr_cache_get(SOCKADDR_STORAGE *addr, size_t *addrlen, addr32_t net, addr48
 	
 	host_table_t *host = host_table_find(net, node, sock);
 	
-	if(host && time(NULL) < host->time + ADDR_CACHE_TTL)
+	if(host && addrcache_time() < host->time + ADDR_CACHE_TTL)
 	{
 		memcpy(addr, &(host->addr), host->addrlen);
 		*addrlen = host->addrlen;
@@ -181,7 +190,7 @@ void addr_cache_set(const struct sockaddr *addr, size_t addrlen, addr32_t net, a
 	memcpy(&(host->addr), addr, addrlen);
 	host->addrlen = addrlen;
 	
-	host->time = time(NULL);
+	host->time = addrcache_time();
 	
 	host_table_unlock();
 }

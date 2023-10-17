@@ -1,5 +1,5 @@
 # IPXWrapper - Makefile
-# Copyright (C) 2011-2017 Daniel Collins <solemnwarning@solemnwarning.net>
+# Copyright (C) 2011-2023 Daniel Collins <solemnwarning@solemnwarning.net>
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License version 2 as published by
@@ -30,7 +30,7 @@ else
 DBG_OPT := -Wl,-s
 endif
 
-INCLUDE := -I./include/ -D_WIN32_WINNT=0x0500 -D_WIN32_IE=0x0500 -DHAVE_REMOTE
+INCLUDE := -I./include/ -I./winpcap/include/ -D_WIN32_WINNT=0x0500 -D_WIN32_IE=0x0500 -DHAVE_REMOTE
 
 CFLAGS   := -std=c99   -mno-ms-bitfields -Wall $(DBG_OPT) $(INCLUDE)
 CXXFLAGS := -std=c++0x -mno-ms-bitfields -Wall $(DBG_OPT) $(INCLUDE)
@@ -85,7 +85,7 @@ dist: all
 #
 
 IPXWRAPPER_OBJS := src/ipxwrapper.o src/winsock.o src/ipxwrapper_stubs.o src/log.o src/common.o \
-	src/interface.o src/router.o src/ipxwrapper.def src/addrcache.o src/config.o src/addr.o \
+	src/interface.o src/interface2.o src/router.o src/ipxwrapper.def src/addrcache.o src/config.o src/addr.o \
 	src/firewall.o src/wpcap_stubs.o src/ethernet.o
 
 ipxwrapper.dll: $(IPXWRAPPER_OBJS)
@@ -129,7 +129,7 @@ src/dpwsockx_stubs.s: src/dpwsockx_stubs.txt
 # IPXCONFIG.EXE
 #
 
-IPXCONFIG_OBJS := src/ipxconfig.o icons/ipxconfig.o src/addr.o src/interface.o src/common.o \
+IPXCONFIG_OBJS := src/ipxconfig.o icons/ipxconfig.o src/addr.o src/interface2.o src/common.o \
 	src/config.o src/wpcap_stubs.o
 
 ipxconfig.exe: $(IPXCONFIG_OBJS)

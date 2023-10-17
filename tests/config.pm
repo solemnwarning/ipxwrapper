@@ -29,4 +29,8 @@ our $remote_c_ip = "172.16.1.23";
 our $net_a_bcast  = "172.16.1.255";
 our $net_b_bcast  = "172.16.2.255";
 
+# Port to use for test DOSBox server.
+
+our $dosbox_port = 8086;
+
 1;

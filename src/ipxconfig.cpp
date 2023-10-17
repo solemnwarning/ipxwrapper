@@ -1,5 +1,5 @@
 /* IPXWrapper - Configuration tool
- * Copyright (C) 2011-2014 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2011-2022 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -24,9 +24,10 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <ctype.h>
+#include <set>
 
 #include "config.h"
-#include "interface.h"
+#include "interface2.h"
 #include "addr.h"
 
 const char *IPXCONFIG_WINDOW_CLASS = "ipxconfig_class";
@@ -37,16 +38,24 @@ enum {
 	ID_NIC_NET     = 13,
 	ID_NIC_NODE    = 14,
 	
-	ID_OPT_PORT      = 21,
 	ID_OPT_W95       = 22,
 	ID_OPT_LOG_DEBUG = 25,
 	ID_OPT_LOG_TRACE = 26,
-	ID_OPT_FW_EXCEPT = 27,
-	ID_OPT_USE_PCAP  = 28,
 	
 	ID_OK     = 31,
 	ID_CANCEL = 32,
 	ID_APPLY  = 33,
+	
+	ID_ENCAP_IPXWRAPPER = 41,
+	ID_ENCAP_DOSBOX = 42,
+	ID_ENCAP_IPX = 44,
+	
+	ID_DOSBOX_SERVER_ADDR = 51,
+	ID_DOSBOX_SERVER_PORT = 52,
+	ID_DOSBOX_FW_EXCEPT = 55,
+	
+	ID_IPXWRAPPER_PORT = 61,
+	ID_IPXWRAPPER_FW_EXCEPT = 62,
 };
 
 struct iface {
@@ -65,7 +74,7 @@ static bool stash_nic_config();
 static bool save_config();
 static void main_window_init();
 static void main_window_update();
-static void main_window_resize(int width, int height);
+static void main_window_layout(HWND *visible_groups);
 
 static HWND create_child(HWND parent, LPCTSTR class_name, LPCTSTR title, DWORD style = 0, DWORD ex_style = 0, unsigned int id = 0);
 static HWND create_GroupBox(HWND parent, LPCTSTR title);
@@ -73,6 +82,7 @@ static HWND create_STATIC(HWND parent, LPCTSTR text);
 static HWND create_checkbox(HWND parent, LPCTSTR label, int id);
 static bool get_checkbox(HWND checkbox);
 static void set_checkbox(HWND checkbox, bool state);
+static HWND create_radio(HWND parent, LPCTSTR label, int id);
 static int get_text_width(HWND hwnd, const char *txt);
 static int get_text_height(HWND hwnd);
 
@@ -96,6 +106,11 @@ static wproc_fptr default_groupbox_wproc = NULL;
 static struct {
 	HWND main;
 	
+	HWND box_encap;
+	HWND encap_ipxwrapper;
+	HWND encap_dosbox;
+	HWND encap_ipx;
+	
 	HWND box_primary;
 	HWND primary;
 	
@@ -107,18 +122,26 @@ static struct {
 	HWND nic_node_lbl;
 	HWND nic_node;
 	
+	HWND box_ipxwrapper_options;
+	HWND ipxwrapper_port_lbl;
+	HWND ipxwrapper_port;
+	HWND ipxwrapper_fw_except;
+	
+	HWND box_dosbox_options;
+	HWND dosbox_server_addr_lbl;
+	HWND dosbox_server_addr;
+	HWND dosbox_server_port_lbl;
+	HWND dosbox_server_port;
+	HWND dosbox_fw_except;
+	
+	HWND box_ipx_options;
+	HWND ipx_frame_type_lbl;
+	HWND ipx_frame_type;
+	
 	HWND box_options;
-	
-	HWND opt_port_lbl;
-	HWND opt_port;
-	
 	HWND opt_w95;
 	HWND opt_log_debug;
 	HWND opt_log_trace;
-	HWND opt_fw_except;
-	HWND opt_use_pcap;
-	HWND opt_frame_type_lbl;
-	HWND opt_frame_type;
 	
 	HWND ok_btn;
 	HWND can_btn;
@@ -165,6 +188,13 @@ static LRESULT CALLBACK main_wproc(HWND window, UINT msg, WPARAM wp, LPARAM lp) 
 		case WM_COMMAND: {
 			if(HIWORD(wp) == BN_CLICKED) {
 				switch(LOWORD(wp)) {
+					case ID_ENCAP_IPXWRAPPER:
+					case ID_ENCAP_DOSBOX:
+					case ID_ENCAP_IPX:
+						main_window_update();
+						reload_nics();
+						break;
+					
 					case ID_NIC_ENABLED: {
 						int nic = ListView_GetNextItem(wh.nic_list, (LPARAM)(-1), LVNI_FOCUSED);
 						nics[nic].config.enabled = get_checkbox(wh.nic_enabled);
@@ -177,16 +207,6 @@ static LRESULT CALLBACK main_wproc(HWND window, UINT msg, WPARAM wp, LPARAM lp) 
 					
 					case ID_OPT_LOG_DEBUG: {
 						main_window_update();
-						break;
-					}
-					
-					case ID_OPT_USE_PCAP: {
-						main_config.use_pcap = get_checkbox(wh.opt_use_pcap);
-						
-						EnableWindow(wh.opt_frame_type, PCAP_INSTALLED && main_config.use_pcap);
-						
-						reload_nics();
-						
 						break;
 					}
 					
@@ -213,11 +233,6 @@ static LRESULT CALLBACK main_wproc(HWND window, UINT msg, WPARAM wp, LPARAM lp) 
 				}
 			}
 			
-			break;
-		}
-		
-		case WM_SIZE: {
-			main_window_resize(LOWORD(lp), HIWORD(lp));
 			break;
 		}
 		
@@ -270,11 +285,12 @@ int main()
 		die("Could not register window class: " + w32_errmsg(GetLastError()));
 	}
 	
-	if(!PCAP_INSTALLED && main_config.use_pcap)
+	if(!PCAP_INSTALLED && main_config.encap_type == ENCAP_TYPE_PCAP)
 	{
 		MessageBox(NULL, "IPXWrapper is currently configured to use WinPcap, but it doesn't seem to be installed.\n"
 			"Configuration has been reset to use IP encapsulation.", "WinPcap not found", MB_OK | MB_TASKMODAL | MB_ICONWARNING);
-		main_config.use_pcap = false;
+		
+		main_config.encap_type = ENCAP_TYPE_IPXWRAPPER;
 	}
 	
 	main_window_init();
@@ -324,7 +340,7 @@ static void reload_nics()
 {
 	nics.clear();
 	
-	if(main_config.use_pcap)
+	if(main_config.encap_type == ENCAP_TYPE_PCAP)
 	{
 		/* Ethernet encapsulation is selected, so we base the NIC list
 		 * on the list of usable WinPcap interfaces.
@@ -339,7 +355,8 @@ static void reload_nics()
 		
 		ipx_free_pcap_interfaces(&pcap_interfaces);
 	}
-	else{
+	else if(main_config.encap_type == ENCAP_TYPE_IPXWRAPPER)
+	{
 		/* IP encapsulation is selected, so we base the NIC list on the
 		 * list of IP interfaces.
 		*/
@@ -438,7 +455,7 @@ static bool stash_nic_config()
 		return false;
 	}
 	
-	if(!main_config.use_pcap)
+	if(main_config.encap_type != ENCAP_TYPE_PCAP)
 	{
 		if(!addr48_from_string(&(nics[selected_nic].config.nodenum), node))
 		{
@@ -455,60 +472,106 @@ static bool stash_nic_config()
 
 static bool save_config()
 {
-	if(!stash_nic_config())
+	if(main_config.encap_type == ENCAP_TYPE_IPXWRAPPER || main_config.encap_type == ENCAP_TYPE_PCAP)
 	{
-		return false;
-	}
-	
-	int pri_index = ComboBox_GetCurSel(wh.primary);
-	
-	if(pri_index == 0)
-	{
-		const unsigned char f6[] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
-		primary_iface = addr48_in(f6);
-	}
-	else{
-		/* Iterate over the NIC list to find the selected primary
-		 * interface.
-		 * 
-		 * Can't just deref by index here as disabled interfaces don't
-		 * increment the index.
-		*/
+		int pri_index = ComboBox_GetCurSel(wh.primary);
 		
-		int this_nic = 0;
-		
-		for(auto i = nics.begin(); i != nics.end(); i++)
+		if(pri_index == 0)
 		{
-			if(i->config.enabled && ++this_nic == pri_index)
+			const unsigned char f6[] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
+			primary_iface = addr48_in(f6);
+		}
+		else{
+			/* Iterate over the NIC list to find the selected primary interface.
+			 * Can't just deref by index here as disabled interfaces don't increment
+			 * the index.
+			*/
+			
+			int this_nic = 0;
+			
+			for(auto i = nics.begin(); i != nics.end(); i++)
 			{
-				primary_iface = i->hwaddr;
-				break;
+				if(i->config.enabled && ++this_nic == pri_index)
+				{
+					primary_iface = i->hwaddr;
+					break;
+				}
 			}
+		}
+		
+		if(!stash_nic_config())
+		{
+			return false;
 		}
 	}
 	
-	if(!main_config.use_pcap)
+	if(main_config.encap_type == ENCAP_TYPE_IPXWRAPPER)
 	{
 		char port_s[32], *endptr;
 		
-		GetWindowText(wh.opt_port, port_s, 32);
+		GetWindowText(wh.ipxwrapper_port, port_s, 32);
 		int port = strtol(port_s, &endptr, 10);
 		
 		if(port < 1 || port > 65535 || *endptr) {
 			MessageBox(wh.main, "Invalid port number.\n"
-				"Port number must be an integer in the range 1 - 65535", "Error", MB_OK);
+			                    "Port number must be an integer in the range 1 - 65535", "Error", MB_OK);
 			
-			SetFocus(wh.opt_port);
-			Edit_SetSel(wh.opt_port, 0, Edit_GetTextLength(wh.opt_port));
+			SetFocus(wh.ipxwrapper_port);
+			Edit_SetSel(wh.ipxwrapper_port, 0, Edit_GetTextLength(wh.ipxwrapper_port));
 			
 			return false;
 		}
 		
 		main_config.udp_port = port;
+		
+		main_config.fw_except = get_checkbox(wh.ipxwrapper_fw_except);
+	}
+	else if(main_config.encap_type == ENCAP_TYPE_DOSBOX)
+	{
+		char server[256];
+		server[ GetWindowText(wh.dosbox_server_addr, server, 256) ] = '\0';
+		
+		if(server[0] == '\0')
+		{
+			MessageBox(wh.main, "DOSBox IPX server address is required.", "Error", MB_OK);
+			SetFocus(wh.dosbox_server_addr);
+			
+			return false;
+		}
+		
+		char port_s[32], *endptr;
+		
+		GetWindowText(wh.dosbox_server_port, port_s, 32);
+		int port = strtol(port_s, &endptr, 10);
+		
+		if(port < 1 || port > 65535 || *endptr) {
+			MessageBox(wh.main, "Invalid port number.\n"
+			                    "Port number must be an integer in the range 1 - 65535", "Error", MB_OK);
+			
+			SetFocus(wh.dosbox_server_port);
+			Edit_SetSel(wh.dosbox_server_port, 0, Edit_GetTextLength(wh.dosbox_server_port));
+			
+			return false;
+		}
+		
+		free(main_config.dosbox_server_addr);
+		
+		main_config.dosbox_server_addr = strdup(server);
+		if(main_config.dosbox_server_addr == NULL)
+		{
+			MessageBox(wh.main, "Memory allocation failure.", "Error", MB_OK);
+			abort();
+		}
+		
+		main_config.dosbox_server_port = port;
+		main_config.fw_except = get_checkbox(wh.dosbox_fw_except);
+	}
+	else if(main_config.encap_type == ENCAP_TYPE_PCAP)
+	{
+		main_config.frame_type = (main_config_frame_type)(ComboBox_GetCurSel(wh.ipx_frame_type) + 1);
 	}
 	
 	main_config.w95_bug   = get_checkbox(wh.opt_w95);
-	main_config.fw_except = get_checkbox(wh.opt_fw_except);
 	main_config.log_level = LOG_INFO;
 	
 	if(get_checkbox(wh.opt_log_debug))
@@ -521,13 +584,14 @@ static bool save_config()
 		}
 	}
 	
-	main_config.frame_type = (main_config_frame_type)(ComboBox_GetCurSel(wh.opt_frame_type) + 1);
-	
-	for(auto i = nics.begin(); i != nics.end(); i++)
+	if(main_config.encap_type == ENCAP_TYPE_IPXWRAPPER || main_config.encap_type == ENCAP_TYPE_PCAP)
 	{
-		if(!set_iface_config(i->hwaddr, &(i->config)))
+		for(auto i = nics.begin(); i != nics.end(); i++)
 		{
-			return false;
+			if(!set_iface_config(i->hwaddr, &(i->config)))
+			{
+				return false;
+			}
 		}
 	}
 	
@@ -542,9 +606,9 @@ static void main_window_init()
 	wh.main = CreateWindow(
 		IPXCONFIG_WINDOW_CLASS,
 		"IPXWrapper configuration",
-		WS_TILEDWINDOW,
+		(WS_TILEDWINDOW & ~WS_SIZEBOX),
 		CW_USEDEFAULT, CW_USEDEFAULT,
-		370, 445,
+		400, 445,
 		NULL,
 		NULL,
 		NULL,
@@ -556,14 +620,57 @@ static void main_window_init()
 		die("Could not create main window: " + w32_errmsg(GetLastError()));
 	}
 	
+	/* +- Encapsulation type-------------------------------------+
+	 * | ( ) IPXWrapper UDP encapsulation                        |
+	 * |     ...                                                 |
+	 * |                                                         |
+	 * | ( ) DOSBox UDP encapsulation                            |
+	 * |     ...                                                 |
+	 * |                                                         |
+	 * | ( ) Real IPX encapsulation (requires WinPcap)           |
+	 * |     ...                                                 |
+	 * +---------------------------------------------------------+
+	*/
+	
+	{
+		/* Create controls. */
+		
+		wh.box_encap = create_GroupBox(wh.main, "Encapsulation type");
+		
+		wh.encap_ipxwrapper = create_radio(wh.box_encap, "IPXWrapper UDP encapsulation\nConnect to other computers using IPXWrapper on your local network.", ID_ENCAP_IPXWRAPPER);
+		wh.encap_dosbox     = create_radio(wh.box_encap, "DOSBox UDP encapsulation\nConnect to other computers via a DOSBox IPX server.", ID_ENCAP_DOSBOX);
+		wh.encap_ipx        = create_radio(wh.box_encap, "Real IPX encapsulation (requires WinPcap)\nConnect to devices using the real IPX protocol on your local network.", ID_ENCAP_IPX);
+		
+		/* Initialise controls. */
+		
+		switch(main_config.encap_type)
+		{
+			case ENCAP_TYPE_IPXWRAPPER:
+				set_checkbox(wh.encap_ipxwrapper, true);
+				break;
+				
+			case ENCAP_TYPE_DOSBOX:
+				set_checkbox(wh.encap_dosbox, true);
+				break;
+				
+			case ENCAP_TYPE_PCAP:
+				set_checkbox(wh.encap_ipx, true);
+				break;
+		}
+		
+		EnableWindow(wh.encap_ipx, PCAP_INSTALLED);
+	}
+	
 	/* +- Primary interface -------------------------------------+
 	 * | | Default                                           |▼| |
 	 * +---------------------------------------------------------+
 	*/
 	
-	wh.box_primary = create_GroupBox(wh.main, "Primary interface");
-	
-	wh.primary = create_child(wh.box_primary, WC_COMBOBOX, NULL, CBS_DROPDOWNLIST | CBS_HASSTRINGS, 0);
+	{
+		wh.box_primary = create_GroupBox(wh.main, "Primary interface");
+		
+		wh.primary = create_child(wh.box_primary, WC_COMBOBOX, NULL, CBS_DROPDOWNLIST | CBS_HASSTRINGS, 0);
+	}
 	
 	/* +- Network adapters --------------------------------------+
 	 * | +-----------------------------------------------------+ |
@@ -597,56 +704,284 @@ static void main_window_init()
 		wh.nic_node     = create_child(wh.box_nic, "EDIT", "", WS_TABSTOP, WS_EX_CLIENTEDGE, ID_NIC_NODE);
 	}
 	
-	/* +- Options -----------------------------------------------+
+	/* +- Network options ---------------------------------------+
 	 * |       Broadcast port | 54792             |              |
-	 * | □ Enable Windows 95 SO_BROADCAST bug                    |
-	 * | □ Log debugging messages                                |
-	 * | □ Log WinSock API calls                                 |
+	 * |                                                         |
 	 * | □ Automatically create Windows Firewall exceptions      |
-	 * | □ Send and receive real IPX packets                     |
+	 * +---------------------------------------------------------+
+	*/
+	
+	{
+		/* Create controls. */
+		
+		wh.box_ipxwrapper_options = create_GroupBox(wh.main, "Network options");
+		
+		wh.ipxwrapper_port_lbl = create_STATIC(wh.box_ipxwrapper_options, "Broadcast port");
+		wh.ipxwrapper_port     = create_child(wh.box_ipxwrapper_options, "EDIT", "", WS_TABSTOP, WS_EX_CLIENTEDGE, ID_IPXWRAPPER_PORT);
+		
+		wh.ipxwrapper_fw_except = create_checkbox(wh.box_ipxwrapper_options, "Automatically create Windows Firewall exceptions", ID_IPXWRAPPER_FW_EXCEPT);
+		
+		/* Initialise controls. */
+		
+		char port_s[8];
+		
+		sprintf(port_s, "%hu", main_config.udp_port);
+		SetWindowText(wh.ipxwrapper_port, port_s);
+		
+		set_checkbox(wh.ipxwrapper_fw_except, main_config.fw_except);
+		
+		// TODO: Layout controls
+	}
+	
+	/* +- Network options ---------------------------------------+
+	 * |   DOSBox IPX server address | foo.bar.com       |       |
+	 * |      DOSBox IPX server port | 213               |       |
+	 * |                                                         |
+	 * | □ Automatically create Windows Firewall exceptions      |
+	 * +---------------------------------------------------------+
+	*/
+	
+	{
+		/* Create controls. */
+		
+		wh.box_dosbox_options = create_GroupBox(wh.main, "Network options");
+		
+		wh.dosbox_server_addr_lbl = create_STATIC(wh.box_dosbox_options, "DOSBox IPX server address");
+		wh.dosbox_server_addr     = create_child(wh.box_dosbox_options, "EDIT", "", WS_TABSTOP, WS_EX_CLIENTEDGE, ID_DOSBOX_SERVER_ADDR);
+		
+		wh.dosbox_server_port_lbl = create_STATIC(wh.box_dosbox_options, "DOSBox IPX server port");
+		wh.dosbox_server_port     = create_child(wh.box_dosbox_options, "EDIT", "", WS_TABSTOP, WS_EX_CLIENTEDGE, ID_DOSBOX_SERVER_PORT);
+		
+		wh.dosbox_fw_except = create_checkbox(wh.box_dosbox_options, "Automatically create Windows Firewall exceptions", ID_DOSBOX_FW_EXCEPT);
+		
+		/* Initialise controls. */
+		
+		SetWindowText(wh.dosbox_server_addr, main_config.dosbox_server_addr);
+		
+		char port_s[8];
+		
+		sprintf(port_s, "%hu", main_config.dosbox_server_port);
+		SetWindowText(wh.dosbox_server_port, port_s);
+		
+		set_checkbox(wh.dosbox_fw_except, main_config.fw_except);
+	}
+	
+	/* +- Network options ---------------------------------------+
 	 * |         Frame type   | Ethernet II  |▼|                 |
 	 * +---------------------------------------------------------+
 	*/
 	
 	{
-		wh.box_options = create_GroupBox(wh.main, "Options");
+		/* Create controls. */
 		
-		wh.opt_port_lbl = create_STATIC(wh.box_options, "Broadcast port");
-		wh.opt_port     = create_child(wh.box_options, "EDIT",   "", WS_TABSTOP, WS_EX_CLIENTEDGE, ID_OPT_PORT);
+		wh.box_ipx_options = create_GroupBox(wh.main, "Network options");
 		
-		char port_s[8];
+		wh.ipx_frame_type_lbl = create_STATIC(wh.box_ipx_options, "Frame type");
+		wh.ipx_frame_type     = create_child( wh.box_ipx_options, WC_COMBOBOX, NULL, CBS_DROPDOWNLIST | CBS_HASSTRINGS, 0);
 		
-		sprintf(port_s, "%hu", main_config.udp_port);
-		SetWindowText(wh.opt_port, port_s);
+		/* Initialise controls. */
+		
+		ComboBox_AddString(wh.ipx_frame_type, "Ethernet II");
+		ComboBox_AddString(wh.ipx_frame_type, "Novell \"raw\" 802.3");
+		ComboBox_AddString(wh.ipx_frame_type, "IEEE 802.2 (LLC)");
+		
+		ComboBox_SetCurSel(wh.ipx_frame_type, main_config.frame_type - 1);
+	}
+	
+	/* +- Other options --------------------------------------+
+	 * | □ Enable Windows 95 SO_BROADCAST bug                    |
+	 * | □ Log debugging messages                                |
+	 * | □ Log WinSock API calls                                 |
+	 * +---------------------------------------------------------+
+	*/
+	
+	{
+		wh.box_options = create_GroupBox(wh.main, "Other options");
 		
 		wh.opt_w95       = create_checkbox(wh.box_options, "Enable Windows 95 SO_BROADCAST bug", ID_OPT_W95);
 		wh.opt_log_debug = create_checkbox(wh.box_options, "Log debugging messages", ID_OPT_LOG_DEBUG);
 		wh.opt_log_trace = create_checkbox(wh.box_options, "Log WinSock API calls", ID_OPT_LOG_TRACE);
-		wh.opt_fw_except = create_checkbox(wh.box_options, "Automatically create Windows Firewall exceptions", ID_OPT_FW_EXCEPT);
-		wh.opt_use_pcap  = create_checkbox(wh.box_options, "Send and receive real IPX packets", ID_OPT_USE_PCAP);
-		
-		wh.opt_frame_type_lbl = create_STATIC(wh.box_options, "Frame type");
-		wh.opt_frame_type     = create_child( wh.box_options, WC_COMBOBOX, NULL, CBS_DROPDOWNLIST | CBS_HASSTRINGS, 0);
 		
 		set_checkbox(wh.opt_w95,       main_config.w95_bug);
 		set_checkbox(wh.opt_log_debug, main_config.log_level <= LOG_DEBUG);
 		set_checkbox(wh.opt_log_trace, main_config.log_level <= LOG_CALL);
-		set_checkbox(wh.opt_fw_except, main_config.fw_except);
-		set_checkbox(wh.opt_use_pcap,  main_config.use_pcap);
-		
-		ComboBox_AddString(wh.opt_frame_type, "Ethernet II");
-		ComboBox_AddString(wh.opt_frame_type, "Novell \"raw\" 802.3");
-		ComboBox_AddString(wh.opt_frame_type, "IEEE 802.2 (LLC)");
-		
-		ComboBox_SetCurSel(wh.opt_frame_type, main_config.frame_type - 1);
-		
-		EnableWindow(wh.opt_use_pcap,   PCAP_INSTALLED);
-		EnableWindow(wh.opt_frame_type, PCAP_INSTALLED && main_config.use_pcap);
 	}
 	
 	wh.ok_btn  = create_child(wh.main, "BUTTON", "OK",     BS_PUSHBUTTON | WS_TABSTOP, 0, ID_OK);
 	wh.can_btn = create_child(wh.main, "BUTTON", "Cancel", BS_PUSHBUTTON | WS_TABSTOP, 0, ID_CANCEL);
 	wh.app_btn = create_child(wh.main, "BUTTON", "Apply",  BS_PUSHBUTTON | WS_TABSTOP, 0, ID_APPLY);
+	
+	/*******************
+	 * Layout controls *
+	 ******************
+	*/
+	
+	RECT window_client_area;
+	GetClientRect(wh.main, &window_client_area);
+	
+	int width = window_client_area.right - window_client_area.left;
+	
+	const int edge   = GetSystemMetrics(SM_CYEDGE);
+	const int text_h = get_text_height(wh.box_primary);
+	const int edit_h = text_h + 2 * edge;
+	const int lbl_w  = get_text_width(wh.nic_net_lbl, "Network number") + 2 * edge;
+	const int lbl_w2 = get_text_width(wh.nic_net_lbl, "DOSBox IPX server address") + 2 * edge;
+	
+	const int port_w = get_text_width(wh.nic_node, "000000") * 1.5;
+	const int node_w = get_text_width(wh.nic_node, "00:00:00:00:00:00") * 1.5;
+	
+	const int BOX_TOP_PAD     = text_h;
+	const int BOX_BOTTOM_PAD  = 6;
+	const int BOX_SIDE_PAD    = 10;
+	const int BOX_SIDE_MARGIN = 10;
+	
+	const int BOX_WIDTH = width - (BOX_SIDE_MARGIN * 2);
+	const int BOX_INNER_WIDTH = BOX_WIDTH - (BOX_SIDE_PAD * 2);
+	
+	/* Encapsulation type */
+	
+	{
+		int box_encap_y = BOX_TOP_PAD;
+		
+		MoveWindow(wh.encap_ipxwrapper, BOX_SIDE_PAD, box_encap_y, BOX_INNER_WIDTH, text_h * 2, TRUE);
+		box_encap_y += text_h * 3;
+		
+		MoveWindow(wh.encap_dosbox, BOX_SIDE_PAD, box_encap_y, BOX_INNER_WIDTH, text_h * 2, TRUE);
+		box_encap_y += text_h * 3;
+		
+		MoveWindow(wh.encap_ipx, BOX_SIDE_PAD, box_encap_y, BOX_INNER_WIDTH, text_h * 2, TRUE);
+		box_encap_y += text_h * 2;
+		
+		int box_encap_h = box_encap_y + BOX_BOTTOM_PAD;
+		
+		MoveWindow(wh.box_encap, BOX_SIDE_MARGIN, 0, BOX_WIDTH, box_encap_h, TRUE);
+	}
+	
+	/* "Primary interface" */
+	
+	{
+		MoveWindow(wh.primary, BOX_SIDE_PAD, BOX_TOP_PAD, BOX_INNER_WIDTH, 300, TRUE);
+		
+		int box_primary_h = BOX_TOP_PAD + edit_h + BOX_BOTTOM_PAD;
+		MoveWindow(wh.box_primary, BOX_SIDE_MARGIN,  0, BOX_WIDTH, box_primary_h, TRUE);
+	}
+	
+	/* "Network adapters" */
+	
+	{
+		int box_nic_y = BOX_TOP_PAD;
+		
+		int nic_list_h = ((5 * text_h) + (2 * edge));
+		
+		MoveWindow(wh.nic_list, BOX_SIDE_PAD, box_nic_y, BOX_INNER_WIDTH, nic_list_h, TRUE);
+		
+		box_nic_y += nic_list_h + 2;
+		
+		MoveWindow(wh.nic_node_lbl, BOX_SIDE_PAD,             box_nic_y + edge, lbl_w,  text_h, TRUE);
+		MoveWindow(wh.nic_node,     BOX_SIDE_PAD + 5 + lbl_w, box_nic_y,        node_w, edit_h, TRUE);
+		
+		box_nic_y += edit_h + 2;
+		
+		MoveWindow(wh.nic_net_lbl, BOX_SIDE_PAD,             box_nic_y + edge, lbl_w,  text_h, TRUE);
+		MoveWindow(wh.nic_net,     BOX_SIDE_PAD + 5 + lbl_w, box_nic_y,        node_w, edit_h, TRUE);
+		
+		box_nic_y += edit_h + 2;
+		
+		MoveWindow(wh.nic_enabled, BOX_SIDE_PAD, box_nic_y, BOX_INNER_WIDTH, text_h, TRUE);
+		
+		box_nic_y += edit_h + 2;
+		
+		int box_nic_h = box_nic_y + BOX_BOTTOM_PAD;
+		
+		MoveWindow(wh.box_nic, BOX_SIDE_MARGIN, 0, BOX_WIDTH, box_nic_h, TRUE);
+	}
+	
+	/* "Network options" (IPXWrapper encapsulation) */
+	
+	{
+		int box_ipxwrapper_options_y = BOX_TOP_PAD;
+		
+		MoveWindow(wh.ipxwrapper_port_lbl, BOX_SIDE_PAD, box_ipxwrapper_options_y, lbl_w, text_h, TRUE);
+		MoveWindow(wh.ipxwrapper_port, BOX_SIDE_PAD + 5 + lbl_w, box_ipxwrapper_options_y, port_w, edit_h, TRUE);
+		box_ipxwrapper_options_y += edit_h;
+		
+		MoveWindow(wh.ipxwrapper_fw_except, BOX_SIDE_PAD, box_ipxwrapper_options_y, BOX_INNER_WIDTH, text_h, TRUE);
+		box_ipxwrapper_options_y += text_h;
+		
+		int box_ipxwrapper_options_h = box_ipxwrapper_options_y + BOX_BOTTOM_PAD;
+		MoveWindow(wh.box_ipxwrapper_options, BOX_SIDE_MARGIN,  0, BOX_WIDTH, box_ipxwrapper_options_h, TRUE);
+	}
+	
+	/* "Network options" (DOSBox encapsulation) */
+	
+	{
+		int box_dosbox_options_y = BOX_TOP_PAD;
+		
+		MoveWindow(wh.dosbox_server_addr_lbl, BOX_SIDE_PAD, box_dosbox_options_y, lbl_w2, text_h, TRUE);
+		MoveWindow(wh.dosbox_server_addr, 15 + lbl_w2, box_dosbox_options_y, node_w, edit_h, TRUE);
+		box_dosbox_options_y += edit_h;
+		
+		MoveWindow(wh.dosbox_server_port_lbl, BOX_SIDE_PAD, box_dosbox_options_y, lbl_w2, text_h, TRUE);
+		MoveWindow(wh.dosbox_server_port, 15 + lbl_w2, box_dosbox_options_y, port_w, edit_h, TRUE);
+		box_dosbox_options_y += edit_h;
+		
+		box_dosbox_options_y += text_h; /* Padding. */
+		
+		MoveWindow(wh.dosbox_fw_except, BOX_SIDE_PAD, box_dosbox_options_y, width - 20, text_h, TRUE);
+		box_dosbox_options_y += text_h;
+		
+		int box_dosbox_options_h = box_dosbox_options_y + BOX_BOTTOM_PAD;
+		
+		MoveWindow(wh.box_dosbox_options, BOX_SIDE_MARGIN, 0, BOX_WIDTH, box_dosbox_options_h, TRUE);
+	}
+	
+	/* "Network options" (Real IPX encapsulation) */
+	
+	{
+		/* Find the longest frame type (in horizontal pixels) and multiply it
+		 * by 1.5 to get the width of the frame type ComboBox, should be at
+		 * least wide enough to avoid truncating them.
+		*/
+		
+		int ft_w = 0;
+		for(int count = ComboBox_GetCount(wh.ipx_frame_type), i = 0; i < count; ++i)
+		{
+			char ft_label[256];
+			ComboBox_GetLBText(wh.ipx_frame_type, i, ft_label);
+			
+			int this_ft_w = get_text_width(wh.ipx_frame_type, ft_label) * 1.5;
+			ft_w = std::max(ft_w, this_ft_w);
+		}
+		
+		int box_ipx_options_y = BOX_TOP_PAD;
+		
+		MoveWindow(wh.ipx_frame_type_lbl, BOX_SIDE_PAD, box_ipx_options_y, lbl_w, text_h, TRUE);
+		MoveWindow(wh.ipx_frame_type, 15 + lbl_w, box_ipx_options_y, ft_w, edit_h * 10, TRUE);
+		box_ipx_options_y += edit_h;
+		
+		int box_ipx_options_h = box_ipx_options_y + BOX_BOTTOM_PAD;
+		
+		MoveWindow(wh.box_ipx_options, BOX_SIDE_MARGIN, 0, BOX_WIDTH, box_ipx_options_h, TRUE);
+	}
+	
+	/* "Options" */
+	
+	{
+		int box_options_y = BOX_TOP_PAD;
+		
+		MoveWindow(wh.opt_w95, BOX_SIDE_PAD, box_options_y, BOX_INNER_WIDTH, text_h, TRUE);
+		box_options_y += text_h + 2;
+		
+		MoveWindow(wh.opt_log_debug, BOX_SIDE_PAD, box_options_y, BOX_INNER_WIDTH, text_h, TRUE);
+		box_options_y += text_h + 2;
+		
+		MoveWindow(wh.opt_log_trace, BOX_SIDE_PAD, box_options_y, BOX_INNER_WIDTH, text_h, TRUE);
+		box_options_y += text_h + 2;
+		
+		int box_options_h = box_options_y + BOX_BOTTOM_PAD;
+		
+		MoveWindow(wh.box_options, BOX_SIDE_MARGIN, 0, BOX_WIDTH, box_options_h, TRUE);
+	}
 	
 	reload_nics();
 	
@@ -668,7 +1003,7 @@ static void main_window_update()
 	
 	EnableWindow(wh.nic_enabled, selected_nic >= 0);
 	EnableWindow(wh.nic_net,     nic_enabled);
-	EnableWindow(wh.nic_node,    nic_enabled && !main_config.use_pcap);
+	EnableWindow(wh.nic_node,    nic_enabled && main_config.encap_type != ENCAP_TYPE_PCAP);
 	
 	if(selected_nic >= 0)
 	{
@@ -678,7 +1013,7 @@ static void main_window_update()
 		addr32_string(net_s, nics[selected_nic].config.netnum);
 		
 		char node_s[ADDR48_STRING_SIZE];
-		addr48_string(node_s, (main_config.use_pcap
+		addr48_string(node_s, (main_config.encap_type == ENCAP_TYPE_PCAP
 			? nics[selected_nic].hwaddr
 			: nics[selected_nic].config.nodenum));
 		
@@ -686,117 +1021,124 @@ static void main_window_update()
 		SetWindowText(wh.nic_node, node_s);
 	}
 	
-	EnableWindow(wh.opt_port,      !main_config.use_pcap);
 	EnableWindow(wh.opt_log_trace, get_checkbox(wh.opt_log_debug));
+	
+	std::vector<HWND> visible_groups = {
+		wh.box_encap,
+	};
+	
+	if(get_checkbox(wh.encap_ipxwrapper))
+	{
+		main_config.encap_type = ENCAP_TYPE_IPXWRAPPER;
+		
+		ShowWindow(wh.box_primary, SW_SHOW);
+		visible_groups.push_back(wh.box_primary);
+		
+		ShowWindow(wh.box_nic, SW_SHOW);
+		visible_groups.push_back(wh.box_nic);
+		
+		ShowWindow(wh.box_ipxwrapper_options, SW_SHOW);
+		visible_groups.push_back(wh.box_ipxwrapper_options);
+		
+		ShowWindow(wh.box_dosbox_options, SW_HIDE);
+		ShowWindow(wh.box_ipx_options, SW_HIDE);
+	}
+	else if(get_checkbox(wh.encap_dosbox))
+	{
+		main_config.encap_type = ENCAP_TYPE_DOSBOX;
+		
+		ShowWindow(wh.box_primary, SW_HIDE);
+		ShowWindow(wh.box_nic, SW_HIDE);
+		ShowWindow(wh.box_ipxwrapper_options, SW_HIDE);
+		
+		ShowWindow(wh.box_dosbox_options, SW_SHOW);
+		visible_groups.push_back(wh.box_dosbox_options);
+		
+		ShowWindow(wh.box_ipx_options, SW_HIDE);
+	}
+	else if(get_checkbox(wh.encap_ipx))
+	{
+		main_config.encap_type = ENCAP_TYPE_PCAP;
+		
+		ShowWindow(wh.box_primary, SW_SHOW);
+		visible_groups.push_back(wh.box_primary);
+		
+		ShowWindow(wh.box_nic, SW_SHOW);
+		visible_groups.push_back(wh.box_nic);
+		
+		ShowWindow(wh.box_ipxwrapper_options, SW_HIDE);
+		ShowWindow(wh.box_dosbox_options, SW_HIDE);
+		
+		ShowWindow(wh.box_ipx_options, SW_SHOW);
+		visible_groups.push_back(wh.box_ipx_options);
+	}
+	
+	visible_groups.push_back(wh.box_options);
+	visible_groups.push_back(NULL);
+	
+	main_window_layout(visible_groups.data());
+	
+	UpdateWindow(wh.main);
 }
 
-/* Update the size and position of everything within the window. */
-static void main_window_resize(int width, int height)
+static void main_window_layout(HWND *visible_groups)
 {
-	int edge   = GetSystemMetrics(SM_CYEDGE);
-	int text_h = get_text_height(wh.box_primary);
-	int edit_h = text_h + 2 * edge;
-	int lbl_w  = get_text_width(wh.nic_net_lbl, "Network number");
+	int y = 0;
 	
-	/* Primary interface
-	 * Height is constant. Vertical position is at the very top.
-	*/
+	for(int i = 0; visible_groups[i] != NULL; ++i)
+	{
+		HWND group = visible_groups[i];
+		
+		RECT group_bounds;
+		GetWindowRect(group, &group_bounds);
+		MapWindowPoints(HWND_DESKTOP, GetParent(group), (LPPOINT)(&group_bounds), 2);
+		
+		int group_x = group_bounds.left;
+		
+		int group_w = group_bounds.right - group_bounds.left;
+		int group_h = group_bounds.bottom - group_bounds.top;
+		
+		MoveWindow(group, group_x, y, group_w, group_h, TRUE);
+		
+		y += group_h;
+	}
 	
-	int pri_h = edit_h + text_h + 10;
+	RECT window_client_area;
+	GetClientRect(wh.main, &window_client_area);
 	
-	MoveWindow(wh.box_primary, 0,  0,      width,      pri_h,  TRUE);
-	MoveWindow(wh.primary,     10, text_h, width - 20, height, TRUE);
+	int width = window_client_area.right - window_client_area.left;
+	int height = window_client_area.bottom - window_client_area.top;
 	
 	/* Buttons
 	 * Height is constant. Vertical position is at the very bottom.
-	 * 
+	 *
 	 * TODO: Dynamic button sizing.
 	*/
+	
+	const int BTN_PAD = 6;
+	
+	y += BTN_PAD;
 	
 	int btn_w = 75;
 	int btn_h = 23;
 	
-	MoveWindow(wh.app_btn, width - btn_w - 6,      height - btn_h - 6, btn_w, btn_h, TRUE);
-	MoveWindow(wh.can_btn, width - btn_w * 2 - 12, height - btn_h - 6, btn_w, btn_h, TRUE);
-	MoveWindow(wh.ok_btn,  width - btn_w * 3 - 18, height - btn_h - 6, btn_w, btn_h, TRUE);
+	MoveWindow(wh.ok_btn,  width - (3 * btn_w) - (3 * BTN_PAD), y, btn_w, btn_h, TRUE);
+	MoveWindow(wh.can_btn, width - (2 * btn_w) - (2 * BTN_PAD), y, btn_w, btn_h, TRUE);
+	MoveWindow(wh.app_btn, width - (1 * btn_w) - (1 * BTN_PAD), y, btn_w, btn_h, TRUE);
 	
-	/* Options
-	 * Height is constant. Vertical position is above buttons.
-	*/
+	y += btn_h;
+	y += BTN_PAD;
 	
-	int box_options_y = text_h;
+	RECT window_area;
+	GetWindowRect(wh.main, &window_area);
 	
-	int port_w = get_text_width(wh.nic_node, "000000");
+	int area_width = window_area.right - window_area.left;
+	int area_height = window_area.bottom - window_area.top;
 	
-	/* Find the longest frame type (in horizontal pixels) and multiply it
-	 * by 1.5 to get the width of the frame type ComboBox, should be at
-	 * least wide enough to avoid truncating them.
-	*/
+	int pad_width = area_width - width;
+	int pad_height = area_height - height;
 	
-	int ft_w = 0;
-	for(int count = ComboBox_GetCount(wh.opt_frame_type), i = 0; i < count; ++i)
-	{
-		char ft_label[256];
-		ComboBox_GetLBText(wh.opt_frame_type, i, ft_label);
-		
-		int this_ft_w = get_text_width(wh.opt_frame_type, ft_label) * 1.5;
-		ft_w = std::max(ft_w, this_ft_w);
-	}
-	
-	MoveWindow(wh.opt_port_lbl, 10,         box_options_y + edge, lbl_w,  text_h, TRUE);
-	MoveWindow(wh.opt_port,     15 + lbl_w, box_options_y,        port_w, edit_h, TRUE);
-	box_options_y += edit_h + 4;
-	
-	MoveWindow(wh.opt_w95,       10, box_options_y, width - 20, text_h, TRUE);
-	box_options_y += text_h + 2;
-	
-	MoveWindow(wh.opt_log_debug, 10, box_options_y, width - 20, text_h, TRUE);
-	box_options_y += text_h + 2;
-	
-	MoveWindow(wh.opt_log_trace, 10, box_options_y, width - 20, text_h, TRUE);
-	box_options_y += text_h + 2;
-	
-	MoveWindow(wh.opt_fw_except, 10, box_options_y, width - 20, text_h, TRUE);
-	box_options_y += text_h + 2;
-	
-	MoveWindow(wh.opt_use_pcap,  10, box_options_y, width - 20, text_h, TRUE);
-	box_options_y += text_h + 2;
-	
-	MoveWindow(wh.opt_frame_type_lbl,  10,         box_options_y + edge, lbl_w, text_h, TRUE);
-	MoveWindow(wh.opt_frame_type,      15 + lbl_w, box_options_y,        ft_w,  height, TRUE);
-	box_options_y += edit_h + 2;
-	
-	int box_options_h = box_options_y + 6;
-	
-	MoveWindow(wh.box_options, 0, height - box_options_y - btn_h - 16, width, box_options_h, TRUE);
-	
-	/* NICs
-	 * Fills available space between primary interface and options.
-	*/
-	
-	int node_w    = get_text_width(wh.nic_node, "00:00:00:00:00:00");
-	int box_nic_h = height - pri_h - box_options_h - btn_h - 12;
-	
-	MoveWindow(wh.box_nic, 0, pri_h, width, box_nic_h, TRUE);
-	
-	int box_nic_y = box_nic_h - 4;
-	
-	box_nic_y -= edit_h + 2;
-	MoveWindow(wh.nic_node_lbl, 10,         box_nic_y + edge, lbl_w,  text_h, TRUE);
-	MoveWindow(wh.nic_node,     15 + lbl_w, box_nic_y,        node_w, edit_h, TRUE);
-	
-	box_nic_y -= edit_h + 2;
-	MoveWindow(wh.nic_net_lbl, 10,         box_nic_y + edge, lbl_w,  text_h, TRUE);
-	MoveWindow(wh.nic_net,     15 + lbl_w, box_nic_y,        node_w, edit_h, TRUE);
-	
-	box_nic_y -= edit_h + 2;
-	MoveWindow(wh.nic_enabled, 10, box_nic_y, width - 20, text_h, TRUE);
-	
-	box_nic_y -= 6;
-	MoveWindow(wh.nic_list, 10, text_h, width - 20, box_nic_y - text_h, TRUE);
-	
-	
-	UpdateWindow(wh.main);
+	MoveWindow(wh.main, window_area.left, window_area.top, (width + pad_width), (y + pad_height), TRUE);
 }
 
 static HWND create_child(HWND parent, LPCTSTR class_name, LPCTSTR title, DWORD style, DWORD ex_style, unsigned int id) {
@@ -852,11 +1194,19 @@ static void set_checkbox(HWND checkbox, bool state)
 	Button_SetCheck(checkbox, (state ? BST_CHECKED : BST_UNCHECKED));
 }
 
+static HWND create_radio(HWND parent, LPCTSTR label, int id)
+{
+	return create_child(parent, "BUTTON", label, BS_AUTORADIOBUTTON | WS_TABSTOP | BS_MULTILINE, 0, id);
+}
+
 static int get_text_width(HWND hwnd, const char *txt) {
 	HDC dc = GetDC(hwnd);
 	if(!dc) {
 		die("GetDC failed");
 	}
+	
+	HFONT font = (HFONT)(SendMessage(hwnd, WM_GETFONT, 0, 0));
+	SelectFont(dc, font);
 	
 	SIZE size;
 	if(!GetTextExtentPoint32(dc, txt, strlen(txt), &size)) {
