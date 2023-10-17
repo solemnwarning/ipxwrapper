@@ -25,6 +25,8 @@ use NetPacket::IP;
 use NetPacket::UDP;
 use NetPacket::IPXWrapper;
 
+my @IGNORE_PORTS = (53, 67, 68); # DNS and DHCP
+
 sub new
 {
 	my ($class, $dev) = @_;
@@ -55,6 +57,12 @@ sub read_available
 		return unless($ip->{proto} == NetPacket::IP::IP_PROTO_UDP());
 		
 		my $udp = NetPacket::UDP->decode($ip->{data});
+		
+		# NetPacket::IPXWrapper tries to validate packets are in fact
+		# IPXWrapper packets, but I've seen it accept DNS packets that
+		# just happen to have the right bytes in places, so we ignore
+		# special ports we expect unrelated traffic on.
+		return if(grep { $udp->{src_port} == $_ || $udp->{dest_port} == $_ } @IGNORE_PORTS);
 		
 		my $ipx = NetPacket::IPXWrapper->decode($udp->{data});
 		return unless(defined($ipx));
