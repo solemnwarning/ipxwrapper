@@ -2668,32 +2668,36 @@ int WSAAPI select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds
 	fd_set force_read_fds;
 	FD_ZERO(&force_read_fds);
 	
-	for(unsigned int i = 0; i < readfds->fd_count; ++i)
+	if(readfds != NULL)
 	{
-		int fd = readfds->fd_array[i];
-		
-		ipx_socket *sockptr = get_socket(fd);
-		if(sockptr != NULL)
+		for(unsigned int i = 0; i < readfds->fd_count; ++i)
 		{
-			if(sockptr->flags & IPX_IS_SPX)
-			{
-				unlock_sockets();
-				continue;
-			}
+			int fd = readfds->fd_array[i];
 			
-			if(sockptr->recv_queue->n_ready > 0)
+			ipx_socket *sockptr = get_socket(fd);
+			if(sockptr != NULL)
 			{
-				/* There is data in the receive queue for this socket, but the
-				 * underlying socket isn't necessarily readable, so we reduce the
-				 * select() timeout to zero to ensure it returns immediately and
-				 * inject this fd back into readfds at the end if necessary.
-				*/
+				if(sockptr->flags & IPX_IS_SPX)
+				{
+					unlock_sockets();
+					continue;
+				}
 				
-				FD_SET(fd, &force_read_fds);
-				use_timeout = &TIMEOUT_IMMEDIATE;
+				if(sockptr->recv_queue->n_ready > 0)
+				{
+					/* There is data in the receive queue for this socket, but
+					 * the underlying socket isn't necessarily readable, so we
+					 * reduce the select() timeout to zero to ensure it returns
+					 * immediately and inject this fd back into readfds at the
+					 * end if necessary.
+					*/
+					
+					FD_SET(fd, &force_read_fds);
+					use_timeout = &TIMEOUT_IMMEDIATE;
+				}
+				
+				unlock_sockets();
 			}
-			
-			unlock_sockets();
 		}
 	}
 	

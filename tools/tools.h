@@ -8,7 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "addr.h"
+#include "../src/addr.h"
 
 static struct sockaddr_ipx read_sockaddr(const char *net_s, const char *node_s, const char *socket_s)
 {
