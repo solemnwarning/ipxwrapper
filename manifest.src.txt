@@ -24,6 +24,8 @@ src/dpwsockx_stubs.txt
 src/firewall.c
 src/interface.c
 src/interface.h
+src/interface2.c
+src/interface2.h
 src/ipxwrapper.c
 src/ipxwrapper.def
 src/ipxwrapper.h
@@ -63,6 +65,8 @@ tests/07-ethernet.t
 tests/10-socket.t
 tests/15-interfaces.t
 tests/20-bind.t
+tests/25-fionread.t
+tests/30-dosbox-ipx.t
 tests/30-eth-ipx.t
 tests/30-ip-ipx.t
 tests/40-ip-spx.t
@@ -71,12 +75,15 @@ tests/addr.c
 tests/addrcache.c
 tests/config.pm
 tests/ethernet.c
+tests/fionread.c
 tests/ptype.pm
 
 tests/lib/IPXWrapper/Capture/IPX.pm
 tests/lib/IPXWrapper/Capture/IPXLLC.pm
 tests/lib/IPXWrapper/Capture/IPXNovell.pm
 tests/lib/IPXWrapper/Capture/IPXOverUDP.pm
+tests/lib/IPXWrapper/DOSBoxClient.pm
+tests/lib/IPXWrapper/DOSBoxServer.pm
 tests/lib/IPXWrapper/SPX.pm
 tests/lib/IPXWrapper/Tool/Bind.pm
 tests/lib/IPXWrapper/Tool/DPTool.pm
@@ -101,3 +108,20 @@ tools/socket.c
 tools/spx-client.c
 tools/spx-server.c
 tools/tools.h
+
+winpcap/include/pcap-bpf.h
+winpcap/include/Packet32.h
+winpcap/include/pcap/vlan.h
+winpcap/include/pcap/sll.h
+winpcap/include/pcap/bluetooth.h
+winpcap/include/pcap/bpf.h
+winpcap/include/pcap/usb.h
+winpcap/include/pcap/namedb.h
+winpcap/include/pcap/pcap.h
+winpcap/include/pcap-namedb.h
+winpcap/include/pcap-stdinc.h
+winpcap/include/Win32-Extensions.h
+winpcap/include/bittypes.h
+winpcap/include/ip6_misc.h
+winpcap/include/remote-ext.h
+winpcap/include/pcap.h

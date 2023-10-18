@@ -62,6 +62,7 @@ The following have been reported to work:
  * Delta Force 2
  * Diablo
  * Heroes of Might and Magic III
+ * Laser Arena
  * Need For Speed III - Hot Pursuit
  * Outlive
  * Rising Lands
