@@ -1,5 +1,5 @@
 /* IPXWrapper - Common functions
- * Copyright (C) 2011-2019 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2011-2021 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -223,6 +223,92 @@ bool reg_set_addr48(HKEY key, const char *name, addr48_t value)
 	addr48_out(buf, value);
 	
 	return reg_set_bin(key, name, buf, sizeof(buf));
+}
+
+/* Read a string value from the registry.
+ *
+ * Returns the value or default_value in a newly allocated buffer. The caller
+ * is responsible for freeing it.
+*/
+char *reg_get_string(HKEY key, const char *name, const char *default_value)
+{
+	if(key != NULL)
+	{
+		DWORD value_type;
+		DWORD value_size = 0;
+		
+		LSTATUS reg_err = RegQueryValueEx(key, name, NULL, &value_type, NULL, &value_size);
+		if(reg_err == ERROR_SUCCESS || reg_err == ERROR_MORE_DATA)
+		{
+			if(value_type == REG_SZ)
+			{
+				size_t buffer_size = value_size + 1; /* Extra space for nul terminator. */
+				char *buffer = malloc(buffer_size);
+				
+				if(buffer != NULL)
+				{
+					reg_err = RegQueryValueEx(key, name, NULL, &value_type, (BYTE*)(buffer), &value_size);
+					if(reg_err == ERROR_SUCCESS)
+					{
+						if(value_type == REG_SZ)
+						{
+							buffer[value_size] = '\0';
+							return buffer;
+						}
+						else{
+							log_printf(LOG_ERROR, "Expected REG_SZ value, got type %u", (unsigned)(value_type));
+						}
+					}
+					else if(reg_err != ERROR_FILE_NOT_FOUND)
+					{
+						log_printf(LOG_ERROR, "Error reading registry: %s", w32_error(reg_err));
+					}
+					
+					free(buffer);
+				}
+				else{
+					log_printf(LOG_ERROR, "Memory alloation failed");
+				}
+			}
+			else{
+				log_printf(LOG_ERROR, "Expected REG_SZ value, got type %u", (unsigned)(value_type));
+			}
+		}
+		else if(reg_err != ERROR_FILE_NOT_FOUND)
+		{
+			log_printf(LOG_ERROR, "Error reading registry: %s", w32_error(reg_err));
+		}
+	}
+	
+	char *default_copy = strdup(default_value);
+	if(default_copy == NULL)
+	{
+		log_printf(LOG_ERROR, "Memory alloation failed");
+		abort();
+	}
+	
+	return default_copy;
+}
+
+/* Store a string value in the registry.
+ * Returns true on success, false on failure.
+*/
+bool reg_set_string(HKEY key, const char *name, const char *value)
+{
+	if(key != NULL)
+	{
+		int err = RegSetValueEx(key, name, 0, REG_SZ, (BYTE*)(value), strlen(value));
+		
+		if(err == ERROR_SUCCESS)
+		{
+			return true;
+		}
+		else{
+			log_printf(LOG_ERROR, "Error writing registry value: %s", w32_error(err));
+		}
+	}
+	
+	return false;
 }
 
 void load_dll(unsigned int dllnum) {

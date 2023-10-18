@@ -1,5 +1,5 @@
 # IPXWrapper test suite
-# Copyright (C) 2014 Daniel Collins <solemnwarning@solemnwarning.net>
+# Copyright (C) 2014-2023 Daniel Collins <solemnwarning@solemnwarning.net>
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License version 2 as published by
@@ -25,6 +25,8 @@ use NetPacket::IP;
 use NetPacket::UDP;
 use NetPacket::IPXWrapper;
 
+my @IGNORE_PORTS = (53, 67, 68); # DNS and DHCP
+
 sub new
 {
 	my ($class, $dev) = @_;
@@ -32,6 +34,8 @@ sub new
 	my $err;
 	my $pcap = Net::Pcap::pcap_open_live($dev, 1500, 0, 1, \$err)
 		or die("Cannot open device $dev: $err");
+	
+	Net::Pcap::pcap_setnonblock($pcap, 1, \$err);
 	
 	return bless(\$pcap, $class);
 }
@@ -53,6 +57,12 @@ sub read_available
 		return unless($ip->{proto} == NetPacket::IP::IP_PROTO_UDP());
 		
 		my $udp = NetPacket::UDP->decode($ip->{data});
+		
+		# NetPacket::IPXWrapper tries to validate packets are in fact
+		# IPXWrapper packets, but I've seen it accept DNS packets that
+		# just happen to have the right bytes in places, so we ignore
+		# special ports we expect unrelated traffic on.
+		return if(grep { $udp->{src_port} == $_ || $udp->{dest_port} == $_ } @IGNORE_PORTS);
 		
 		my $ipx = NetPacket::IPXWrapper->decode($udp->{data});
 		return unless(defined($ipx));

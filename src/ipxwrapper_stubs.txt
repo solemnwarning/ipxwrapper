@@ -9,7 +9,7 @@ htonl                  ws2_32.dll     htonl                   4
 ntohl                  ws2_32.dll     ntohl                   4
 htons                  ws2_32.dll     htons                   4
 ntohs                  ws2_32.dll     ntohs                   4
-select                 ws2_32.dll     select                 20
+r_select               ws2_32.dll     select                 20
 r_listen               ws2_32.dll     listen                  8
 r_accept               ws2_32.dll     accept                 12
 WSACreateEvent         ws2_32.dll     WSACreateEvent          0
@@ -37,6 +37,7 @@ r_getpeername          ws2_32.dll     getpeername            12
 inet_ntoa              ws2_32.dll     inet_ntoa               4
 __WSAFDIsSet           ws2_32.dll     __WSAFDIsSet            8
 r_WSAAsyncSelect       ws2_32.dll     WSAAsyncSelect         16
+gethostbyname          ws2_32.dll     gethostbyname           4
 
 pcap_open              wpcap.dll      pcap_open
 pcap_close             wpcap.dll      pcap_close

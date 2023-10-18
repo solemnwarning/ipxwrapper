@@ -26,12 +26,24 @@ the interface you want to use. Some software may also require you to select the
 interface in question inside it. Disabling all other interfaces may make this
 easier.
 
+Using a DOSBox IPX server
+-------------------------
+
+You can choose to use a DOSBox IPX server to communicate with other hosts
+rather than exchanging packets directly, either to allow play over the Internet
+or communication between Windows and DOS games (running under DOSBox).
+
+To enable this, select the "DOSBox UDP encapsulation" option in ipxconfig and
+enter the address/port of your DOSBox server.
+
+**NOTE**: SPX connections are not supported when using this option.
+
 Using the real IPX protocol
 ---------------------------
 
 If your software needs to send/receive real IPX frames, for example because it
 talks to an old piece of equipment that only understands IPX, install WinPcap
-and enable the "Send and receive real IPX packets" option.
+and select the "Real IPX encapsulation" option in ipxconfig.
 
 **NOTE**: SPX connections are not supported when using this option.
 
@@ -50,6 +62,7 @@ The following have been reported to work:
  * Delta Force 2
  * Diablo
  * Heroes of Might and Magic III
+ * Laser Arena
  * Need For Speed III - Hot Pursuit
  * Outlive
  * Rising Lands
@@ -69,5 +82,5 @@ The following have been reported to work:
 License
 -------
 
-Copyright (C) 2008-2017 Daniel Collins <solemnwarning@solemnwarning.net>
+Copyright (C) 2008-2023 Daniel Collins <solemnwarning@solemnwarning.net>
 Read license.txt for licensing terms.

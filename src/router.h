@@ -26,7 +26,11 @@
 extern SOCKET shared_socket;
 extern SOCKET private_socket;
 
+extern struct sockaddr_in dosbox_server_addr;
+
 void router_init(void);
 void router_cleanup(void);
+
+void wait_for_ready(DWORD timeout);
 
 #endif /* !IPXWRAPPER_ROUTER_H */

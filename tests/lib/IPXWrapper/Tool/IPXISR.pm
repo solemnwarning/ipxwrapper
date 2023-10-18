@@ -1,5 +1,5 @@
 # IPXWrapper test suite
-# Copyright (C) 2014 Daniel Collins <solemnwarning@solemnwarning.net>
+# Copyright (C) 2014-2023 Daniel Collins <solemnwarning@solemnwarning.net>
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License version 2 as published by
@@ -38,8 +38,6 @@ sub new
 		pid => $pid,
 		in  => $in,
 		out => $out,
-		
-		sockets => {},
 	}, $class);
 	
 	my $output = "";
@@ -50,8 +48,12 @@ sub new
 		
 		$line =~ s/[\r\n]//g;
 		
-		if($line eq "Ready")
+		if($line =~ m/^Ready (\S+) (\S+) (\S+)$/)
 		{
+			$self->{net}    = $1;
+			$self->{node}   = $2;
+			$self->{socket} = $3;
+			
 			return $self;
 		}
 	}
@@ -67,6 +69,18 @@ sub DESTROY
 	{
 		$self->_end();
 	}
+}
+
+sub net
+{
+	my ($self) = @_;
+	return $self->{net};
+}
+
+sub node
+{
+	my ($self) = @_;
+	return $self->{node};
 }
 
 sub _end

@@ -17,7 +17,7 @@ ntohl                          wsock32.dll       ntohl                          
 ntohs                          wsock32.dll       ntohs                           4
 recv                           ipxwrapper.dll    recv                           16
 recvfrom                       ipxwrapper.dll    recvfrom                       24
-select                         wsock32.dll       select                         20
+select                         ipxwrapper.dll    select                         20
 send                           ipxwrapper.dll    send                           16
 sendto                         ipxwrapper.dll    sendto                         24
 setsockopt                     ipxwrapper.dll    setsockopt                     20

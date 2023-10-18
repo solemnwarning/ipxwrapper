@@ -1,5 +1,5 @@
 /* IPXWrapper test suite
- * Copyright (C) 2017 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2017-2023 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -19,22 +19,17 @@
 #include <string.h>
 #include <time.h>
 
-#include "src/addr.h"
-#include "src/addrcache.h"
-#include "src/common.h"
-#include "tests/tap/basic.h"
+#include "../src/addr.h"
+#include "../src/addrcache.h"
+#include "../src/common.h"
+#include "tap/basic.h"
 
 /* Mock time() so we can test timing out of address cache records */
 
 static time_t now = 0;
 
-time_t __cdecl time(time_t *_Time)
+static time_t mock_time(void)
 {
-	if(_Time != NULL)
-	{
-		*_Time = now;
-	}
-	
 	return now;
 }
 
@@ -61,6 +56,9 @@ const char *w32_error(DWORD errnum) {
 
 int main()
 {
+	extern time_t (*addrcache_time)(void);
+	addrcache_time = &mock_time;
+	
 	plan_lazy();
 	
 	{

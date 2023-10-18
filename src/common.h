@@ -1,5 +1,5 @@
 /* IPXWrapper - Common header
- * Copyright (C) 2011-2019 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2011-2021 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -64,6 +64,9 @@ bool reg_set_addr32(HKEY key, const char *name, addr32_t value);
 
 addr48_t reg_get_addr48(HKEY key, const char *name, addr48_t default_value);
 bool reg_set_addr48(HKEY key, const char *name, addr48_t value);
+
+char *reg_get_string(HKEY key, const char *name, const char *default_value);
+bool reg_set_string(HKEY key, const char *name, const char *value);
 
 void load_dll(unsigned int dllnum);
 void unload_dlls(void);

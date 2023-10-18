@@ -40,7 +40,7 @@ sub new
 		out => $out,
 		in  => $in,
 		
-		sockets => {},
+		sockets => [],
 	}, $class);
 	
 	my $output = "";
@@ -53,11 +53,13 @@ sub new
 		
 		if($line =~ m{^Bound socket (\d+) to local address: (.+)/(.+)/(.+)$})
 		{
-			$self->{sockets}->{$1} = {
+			push(@{ $self->{sockets} }, {
+				fd   => $1,
+				
 				net  => $2,
 				node => $3,
 				sock => $4,
-			};
+			});
 		}
 		elsif($line eq "Ready")
 		{
@@ -66,6 +68,34 @@ sub new
 	}
 	
 	die("Didn't get expected output from ipx-recv.exe:\n$output");
+}
+
+sub net
+{
+	my ($self, $sock_idx) = @_;
+	
+	if((scalar @{ $self->{sockets} }) > 1 && !defined($sock_idx))
+	{
+		confess("IPXWrapper::Tool::IPXRecv::net() called without a \$sock_idx but multiple sockets are bound");
+	}
+	
+	$sock_idx //= 0;
+	
+	return $self->{sockets}->[$sock_idx]->{net};
+}
+
+sub node
+{
+	my ($self, $sock_idx) = @_;
+	
+	if((scalar @{ $self->{sockets} }) > 1 && !defined($sock_idx))
+	{
+		confess("IPXWrapper::Tool::IPXRecv::node() called without a \$sock_idx but multiple sockets are bound");
+	}
+	
+	$sock_idx //= 0;
+	
+	return $self->{sockets}->[$sock_idx]->{node};
 }
 
 sub DESTROY
@@ -127,8 +157,10 @@ sub kill_and_read
 		
 		if($line =~ m{^Received (\d+) bytes \((.*)\) on socket (\d+) from (.+)/(.+)/(.+)$})
 		{
+			my ($sock) = grep { $_->{fd} == $3 } @{ $self->{sockets} };
+			
 			die("Received packet on unknown socket $3")
-				unless(defined($self->{sockets}->{$3}));
+				unless(defined $sock);
 			
 			die("Read a packet with the wrong size, binary data used in test?")
 				unless($1 == length($2));
@@ -137,9 +169,9 @@ sub kill_and_read
 				sock => $3,
 				data => $2,
 				
-				local_net  => $self->{sockets}->{$3}->{net},
-				local_node => $self->{sockets}->{$3}->{node},
-				local_sock => $self->{sockets}->{$3}->{sock},
+				local_net  => $sock->{net},
+				local_node => $sock->{node},
+				local_sock => $sock->{sock},
 				
 				src_network => $4,
 				src_node    => $5,
