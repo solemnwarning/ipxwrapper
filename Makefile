@@ -46,7 +46,7 @@ BIN_FILES := $(shell cat manifest.bin.txt)
 SRC_FILES := $(shell cat manifest.src.txt)
 
 # Tests to compile before running the test suite.
-TESTS := tests/addr.exe tests/addrcache.exe tests/ethernet.exe
+TESTS := tests/addr.exe tests/addrcache.exe tests/ethernet.exe tools/fionread.exe
 
 # Tools to compile before running the test suite.
 TOOLS := tools/socket.exe tools/list-interfaces.exe tools/bind.exe tools/ipx-send.exe \
@@ -177,6 +177,9 @@ tests/%.exe: tests/%.o
 tests/%.o: tests/%.c
 	$(CC) $(CFLAGS) $(DEPFLAGS) -I./ -c -o $@ $<
 	$(DEPPOST)
+
+tools/fionread.exe: tests/fionread.o tests/tap/basic.o src/addr.o
+	$(CC) $(CFLAGS) -o $@ $^ -lwsock32
 
 tools/%.exe: tools/%.o src/addr.o
 	$(CC) $(CFLAGS) -o $@ $^ -lwsock32 -lole32 -lrpcrt4

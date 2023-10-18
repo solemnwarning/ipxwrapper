@@ -1,3 +1,10 @@
+Version TBA:
+	Added support for DOSBox IPX servers.
+	
+	Fixed implementation of FIONREAD ioctl (needed for Laser Arena).
+	
+	Fixed a memory leak.
+
 Version 0.6.1:
 	Added support for LLC and Novell "raw" 802.3 Ethernet frame formats.
 	
