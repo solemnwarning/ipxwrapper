@@ -1,5 +1,5 @@
 # IPXWrapper - Generate assembly stub functions
-# Copyright (C) 2008-2019 Daniel Collins <solemnwarning@solemnwarning.net>
+# Copyright (C) 2008-2023 Daniel Collins <solemnwarning@solemnwarning.net>
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License version 2 as published by
@@ -30,9 +30,13 @@ my %DLL_INDICES = (
 	"dpwsockx.dll"   => 3,
 	"ws2_32.dll"     => 4,
 	"wpcap.dll"      => 5,
+	"ipxconfig.exe"  => 6,
 );
 
 my ($stub_file, $asm_file, $dll_name) = @ARGV;
+
+my $dll_index = $DLL_INDICES{$dll_name}
+	// die "Unknown DLL name: $dll_name";
 
 open(STUBS, "<$stub_file") or die("Cannot open $stub_file: $!");
 open(CODE, ">$asm_file") or die("Cannot open $asm_file: $!");
@@ -145,6 +149,12 @@ foreach my $func(@stubs)
 		print CODE <<"END";
 			global _$func->{name}
 			_$func->{name}:
+				; Log the call
+				push dword $func->{target_dll_index}
+				push $func->{name}_target_func
+				push dword $dll_index
+				call _log_call
+				
 				; Check if we have address cached
 				cmp dword [$func->{name}_addr], 0
 				jne $func->{name}_go
@@ -209,11 +219,11 @@ END
 				push dword ebp
 				sub dword [esp], 20
 				
-				; Start tick parameter to _fprof_record_untimed
+				; Start tick parameter to _fprof_record_timed
 				push dword ebp
 				sub dword [esp], 8
 				
-				; FuncStats parameter to _fprof_record_untimed
+				; FuncStats parameter to _fprof_record_timed
 				push dword $func->{name}_fstats
 				
 				; Record profiling data
@@ -232,6 +242,12 @@ END
 		print CODE <<"END";
 			global _$func->{name}
 			_$func->{name}:
+				; Log the call
+				push dword $func->{target_dll_index}
+				push $func->{name}_target_func
+				push dword $dll_index
+				call _log_call
+				
 				; Check if we have address cached
 				cmp dword [$func->{name}_addr], 0
 				jne $func->{name}_go

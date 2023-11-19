@@ -1,5 +1,5 @@
 /* IPXWrapper - Common functions
- * Copyright (C) 2011-2021 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2011-2023 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -31,6 +31,7 @@ static const char *dll_names[] = {
 	"dpwsockx.dll",
 	"ws2_32.dll",
 	"wpcap.dll",
+	"ipxconfig.exe",
 	NULL
 };
 
