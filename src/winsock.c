@@ -325,7 +325,7 @@ static void release_recv_queue(ipx_recv_queue *recv_queue)
 
 SOCKET WSAAPI socket(int af, int type, int protocol)
 {
-	log_printf(LOG_DEBUG, "socket(%d, %d, %d)", af, type, protocol);
+	log_printf(LOG_CALL, "socket(%d, %d, %d)", af, type, protocol);
 	
 	if(af == AF_IPX)
 	{
@@ -1793,7 +1793,7 @@ int PASCAL ioctlsocket(SOCKET fd, long cmd, u_long *argp)
 	
 	if(sock)
 	{
-		log_printf(LOG_DEBUG, "ioctlsocket(%d, %d)", fd, cmd);
+		log_printf(LOG_CALL, "ioctlsocket(%d, %d)", fd, cmd);
 		
 		if(cmd == FIONREAD && !(sock->flags & IPX_IS_SPX))
 		{
