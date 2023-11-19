@@ -133,28 +133,33 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 		
 		router_init();
 		
-		prof_thread_exit = CreateEvent(NULL, FALSE, FALSE, NULL);
-		if(prof_thread_exit != NULL)
+		if(main_config.profile)
 		{
-			prof_thread_handle = CreateThread(
-				NULL,               /* lpThreadAttributes */
-				0,                  /* dwStackSize */
-				&prof_thread_main,  /* lpStartAddress */
-				NULL,               /* lpParameter */
-				0,                  /* dwCreationFlags */
-				NULL);              /* lpThreadId */
+			stubs_enable_profile = true;
 			
-			if(prof_thread_handle == NULL)
+			prof_thread_exit = CreateEvent(NULL, FALSE, FALSE, NULL);
+			if(prof_thread_exit != NULL)
 			{
+				prof_thread_handle = CreateThread(
+					NULL,               /* lpThreadAttributes */
+					0,                  /* dwStackSize */
+					&prof_thread_main,  /* lpStartAddress */
+					NULL,               /* lpParameter */
+					0,                  /* dwCreationFlags */
+					NULL);              /* lpThreadId */
+				
+				if(prof_thread_handle == NULL)
+				{
+					log_printf(LOG_ERROR,
+						"Unable to create prof_thread_main thread: %s",
+						w32_error(GetLastError()));
+				}
+			}
+			else{
 				log_printf(LOG_ERROR,
-					"Unable to create prof_thread_main thread: %s",
+					"Unable to create prof_thread_exit event object: %s",
 					w32_error(GetLastError()));
 			}
-		}
-		else{
-			log_printf(LOG_ERROR,
-				"Unable to create prof_thread_exit event object: %s",
-				w32_error(GetLastError()));
 		}
 	}
 	else if(fdwReason == DLL_PROCESS_DETACH)
@@ -197,8 +202,11 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 		
 		unload_dlls();
 		
-		fprof_report(STUBS_DLL_NAME, stub_fstats, NUM_STUBS);
-		fprof_report("ipxwrapper.dll", ipxwrapper_fstats, ipxwrapper_fstats_size);
+		if(main_config.profile)
+		{
+			fprof_report(STUBS_DLL_NAME, stub_fstats, NUM_STUBS);
+			fprof_report("ipxwrapper.dll", ipxwrapper_fstats, ipxwrapper_fstats_size);
+		}
 		
 		log_close();
 		

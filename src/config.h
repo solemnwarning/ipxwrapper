@@ -52,6 +52,7 @@ typedef struct main_config {
 	uint16_t dosbox_server_port;
 	
 	enum ipx_log_level log_level;
+	bool profile;
 } main_config_t;
 
 struct v1_global_config {

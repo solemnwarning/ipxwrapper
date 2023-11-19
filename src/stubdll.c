@@ -1,5 +1,5 @@
 /* IPXWrapper - Stub DLL functions
- * Copyright (C) 2008-2019 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2008-2023 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -35,30 +35,37 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
 		
 		log_open("ipxwrapper.log");
 		
-		min_log_level = get_main_config().log_level;
+		main_config_t config = get_main_config();
 		
-		prof_thread_exit = CreateEvent(NULL, FALSE, FALSE, NULL);
-		if(prof_thread_exit != NULL)
+		min_log_level = config.log_level;
+		
+		if(config.profile)
 		{
-			prof_thread_handle = CreateThread(
-				NULL,               /* lpThreadAttributes */
-				0,                  /* dwStackSize */
-				&prof_thread_main,  /* lpStartAddress */
-				NULL,               /* lpParameter */
-				0,                  /* dwCreationFlags */
-				NULL);              /* lpThreadId */
+			stubs_enable_profile = true;
 			
-			if(prof_thread_handle == NULL)
+			prof_thread_exit = CreateEvent(NULL, FALSE, FALSE, NULL);
+			if(prof_thread_exit != NULL)
 			{
+				prof_thread_handle = CreateThread(
+					NULL,               /* lpThreadAttributes */
+					0,                  /* dwStackSize */
+					&prof_thread_main,  /* lpStartAddress */
+					NULL,               /* lpParameter */
+					0,                  /* dwCreationFlags */
+					NULL);              /* lpThreadId */
+				
+				if(prof_thread_handle == NULL)
+				{
+					log_printf(LOG_ERROR,
+						"Unable to create prof_thread_main thread: %s",
+						w32_error(GetLastError()));
+				}
+			}
+			else{
 				log_printf(LOG_ERROR,
-					"Unable to create prof_thread_main thread: %s",
+					"Unable to create prof_thread_exit event object: %s",
 					w32_error(GetLastError()));
 			}
-		}
-		else{
-			log_printf(LOG_ERROR,
-				"Unable to create prof_thread_exit event object: %s",
-				w32_error(GetLastError()));
 		}
 	}
 	else if(fdwReason == DLL_PROCESS_DETACH)
@@ -91,7 +98,10 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
 		
 		unload_dlls();
 		
-		fprof_report(STUBS_DLL_NAME, stub_fstats, NUM_STUBS);
+		if(stubs_enable_profile)
+		{
+			fprof_report(STUBS_DLL_NAME, stub_fstats, NUM_STUBS);
+		}
 		
 		log_close();
 		

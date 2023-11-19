@@ -112,6 +112,10 @@ END
 
 print CODE <<"END";
 section .data
+
+global _stubs_enable_profile
+_stubs_enable_profile: db 0
+
 END
 
 foreach my $func(@stubs)
@@ -167,6 +171,11 @@ foreach my $func(@stubs)
 				
 				$func->{name}_go:
 				
+				; Bypass the profiling code and jump straight into the taget
+				; function when not profiling.
+				cmp byte [_stubs_enable_profile], 0
+				je $func->{name}_skip
+				
 				push ebp
 				mov ebp, esp
 				
@@ -203,7 +212,6 @@ END
 		}
 		
 		print CODE <<"END";
-				
 				; Call target function
 				call [$func->{name}_addr]
 				
@@ -236,6 +244,9 @@ END
 				pop ebp ; Restore caller's ebp
 				
 				ret $func->{params}
+				
+				$func->{name}_skip:
+				jmp [$func->{name}_addr]
 END
 	}
 	else{
