@@ -197,6 +197,9 @@ enum {
 	#undef FPROF_DECL
 };
 
+extern unsigned int send_packets, send_bytes;  /* Sent from emulated socket */
+extern unsigned int recv_packets, recv_bytes;  /* Forwarded to emulated socket */
+
 ipx_socket *get_socket(SOCKET sockfd);
 ipx_socket *get_socket_wait_for_ready(SOCKET sockfd, int timeout_ms);
 void lock_sockets(void);

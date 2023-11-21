@@ -347,6 +347,10 @@ static void _deliver_packet(
 		{
 			log_printf(LOG_ERROR, "Error relaying packet: %s", w32_error(WSAGetLastError()));
 		}
+		else{
+			__atomic_add_fetch(&recv_packets, 1, __ATOMIC_RELAXED);
+			__atomic_add_fetch(&recv_bytes, data_size, __ATOMIC_RELAXED);
+		}
 		
 		free(packet);
 	}
@@ -541,6 +545,8 @@ static void _handle_dosbox_registration_response(novell_ipx_packet *packet, size
 
 static void _handle_dosbox_recv(novell_ipx_packet *packet, size_t packet_size)
 {
+	FPROF_RECORD_SCOPE(&(ipxwrapper_fstats[IPXWRAPPER_FSTATS__handle_dosbox_recv]));
+	
 	if(packet_size < sizeof(novell_ipx_packet) || ntohs(packet->length) != packet_size)
 	{
 		/* Doesn't look valid. */
@@ -622,6 +628,8 @@ static bool _do_udp_recv(int fd)
 
 static void _handle_pcap_frame(u_char *user, const struct pcap_pkthdr *pkt_header, const u_char *pkt_data)
 {
+	FPROF_RECORD_SCOPE(&(ipxwrapper_fstats[IPXWRAPPER_FSTATS__handle_pcap_frame]));
+	
 	ipx_interface_t *iface = (ipx_interface_t*)(user);
 	
 	const novell_ipx_packet *ipx;

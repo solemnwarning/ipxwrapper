@@ -59,6 +59,9 @@ struct FuncStats ipxwrapper_fstats[] = {
 
 const unsigned int ipxwrapper_fstats_size = sizeof(ipxwrapper_fstats) / sizeof(*ipxwrapper_fstats);
 
+unsigned int send_packets = 0, send_bytes = 0;  /* Sent from emulated socket */
+unsigned int recv_packets = 0, recv_bytes = 0;  /* Forwarded to emulated socket */
+
 static void init_cs(CRITICAL_SECTION *cs)
 {
 	if(!InitializeCriticalSectionAndSpinCount(cs, 0x80000000))
@@ -71,6 +74,18 @@ static void init_cs(CRITICAL_SECTION *cs)
 static HANDLE prof_thread_handle = NULL;
 static HANDLE prof_thread_exit = NULL;
 
+static void report_packet_stats(void)
+{
+	unsigned int my_send_packets = __atomic_exchange_n(&send_packets, 0, __ATOMIC_RELAXED);
+	unsigned int my_send_bytes   = __atomic_exchange_n(&send_bytes,   0, __ATOMIC_RELAXED);
+	
+	unsigned int my_recv_packets = __atomic_exchange_n(&recv_packets, 0, __ATOMIC_RELAXED);
+	unsigned int my_recv_bytes   = __atomic_exchange_n(&recv_bytes,   0, __ATOMIC_RELAXED);
+	
+	log_printf(LOG_INFO, "IPX sockets sent %u packets (%u bytes)", my_send_packets, my_send_bytes);
+	log_printf(LOG_INFO, "IPX sockets received %u packets (%u bytes)", my_recv_packets, my_recv_bytes);
+}
+
 static DWORD WINAPI prof_thread_main(LPVOID lpParameter)
 {
 	static const int PROF_INTERVAL_MS = 10000;
@@ -79,6 +94,7 @@ static DWORD WINAPI prof_thread_main(LPVOID lpParameter)
 	{
 		fprof_report(STUBS_DLL_NAME, stub_fstats, NUM_STUBS);
 		fprof_report("ipxwrapper.dll", ipxwrapper_fstats, ipxwrapper_fstats_size);
+		report_packet_stats();
 	}
 	
 	return 0;
@@ -206,6 +222,8 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 		{
 			fprof_report(STUBS_DLL_NAME, stub_fstats, NUM_STUBS);
 			fprof_report("ipxwrapper.dll", ipxwrapper_fstats, ipxwrapper_fstats_size);
+			
+			report_packet_stats();
 		}
 		
 		log_close();

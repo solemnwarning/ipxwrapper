@@ -1,3 +1,5 @@
 FPROF_DECL(_deliver_packet)
 FPROF_DECL(_handle_udp_recv)
+FPROF_DECL(_handle_dosbox_recv)
+FPROF_DECL(_handle_pcap_frame)
 FPROF_DECL(lock_sockets)

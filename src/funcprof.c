@@ -108,10 +108,11 @@ void fprof_report(const char *dll_name, struct FuncStats *fstats, size_t n_fstat
 			if(total_time > 0.0)
 			{
 				log_printf(LOG_INFO,
-					"%s:%s was called %u times duration min %fus max %fus avg %fus",
+					"%s:%s was called %u times duration total %fus min %fus max %fus avg %fus",
 					dll_name,
 					fstats[i].func_name,
 					n_calls,
+					(total_time / TICKS_PER_USEC),
 					(min_time / TICKS_PER_USEC),
 					(max_time / TICKS_PER_USEC),
 					((total_time / (float)(n_calls)) / TICKS_PER_USEC));

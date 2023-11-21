@@ -1475,6 +1475,9 @@ static DWORD ipx_send_packet(
 			
 			if(pcap_sendpacket(iface->pcap, (void*)(frame), frame_size) == 0)
 			{
+				__atomic_add_fetch(&send_packets, 1, __ATOMIC_RELAXED);
+				__atomic_add_fetch(&send_bytes, data_size, __ATOMIC_RELAXED);
+				
 				free(frame);
 				return ERROR_SUCCESS;
 			}
@@ -1530,6 +1533,10 @@ static DWORD ipx_send_packet(
 			{
 				error = WSAGetLastError();
 				log_printf(LOG_ERROR, "Error sending DOSBox IPX packet: %s", w32_error(error));
+			}
+			else{
+				__atomic_add_fetch(&send_packets, 1, __ATOMIC_RELAXED);
+				__atomic_add_fetch(&send_bytes, data_size, __ATOMIC_RELAXED);
 			}
 			
 			free(packet);
@@ -1634,6 +1641,12 @@ static DWORD ipx_send_packet(
 		}
 		
 		free(packet);
+		
+		if(send_ok)
+		{
+			__atomic_add_fetch(&send_packets, 1, __ATOMIC_RELAXED);
+			__atomic_add_fetch(&send_bytes, data_size, __ATOMIC_RELAXED);
+		}
 		
 		return send_ok
 			? ERROR_SUCCESS
