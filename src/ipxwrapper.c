@@ -62,6 +62,11 @@ const unsigned int ipxwrapper_fstats_size = sizeof(ipxwrapper_fstats) / sizeof(*
 unsigned int send_packets = 0, send_bytes = 0;  /* Sent from emulated socket */
 unsigned int recv_packets = 0, recv_bytes = 0;  /* Forwarded to emulated socket */
 
+#define NUM_SEND_THREADS 4
+
+SenderQueue *send_queue = NULL;
+static SenderThread *send_threads[NUM_SEND_THREADS] = { NULL };
+
 static void init_cs(CRITICAL_SECTION *cs)
 {
 	if(!InitializeCriticalSectionAndSpinCount(cs, 0x80000000))
@@ -147,6 +152,21 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 			return FALSE;
 		}
 		
+		send_queue = SenderQueue_new();
+		if(send_queue == NULL)
+		{
+			abort();
+		}
+		
+		for(int i = 0; i < NUM_SEND_THREADS; ++i)
+		{
+			send_threads[i] = SenderThread_new(send_queue);
+			if(send_threads[i] == NULL)
+			{
+				abort();
+			}
+		}
+		
 		router_init();
 		
 		if(main_config.profile)
@@ -207,6 +227,15 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 		}
 		
 		router_cleanup();
+		
+		for(int i = 0; i < NUM_SEND_THREADS; ++i)
+		{
+			SenderThread_destroy(send_threads[i]);
+			send_threads[i] = NULL;
+		}
+		
+		SenderQueue_destroy(send_queue);
+		send_queue = NULL;
 		
 		WSACleanup();
 		

@@ -1529,7 +1529,8 @@ static DWORD ipx_send_packet(
 			
 			DWORD error = ERROR_SUCCESS;
 			
-			if(r_sendto(private_socket, (const void*)(packet), packet_size, 0, (struct sockaddr*)(&dosbox_server_addr), sizeof(dosbox_server_addr)) < 0)
+			// if(r_sendto(private_socket, (const void*)(packet), packet_size, 0, (struct sockaddr*)(&dosbox_server_addr), sizeof(dosbox_server_addr)) < 0)
+			if(!SenderQueue_send(send_queue, private_socket, NULL, 0, packet, packet_size, (struct sockaddr*)(&dosbox_server_addr), sizeof(dosbox_server_addr)))
 			{
 				error = WSAGetLastError();
 				log_printf(LOG_ERROR, "Error sending DOSBox IPX packet: %s", w32_error(error));

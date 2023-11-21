@@ -37,6 +37,7 @@ r_getpeername          ws2_32.dll     getpeername            12
 inet_ntoa              ws2_32.dll     inet_ntoa               4
 __WSAFDIsSet           ws2_32.dll     __WSAFDIsSet            8
 r_WSAAsyncSelect       ws2_32.dll     WSAAsyncSelect         16
+r_WSASendTo            ws2_32.dll     WSASendTo              36
 gethostbyname          ws2_32.dll     gethostbyname           4
 
 pcap_open              wpcap.dll      pcap_open

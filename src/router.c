@@ -343,7 +343,8 @@ static void _deliver_packet(
 		send_addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 		send_addr.sin_port        = sock->port;
 		
-		if(sendto(private_socket, (void*)(packet), packet_size, 0, (struct sockaddr*)(&send_addr), sizeof(send_addr)) == -1)
+		// if(sendto(private_socket, (void*)(packet), packet_size, 0, (struct sockaddr*)(&send_addr), sizeof(send_addr)) == -1)
+		if(!SenderQueue_send(send_queue, private_socket, NULL, 0, packet, packet_size, (struct sockaddr*)(&send_addr), sizeof(send_addr)))
 		{
 			log_printf(LOG_ERROR, "Error relaying packet: %s", w32_error(WSAGetLastError()));
 		}

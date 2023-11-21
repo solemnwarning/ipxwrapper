@@ -86,7 +86,7 @@ dist: all
 
 IPXWRAPPER_OBJS := src/ipxwrapper.o src/winsock.o src/ipxwrapper_stubs.o src/log.o src/common.o \
 	src/interface.o src/interface2.o src/router.o src/ipxwrapper.def src/addrcache.o src/config.o src/addr.o \
-	src/firewall.o src/ethernet.o src/funcprof.o
+	src/firewall.o src/ethernet.o src/funcprof.o src/sender.o
 
 ipxwrapper.dll: $(IPXWRAPPER_OBJS)
 	echo 'const char *version_string = "$(VERSION)", *compile_time = "'`date`'";' | $(CC) -c -x c -o version.o -

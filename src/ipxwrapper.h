@@ -29,6 +29,7 @@
 #include "config.h"
 #include "funcprof.h"
 #include "router.h"
+#include "sender.h"
 
 /* The standard Windows driver (in XP) only allows 1467 bytes anyway */
 #define MAX_DATA_SIZE 8192
@@ -200,6 +201,8 @@ enum {
 extern unsigned int send_packets, send_bytes;  /* Sent from emulated socket */
 extern unsigned int recv_packets, recv_bytes;  /* Forwarded to emulated socket */
 
+extern SenderQueue *send_queue;
+
 ipx_socket *get_socket(SOCKET sockfd);
 ipx_socket *get_socket_wait_for_ready(SOCKET sockfd, int timeout_ms);
 void lock_sockets(void);
@@ -228,6 +231,7 @@ int PASCAL r_getpeername(SOCKET fd, struct sockaddr *addr, int *addrlen);
 int PASCAL r_listen(SOCKET s, int backlog);
 SOCKET PASCAL r_accept(SOCKET s, struct sockaddr *addr, int *addrlen);
 int PASCAL r_WSAAsyncSelect(SOCKET s, HWND hWnd, unsigned int wMsg, long lEvent);
+int PASCAL r_WSASendTo(SOCKET s, LPWSABUF lpBuffers, DWORD dwBufferCount, LPDWORD lpNumberOfBytesSent, DWORD dwFlags, const struct sockaddr FAR *lpTo, int iToLen, LPWSAOVERLAPPED lpOverlapped, LPWSAOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine);
 int WSAAPI r_select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, const PTIMEVAL timeout);
 
 #endif /* !IPXWRAPPER_H */
