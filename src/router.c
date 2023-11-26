@@ -655,6 +655,9 @@ static bool _do_udp_recv(int fd)
 		return false;
 	}
 	
+	__atomic_add_fetch(&recv_packets_udp, 1, __ATOMIC_RELAXED);
+	__atomic_add_fetch(&recv_bytes_udp, len, __ATOMIC_RELAXED);
+	
 	if(ipx_encap_type == ENCAP_TYPE_DOSBOX)
 	{
 		if(addr.sin_family != dosbox_server_addr.sin_family

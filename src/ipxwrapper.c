@@ -64,6 +64,9 @@ const unsigned int ipxwrapper_fstats_size = sizeof(ipxwrapper_fstats) / sizeof(*
 unsigned int send_packets = 0, send_bytes = 0;  /* Sent from emulated socket */
 unsigned int recv_packets = 0, recv_bytes = 0;  /* Forwarded to emulated socket */
 
+unsigned int send_packets_udp = 0, send_bytes_udp = 0;  /* Sent over UDP transport */
+unsigned int recv_packets_udp = 0, recv_bytes_udp = 0;  /* Received over UDP transport */
+
 static void init_cs(CRITICAL_SECTION *cs)
 {
 	if(!InitializeCriticalSectionAndSpinCount(cs, 0x80000000))
@@ -84,8 +87,17 @@ static void report_packet_stats(void)
 	unsigned int my_recv_packets = __atomic_exchange_n(&recv_packets, 0, __ATOMIC_RELAXED);
 	unsigned int my_recv_bytes   = __atomic_exchange_n(&recv_bytes,   0, __ATOMIC_RELAXED);
 	
+	unsigned int my_send_packets_udp = __atomic_exchange_n(&send_packets_udp, 0, __ATOMIC_RELAXED);
+	unsigned int my_send_bytes_udp   = __atomic_exchange_n(&send_bytes_udp,   0, __ATOMIC_RELAXED);
+	
+	unsigned int my_recv_packets_udp = __atomic_exchange_n(&recv_packets_udp, 0, __ATOMIC_RELAXED);
+	unsigned int my_recv_bytes_udp   = __atomic_exchange_n(&recv_bytes_udp,   0, __ATOMIC_RELAXED);
+	
 	log_printf(LOG_INFO, "IPX sockets sent %u packets (%u bytes)", my_send_packets, my_send_bytes);
 	log_printf(LOG_INFO, "IPX sockets received %u packets (%u bytes)", my_recv_packets, my_recv_bytes);
+	
+	log_printf(LOG_INFO, "UDP sockets sent %u packets (%u bytes)", my_send_packets_udp, my_send_bytes_udp);
+	log_printf(LOG_INFO, "UDP sockets received %u packets (%u bytes)", my_recv_packets_udp, my_recv_bytes_udp);
 }
 
 static DWORD WINAPI prof_thread_main(LPVOID lpParameter)

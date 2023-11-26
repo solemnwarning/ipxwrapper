@@ -166,6 +166,10 @@ void coalesce_flush(coalesce_dest *cd)
 	{
 		log_printf(LOG_ERROR, "Error sending DOSBox IPX packet: %s", w32_error(WSAGetLastError()));
 	}
+	else{
+		__atomic_add_fetch(&send_packets_udp, 1, __ATOMIC_RELAXED);
+		__atomic_add_fetch(&send_bytes_udp, cd->payload_used, __ATOMIC_RELAXED);
+	}
 	
 	cd->payload_used = 0;
 	DL_DELETE(coalesce_pending, cd);
@@ -220,12 +224,19 @@ DWORD coalesce_send(const void *data, size_t data_size, addr32_t dest_net, addr4
 		}
 	}
 	
-	if(!queued && r_sendto(private_socket, (const void*)(data), data_size, 0, (struct sockaddr*)(&dosbox_server_addr), sizeof(dosbox_server_addr)) < 0)
+	if(!queued)
 	{
-		DWORD error = WSAGetLastError();
-		log_printf(LOG_ERROR, "Error sending DOSBox IPX packet: %s", w32_error(error));
-		
-		return error;
+		if(r_sendto(private_socket, (const void*)(data), data_size, 0, (struct sockaddr*)(&dosbox_server_addr), sizeof(dosbox_server_addr)) < 0)
+		{
+			DWORD error = WSAGetLastError();
+			log_printf(LOG_ERROR, "Error sending DOSBox IPX packet: %s", w32_error(error));
+			
+			return error;
+		}
+		else{
+			__atomic_add_fetch(&send_packets_udp, 1, __ATOMIC_RELAXED);
+			__atomic_add_fetch(&send_bytes_udp, data_size, __ATOMIC_RELAXED);
+		}
 	}
 	
 	return ERROR_SUCCESS;
