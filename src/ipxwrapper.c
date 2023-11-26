@@ -57,6 +57,8 @@ struct FuncStats ipxwrapper_fstats[] = {
 	#undef FPROF_DECL
 };
 
+static uint64_t perf_counter_freq = 0;
+
 const unsigned int ipxwrapper_fstats_size = sizeof(ipxwrapper_fstats) / sizeof(*ipxwrapper_fstats);
 
 unsigned int send_packets = 0, send_bytes = 0;  /* Sent from emulated socket */
@@ -104,6 +106,12 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 {
 	if(fdwReason == DLL_PROCESS_ATTACH)
 	{
+		LARGE_INTEGER pc_freq;
+		if(QueryPerformanceFrequency(&pc_freq))
+		{
+			perf_counter_freq = pc_freq.QuadPart;
+		}
+		
 		fprof_init(stub_fstats, NUM_STUBS);
 		fprof_init(ipxwrapper_fstats, ipxwrapper_fstats_size);
 		
@@ -306,5 +314,21 @@ uint64_t get_ticks(void)
 	}
 	else{
 		return GetTickCount();
+	}
+}
+
+uint64_t get_uticks(void)
+{
+	LARGE_INTEGER pc_tick;
+	
+	if(perf_counter_freq == 0 || !QueryPerformanceCounter(&pc_tick))
+	{
+		/* Fall back to GetTickCount() if there is no high-resolution
+		 * performance counter available.
+		*/
+		return get_ticks() * 1000;
+	}
+	else{
+		return pc_tick.QuadPart / (perf_counter_freq / 1000000);
 	}
 }

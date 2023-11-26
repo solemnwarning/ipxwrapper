@@ -25,6 +25,7 @@
 #include <Win32-Extensions.h>
 
 #include "router.h"
+#include "coalesce.h"
 #include "common.h"
 #include "funcprof.h"
 #include "ipxwrapper.h"
@@ -196,6 +197,8 @@ void router_cleanup(void)
 	router_thread = NULL;
 	
 	/* Release resources. */
+	
+	coalesce_cleanup();
 	
 	if(private_socket != -1)
 	{
@@ -554,29 +557,85 @@ static void _handle_dosbox_recv(novell_ipx_packet *packet, size_t packet_size)
 		return;
 	}
 	
-	if(min_log_level <= LOG_DEBUG)
+	if(packet->src_socket == 0 && packet->type == IPX_MAGIC_COALESCED)
 	{
-		IPX_STRING_ADDR(src_addr, addr32_in(packet->src_net), addr48_in(packet->src_node), packet->src_socket);
-		IPX_STRING_ADDR(dest_addr, addr32_in(packet->dest_net), addr48_in(packet->dest_node), packet->dest_socket);
+		/* Sanity check the lengths of each inner packet. */
 		
-		log_printf(LOG_DEBUG, "Recieved packet from %s for %s", src_addr, dest_addr);
+		log_printf(LOG_DEBUG, "Recieved coalesced packet (%zu bytes)", packet_size);
+		
+		novell_ipx_packet *inner_packets = (novell_ipx_packet*)(packet->data);
+		size_t remaining_data = packet_size - sizeof(novell_ipx_packet);
+		
+		novell_ipx_packet *end = (novell_ipx_packet*)(packet->data + remaining_data);
+		
+		for(novell_ipx_packet *p = inner_packets; p < end;)
+		{
+			if(remaining_data < sizeof(novell_ipx_packet) || ntohs(p->length) > remaining_data)
+			{
+				/* Doesn't look valid. */
+				log_printf(LOG_ERROR, "Recieved invalid IPX packet from DOSBox server, ignoring");
+				return;
+			}
+			
+			p = (novell_ipx_packet*)((char*)(p) + ntohs(p->length));
+		}
+		
+		/* Deliver the inner packets. */
+		
+		for(novell_ipx_packet *p = inner_packets; p < end;)
+		{
+			if(min_log_level <= LOG_DEBUG)
+			{
+				IPX_STRING_ADDR(src_addr, addr32_in(p->src_net), addr48_in(p->src_node), p->src_socket);
+				IPX_STRING_ADDR(dest_addr, addr32_in(p->dest_net), addr48_in(p->dest_node), p->dest_socket);
+				
+				log_printf(LOG_DEBUG, "Recieved packet from %s for %s", src_addr, dest_addr);
+			}
+			
+			size_t data_size = ntohs(p->length) - sizeof(novell_ipx_packet);
+			
+			_deliver_packet(
+				p->type,
+				
+				addr32_in(p->src_net),
+				addr48_in(p->src_node),
+				p->src_socket,
+				
+				addr32_in(p->dest_net),
+				addr48_in(p->dest_node),
+				p->dest_socket,
+				
+				p->data,
+				data_size);
+			
+			p = (novell_ipx_packet*)((char*)(p) + ntohs(p->length));
+		}
 	}
-	
-	size_t data_size = ntohs(packet->length) - sizeof(novell_ipx_packet);
-	
-	_deliver_packet(
-		packet->type,
+	else{
+		if(min_log_level <= LOG_DEBUG)
+		{
+			IPX_STRING_ADDR(src_addr, addr32_in(packet->src_net), addr48_in(packet->src_node), packet->src_socket);
+			IPX_STRING_ADDR(dest_addr, addr32_in(packet->dest_net), addr48_in(packet->dest_node), packet->dest_socket);
+			
+			log_printf(LOG_DEBUG, "Recieved packet from %s for %s", src_addr, dest_addr);
+		}
 		
-		addr32_in(packet->src_net),
-		addr48_in(packet->src_node),
-		packet->src_socket,
+		size_t data_size = ntohs(packet->length) - sizeof(novell_ipx_packet);
 		
-		addr32_in(packet->dest_net),
-		addr48_in(packet->dest_node),
-		packet->dest_socket,
-		
-		packet->data,
-		data_size);
+		_deliver_packet(
+			packet->type,
+			
+			addr32_in(packet->src_net),
+			addr48_in(packet->src_node),
+			packet->src_socket,
+			
+			addr32_in(packet->dest_net),
+			addr48_in(packet->dest_node),
+			packet->dest_socket,
+			
+			packet->data,
+			data_size);
+	}
 }
 
 static bool _do_udp_recv(int fd)
@@ -766,6 +825,10 @@ static DWORD router_main(void *arg)
 		
 		if(ipx_encap_type == ENCAP_TYPE_DOSBOX)
 		{
+			lock_sockets();
+			coalesce_flush_waiting();
+			unlock_sockets();
+			
 			if(dosbox_state == DOSBOX_DISCONNECTED)
 			{
 				uint64_t now = get_ticks();

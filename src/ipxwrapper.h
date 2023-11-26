@@ -150,6 +150,7 @@ struct ipx_packet {
 } __attribute__((__packed__));
 
 #define IPX_MAGIC_SPXLOOKUP 1
+#define IPX_MAGIC_COALESCED 2
 
 typedef struct spxlookup_req spxlookup_req_t;
 
@@ -205,6 +206,7 @@ ipx_socket *get_socket_wait_for_ready(SOCKET sockfd, int timeout_ms);
 void lock_sockets(void);
 void unlock_sockets(void);
 uint64_t get_ticks(void);
+uint64_t get_uticks(void);
 
 void add_self_to_firewall(void);
 

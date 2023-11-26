@@ -25,6 +25,7 @@
 #include <wsnwlink.h>
 
 #include "ipxwrapper.h"
+#include "coalesce.h"
 #include "common.h"
 #include "interface.h"
 #include "router.h"
@@ -1527,14 +1528,9 @@ static DWORD ipx_send_packet(
 			
 			memcpy(packet->data, data, data_size);
 			
-			DWORD error = ERROR_SUCCESS;
-			
-			if(r_sendto(private_socket, (const void*)(packet), packet_size, 0, (struct sockaddr*)(&dosbox_server_addr), sizeof(dosbox_server_addr)) < 0)
+			DWORD error = coalesce_send(packet, packet_size, dest_net, dest_node, dest_socket);
+			if(error == ERROR_SUCCESS)
 			{
-				error = WSAGetLastError();
-				log_printf(LOG_ERROR, "Error sending DOSBox IPX packet: %s", w32_error(error));
-			}
-			else{
 				__atomic_add_fetch(&send_packets, 1, __ATOMIC_RELAXED);
 				__atomic_add_fetch(&send_bytes, data_size, __ATOMIC_RELAXED);
 			}
