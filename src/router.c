@@ -35,6 +35,9 @@
 
 #define IPX_SOCK_ECHO 2
 
+/* Maximum number of packets to dispatch per iteration of the router loop. */
+#define MAX_RECV_PER_LOOP 50
+
 static bool router_running   = false;
 static WSAEVENT router_event = WSA_INVALID_EVENT;
 static HANDLE router_thread  = NULL;
@@ -638,7 +641,7 @@ static void _handle_dosbox_recv(novell_ipx_packet *packet, size_t packet_size)
 	}
 }
 
-static bool _do_udp_recv(int fd)
+static int _do_udp_recv(int fd)
 {
 	struct sockaddr_in addr;
 	int addrlen = sizeof(addr);
@@ -647,12 +650,14 @@ static bool _do_udp_recv(int fd)
 	int len = recvfrom(fd, buf, sizeof(buf), 0, (struct sockaddr*)(&addr), &addrlen);
 	if(len == -1)
 	{
-		if(WSAGetLastError() == WSAEWOULDBLOCK || WSAGetLastError() == WSAECONNRESET)
-		{
-			return true;
-		}
+		DWORD err = WSAGetLastError();
 		
-		return false;
+		switch(err)
+		{
+			case WSAEWOULDBLOCK: return 0;
+			case WSAECONNRESET: return 1;
+			default: return -1;
+		}
 	}
 	
 	__atomic_add_fetch(&recv_packets_udp, 1, __ATOMIC_RELAXED);
@@ -665,7 +670,7 @@ static bool _do_udp_recv(int fd)
 			|| addr.sin_port != dosbox_server_addr.sin_port)
 		{
 			/* Ignore packet from wrong address. */
-			return true;
+			return 1;
 		}
 		
 		if(dosbox_state == DOSBOX_REGISTERING)
@@ -685,7 +690,7 @@ static bool _do_udp_recv(int fd)
 		_handle_udp_recv((ipx_packet*)(buf), len, addr);
 	}
 	
-	return true;
+	return 1;
 }
 
 static void _handle_pcap_frame(u_char *user, const struct pcap_pkthdr *pkt_header, const u_char *pkt_data)
@@ -885,14 +890,43 @@ static DWORD router_main(void *arg)
 		}
 		else if(ipx_encap_type == ENCAP_TYPE_DOSBOX)
 		{
-			if(!_do_udp_recv(private_socket))
+			int status = 0;
+			
+			for(int i = 0; i < MAX_RECV_PER_LOOP; ++i)
+			{
+				status = _do_udp_recv(private_socket);
+				if(status <= 0)
+				{
+					break;
+				}
+			}
+			
+			if(status < 0)
 			{
 				exit_status = 1;
 				break;
 			}
 		}
 		else{
-			if(!_do_udp_recv(shared_socket) || !_do_udp_recv(private_socket))
+			int status = 0;
+			
+			for(int i = 0; i < MAX_RECV_PER_LOOP; ++i)
+			{
+				int s1 = _do_udp_recv(shared_socket);
+				int s2 = _do_udp_recv(private_socket);
+				
+				if(s1 < 0 || s2 < 0)
+				{
+					status = -1;
+					break;
+				}
+				else if(s1 == 0 && s2 == 0)
+				{
+					break;
+				}
+			}
+			
+			if(status < 0)
 			{
 				exit_status = 1;
 				break;
