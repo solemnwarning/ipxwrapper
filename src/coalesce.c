@@ -68,6 +68,8 @@ static coalesce_dest *coalesce_pending = NULL;
 
 coalesce_dest *get_coalesce_by_dest(addr32_t netnum, addr48_t nodenum, uint16_t socket)
 {
+	FPROF_RECORD_SCOPE(&(ipxwrapper_fstats[IPXWRAPPER_FSTATS_get_coalesce_by_dest]));
+	
 	coalesce_table_key dest = { netnum, nodenum, socket };
 	
 	coalesce_dest *node;
@@ -75,6 +77,8 @@ coalesce_dest *get_coalesce_by_dest(addr32_t netnum, addr48_t nodenum, uint16_t 
 	
 	if(node == NULL)
 	{
+		FPROF_RECORD_SCOPE(&(ipxwrapper_fstats[IPXWRAPPER_FSTATS_get_coalesce_by_dest_new]));
+		
 		/* TODO: Limit maximum number of nodes, recycle old ones. */
 		
 		node = malloc(sizeof(coalesce_dest));
@@ -94,15 +98,16 @@ coalesce_dest *get_coalesce_by_dest(addr32_t netnum, addr48_t nodenum, uint16_t 
 
 bool coalesce_register_send(coalesce_dest *node, uint64_t timestamp)
 {
+	FPROF_RECORD_SCOPE(&(ipxwrapper_fstats[IPXWRAPPER_FSTATS_coalesce_register_send]));
+	
 	memmove(node->send_timestamps, node->send_timestamps + 1, sizeof(node->send_timestamps) - sizeof(*(node->send_timestamps)));
 	node->send_timestamps[IPXWRAPPER_COALESCE_PACKET_TRACK_COUNT - 1] = timestamp;
 	
-	if(node->send_timestamps[0] < node->send_timestamps[IPXWRAPPER_COALESCE_PACKET_TRACK_COUNT - 1]
-		&& (node->send_timestamps[0] + IPXWRAPPER_COALESCE_PACKET_START_THRESH) >= node->send_timestamps[IPXWRAPPER_COALESCE_PACKET_TRACK_COUNT - 1])
+	if((node->send_timestamps[0] + IPXWRAPPER_COALESCE_PACKET_START_THRESH) >= timestamp)
 	{
 		return true;
 	}
-	else if(node->active && (node->send_timestamps[0] + IPXWRAPPER_COALESCE_PACKET_STOP_THRESH) < node->send_timestamps[IPXWRAPPER_COALESCE_PACKET_TRACK_COUNT - 1])
+	else if(node->active && (node->send_timestamps[0] + IPXWRAPPER_COALESCE_PACKET_STOP_THRESH) < timestamp)
 	{
 		return false;
 	}
@@ -113,8 +118,12 @@ bool coalesce_register_send(coalesce_dest *node, uint64_t timestamp)
 
 bool coalesce_add_data(coalesce_dest *cd, const void *data, int size, uint64_t now)
 {
+	FPROF_RECORD_SCOPE(&(ipxwrapper_fstats[IPXWRAPPER_FSTATS_coalesce_add_data]));
+	
 	if(cd->payload_used == 0)
 	{
+		FPROF_RECORD_SCOPE(&(ipxwrapper_fstats[IPXWRAPPER_FSTATS_coalesce_add_data_init]));
+		
 		novell_ipx_packet header;
 		
 		header.checksum = 0xFFFF;
@@ -155,6 +164,8 @@ bool coalesce_add_data(coalesce_dest *cd, const void *data, int size, uint64_t n
 
 void coalesce_flush(coalesce_dest *cd)
 {
+	FPROF_RECORD_SCOPE(&(ipxwrapper_fstats[IPXWRAPPER_FSTATS_coalesce_flush]));
+	
 	assert(cd->payload_used > 0);
 	
 	novell_ipx_packet *header = (novell_ipx_packet*)(cd->payload);
@@ -177,6 +188,8 @@ void coalesce_flush(coalesce_dest *cd)
 
 DWORD coalesce_send(const void *data, size_t data_size, addr32_t dest_net, addr48_t dest_node, uint16_t dest_socket)
 {
+	FPROF_RECORD_SCOPE(&(ipxwrapper_fstats[IPXWRAPPER_FSTATS_coalesce_send]));
+	
 	/* We should always be called with an IPX header, even if the
 	 * application is sending zero-byte payloads.
 	*/
@@ -188,6 +201,8 @@ DWORD coalesce_send(const void *data, size_t data_size, addr32_t dest_net, addr4
 	coalesce_dest *cd = get_coalesce_by_dest(dest_net, dest_node, dest_socket);
 	if(cd != NULL)
 	{
+		FPROF_RECORD_SCOPE(&(ipxwrapper_fstats[IPXWRAPPER_FSTATS_coalesce_send_cd]));
+		
 		bool should_coalesce = coalesce_register_send(cd, now);
 		
 		if(should_coalesce && !cd->active)
@@ -226,6 +241,8 @@ DWORD coalesce_send(const void *data, size_t data_size, addr32_t dest_net, addr4
 	
 	if(!queued)
 	{
+		FPROF_RECORD_SCOPE(&(ipxwrapper_fstats[IPXWRAPPER_FSTATS_coalesce_send_immediate]));
+		
 		if(r_sendto(private_socket, (const void*)(data), data_size, 0, (struct sockaddr*)(&dosbox_server_addr), sizeof(dosbox_server_addr)) < 0)
 		{
 			DWORD error = WSAGetLastError();

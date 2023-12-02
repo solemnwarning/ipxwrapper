@@ -131,6 +131,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 		
 		log_printf(LOG_INFO, "IPXWrapper %s", version_string);
 		log_printf(LOG_INFO, "Compiled at %s", compile_time);
+		log_printf(LOG_INFO, "Performance counter: %lld Hz", perf_counter_freq);
 		
 		if(!getenv("SystemRoot"))
 		{
