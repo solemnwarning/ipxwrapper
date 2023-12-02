@@ -771,25 +771,18 @@ static BOOL reclaim_socket(ipx_socket *sockptr, int lookup_fd)
 static int recv_pump(ipx_socket *sockptr, BOOL block)
 {
 	int fd = sockptr->fd;
+	u_long available = -1;
 	
 	if(!block)
 	{
 		FPROF_RECORD_SCOPE(&(ipxwrapper_fstats[IPXWRAPPER_FSTATS_recv_pump_select]));
 		
-		fd_set read_fds;
-		FD_ZERO(&read_fds);
-		
-		FD_SET(fd, &read_fds);
-		
-		struct timeval timeout = { 0, 0 };
-		
-		int r = r_select(-1, &read_fds, NULL, NULL, &timeout);
-		if(r == -1)
+		if(r_ioctlsocket(fd, FIONREAD, &available) != 0)
 		{
 			unlock_sockets();
 			return -1;
 		}
-		else if(r == 0)
+		else if(available == 0)
 		{
 			/* No packet waiting in underlying recv buffer. */
 			return 0;
