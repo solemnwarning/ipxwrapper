@@ -70,6 +70,12 @@ coalesce_dest *get_coalesce_by_dest(addr32_t netnum, addr48_t nodenum, uint16_t 
 {
 	FPROF_RECORD_SCOPE(&(ipxwrapper_fstats[IPXWRAPPER_FSTATS_get_coalesce_by_dest]));
 	
+	if(!main_config.dosbox_coalesce)
+	{
+		/* Skip coalescing if disabled. */
+		return NULL;
+	}
+	
 	coalesce_table_key dest = { netnum, nodenum, socket };
 	
 	coalesce_dest *node;

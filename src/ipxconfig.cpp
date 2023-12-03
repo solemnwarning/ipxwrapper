@@ -53,6 +53,7 @@ enum {
 	
 	ID_DOSBOX_SERVER_ADDR = 51,
 	ID_DOSBOX_SERVER_PORT = 52,
+	ID_DOSBOX_COALESCE = 53,
 	ID_DOSBOX_FW_EXCEPT = 55,
 	
 	ID_IPXWRAPPER_PORT = 61,
@@ -133,6 +134,7 @@ static struct {
 	HWND dosbox_server_addr;
 	HWND dosbox_server_port_lbl;
 	HWND dosbox_server_port;
+	HWND dosbox_coalesce;
 	HWND dosbox_fw_except;
 	
 	HWND box_ipx_options;
@@ -203,6 +205,21 @@ static LRESULT CALLBACK main_wproc(HWND window, UINT msg, WPARAM wp, LPARAM lp) 
 						
 						reload_primary_nics();
 						main_window_update();
+						
+						break;
+					}
+					
+					case ID_DOSBOX_COALESCE: {
+						bool coalesce = get_checkbox(wh.dosbox_coalesce);
+						
+						if(coalesce)
+						{
+							int result = MessageBox(NULL, "Packet coalescing requires all players to be using IPXWrapper 0.7.1 or later.\nAre you sure you want to enable it?", "Warning", MB_YESNO | MB_TASKMODAL | MB_ICONWARNING);
+							if(result != IDYES)
+							{
+								set_checkbox(wh.dosbox_coalesce, false);
+							}
+						}
 						
 						break;
 					}
@@ -570,6 +587,7 @@ static bool save_config()
 		}
 		
 		main_config.dosbox_server_port = port;
+		main_config.dosbox_coalesce = get_checkbox(wh.dosbox_coalesce);
 		main_config.fw_except = get_checkbox(wh.dosbox_fw_except);
 	}
 	else if(main_config.encap_type == ENCAP_TYPE_PCAP)
@@ -760,6 +778,7 @@ static void main_window_init()
 		wh.dosbox_server_port_lbl = create_STATIC(wh.box_dosbox_options, "DOSBox IPX server port");
 		wh.dosbox_server_port     = create_child(wh.box_dosbox_options, "EDIT", "", WS_TABSTOP, WS_EX_CLIENTEDGE, ID_DOSBOX_SERVER_PORT);
 		
+		wh.dosbox_coalesce  = create_checkbox(wh.box_dosbox_options, "Coalesce packets when saturated", ID_DOSBOX_COALESCE);
 		wh.dosbox_fw_except = create_checkbox(wh.box_dosbox_options, "Automatically create Windows Firewall exceptions", ID_DOSBOX_FW_EXCEPT);
 		
 		/* Initialise controls. */
@@ -771,6 +790,7 @@ static void main_window_init()
 		sprintf(port_s, "%hu", main_config.dosbox_server_port);
 		SetWindowText(wh.dosbox_server_port, port_s);
 		
+		set_checkbox(wh.dosbox_coalesce, main_config.dosbox_coalesce);
 		set_checkbox(wh.dosbox_fw_except, main_config.fw_except);
 	}
 	
@@ -937,6 +957,9 @@ static void main_window_init()
 		box_dosbox_options_y += edit_h;
 		
 		box_dosbox_options_y += text_h; /* Padding. */
+		
+		MoveWindow(wh.dosbox_coalesce, BOX_SIDE_PAD, box_dosbox_options_y, width - 20, text_h, TRUE);
+		box_dosbox_options_y += text_h;
 		
 		MoveWindow(wh.dosbox_fw_except, BOX_SIDE_PAD, box_dosbox_options_y, width - 20, text_h, TRUE);
 		box_dosbox_options_y += text_h;

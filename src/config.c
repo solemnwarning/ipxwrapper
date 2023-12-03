@@ -37,6 +37,7 @@ main_config_t get_main_config(void)
 	
 	config.dosbox_server_addr = NULL;
 	config.dosbox_server_port = 213;
+	config.dosbox_coalesce = false;
 	
 	HKEY reg = reg_open_main(false);
 	
@@ -64,6 +65,7 @@ main_config_t get_main_config(void)
 	
 	config.dosbox_server_addr = reg_get_string(reg, "dosbox_server_addr", "");
 	config.dosbox_server_port = reg_get_dword(reg, "dosbox_server_port", config.dosbox_server_port);
+	config.dosbox_coalesce    = reg_get_dword(reg, "dosbox_coalesce", config.dosbox_coalesce);
 	
 	/* Check for valid frame_type */
 	
@@ -96,7 +98,8 @@ bool set_main_config(const main_config_t *config)
 		&& reg_set_dword(reg, "profile",    config->profile)
 		
 		&& reg_set_string(reg, "dosbox_server_addr", config->dosbox_server_addr)
-		&& reg_set_dword(reg,  "dosbox_server_port", config->dosbox_server_port);
+		&& reg_set_dword(reg,  "dosbox_server_port", config->dosbox_server_port)
+		&& reg_set_dword(reg,  "dosbox_coalesce",    config->dosbox_coalesce);
 	
 	reg_close(reg);
 	
