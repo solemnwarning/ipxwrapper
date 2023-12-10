@@ -30,6 +30,7 @@
 
 #include "ipxwrapper.h"
 #include "common.h"
+#include "funcprof.h"
 #include "interface.h"
 #include "router.h"
 #include "addrcache.h"
@@ -50,6 +51,17 @@ static CRITICAL_SECTION sockets_cs;
 typedef ULONGLONG WINAPI (*GetTickCount64_t)(void);
 static HMODULE kernel32 = NULL;
 
+struct FuncStats ipxwrapper_fstats[] = {
+	#define FPROF_DECL(func) { #func },
+	#include "ipxwrapper_prof_defs.h"
+	#undef FPROF_DECL
+};
+
+const unsigned int ipxwrapper_fstats_size = sizeof(ipxwrapper_fstats) / sizeof(*ipxwrapper_fstats);
+
+unsigned int send_packets = 0, send_bytes = 0;  /* Sent from emulated socket */
+unsigned int recv_packets = 0, recv_bytes = 0;  /* Forwarded to emulated socket */
+
 static void init_cs(CRITICAL_SECTION *cs)
 {
 	if(!InitializeCriticalSectionAndSpinCount(cs, 0x80000000))
@@ -59,10 +71,42 @@ static void init_cs(CRITICAL_SECTION *cs)
 	}
 }
 
+static HANDLE prof_thread_handle = NULL;
+static HANDLE prof_thread_exit = NULL;
+
+static void report_packet_stats(void)
+{
+	unsigned int my_send_packets = __atomic_exchange_n(&send_packets, 0, __ATOMIC_RELAXED);
+	unsigned int my_send_bytes   = __atomic_exchange_n(&send_bytes,   0, __ATOMIC_RELAXED);
+	
+	unsigned int my_recv_packets = __atomic_exchange_n(&recv_packets, 0, __ATOMIC_RELAXED);
+	unsigned int my_recv_bytes   = __atomic_exchange_n(&recv_bytes,   0, __ATOMIC_RELAXED);
+	
+	log_printf(LOG_INFO, "IPX sockets sent %u packets (%u bytes)", my_send_packets, my_send_bytes);
+	log_printf(LOG_INFO, "IPX sockets received %u packets (%u bytes)", my_recv_packets, my_recv_bytes);
+}
+
+static DWORD WINAPI prof_thread_main(LPVOID lpParameter)
+{
+	static const int PROF_INTERVAL_MS = 10000;
+	
+	while(WaitForSingleObject(prof_thread_exit, PROF_INTERVAL_MS) == WAIT_TIMEOUT)
+	{
+		fprof_report(STUBS_DLL_NAME, stub_fstats, NUM_STUBS);
+		fprof_report("ipxwrapper.dll", ipxwrapper_fstats, ipxwrapper_fstats_size);
+		report_packet_stats();
+	}
+	
+	return 0;
+}
+
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 {
 	if(fdwReason == DLL_PROCESS_ATTACH)
 	{
+		fprof_init(stub_fstats, NUM_STUBS);
+		fprof_init(ipxwrapper_fstats, ipxwrapper_fstats_size);
+		
 		log_open("ipxwrapper.log");
 		
 		log_printf(LOG_INFO, "IPXWrapper %s", version_string);
@@ -104,6 +148,35 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 		}
 		
 		router_init();
+		
+		if(main_config.profile)
+		{
+			stubs_enable_profile = true;
+			
+			prof_thread_exit = CreateEvent(NULL, FALSE, FALSE, NULL);
+			if(prof_thread_exit != NULL)
+			{
+				prof_thread_handle = CreateThread(
+					NULL,               /* lpThreadAttributes */
+					0,                  /* dwStackSize */
+					&prof_thread_main,  /* lpStartAddress */
+					NULL,               /* lpParameter */
+					0,                  /* dwCreationFlags */
+					NULL);              /* lpThreadId */
+				
+				if(prof_thread_handle == NULL)
+				{
+					log_printf(LOG_ERROR,
+						"Unable to create prof_thread_main thread: %s",
+						w32_error(GetLastError()));
+				}
+			}
+			else{
+				log_printf(LOG_ERROR,
+					"Unable to create prof_thread_exit event object: %s",
+					w32_error(GetLastError()));
+			}
+		}
 	}
 	else if(fdwReason == DLL_PROCESS_DETACH)
 	{
@@ -115,6 +188,22 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 		if(lpvReserved != NULL)
 		{
 			return TRUE;
+		}
+		
+		if(prof_thread_exit != NULL)
+		{
+			SetEvent(prof_thread_exit);
+			
+			if(prof_thread_handle != NULL)
+			{
+				WaitForSingleObject(prof_thread_handle, INFINITE);
+				
+				CloseHandle(prof_thread_handle);
+				prof_thread_handle = NULL;
+			}
+			
+			CloseHandle(prof_thread_exit);
+			prof_thread_exit = NULL;
 		}
 		
 		router_cleanup();
@@ -129,6 +218,14 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 		
 		unload_dlls();
 		
+		if(main_config.profile)
+		{
+			fprof_report(STUBS_DLL_NAME, stub_fstats, NUM_STUBS);
+			fprof_report("ipxwrapper.dll", ipxwrapper_fstats, ipxwrapper_fstats_size);
+			
+			report_packet_stats();
+		}
+		
 		log_close();
 		
 		if(kernel32)
@@ -136,6 +233,9 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 			FreeLibrary(kernel32);
 			kernel32 = NULL;
 		}
+		
+		fprof_cleanup(ipxwrapper_fstats, ipxwrapper_fstats_size);
+		fprof_cleanup(stub_fstats, NUM_STUBS);
 	}
 	
 	return TRUE;
@@ -181,6 +281,7 @@ ipx_socket *get_socket_wait_for_ready(SOCKET sockfd, int timeout_ms)
 /* Lock the mutex */
 void lock_sockets(void)
 {
+	FPROF_RECORD_SCOPE(&(ipxwrapper_fstats[IPXWRAPPER_FSTATS_lock_sockets]));
 	EnterCriticalSection(&sockets_cs);
 }
 

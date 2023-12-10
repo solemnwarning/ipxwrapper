@@ -1,76 +1,78 @@
-accept:0
-bind:0
-closesocket:0
-connect:0
-getpeername:0
-getsockname:0
-getsockopt:0
-htonl
-htons
-inet_addr
-inet_ntoa
-ioctlsocket:0
-listen:0
-ntohl
-ntohs
-recv:0
-recvfrom:0
-select:0
-send:0
-sendto:0
-setsockopt:0
-shutdown:0
-socket:0
-MigrateWinsockConfiguration
-gethostbyaddr
-gethostbyname
-getprotobyname
-getprotobynumber
-getservbyname
-getservbyport
-gethostname
-WSAAsyncSelect:0
-WSAAsyncGetHostByAddr
-WSAAsyncGetHostByName
-WSAAsyncGetProtoByNumber
-WSAAsyncGetProtoByName
-WSAAsyncGetServByPort
-WSAAsyncGetServByName
-WSACancelAsyncRequest
-WSASetBlockingHook
-WSAUnhookBlockingHook
-WSAGetLastError
-WSASetLastError
-WSACancelBlockingCall
-WSAIsBlocking
-WSAStartup
-WSACleanup
-__WSAFDIsSet
-WEP
-WSApSetPostRoutine
-inet_network
-getnetbyname
-rcmd
-rexec
-rresvport
-sethostname
-dn_expand
-WSARecvEx:0
-s_perror
-GetAddressByNameA
-GetAddressByNameW
-EnumProtocolsA:0
-EnumProtocolsW:0
-GetTypeByNameA
-GetTypeByNameW
-GetNameByTypeA
-GetNameByTypeW
-SetServiceA
-SetServiceW
-GetServiceA
-GetServiceW
-NPLoadNameSpaces
-TransmitFile
-AcceptEx
-GetAcceptExSockaddrs
-WSHEnumProtocols:0
+Function name                  Target DLL        Target function                Parameters (bytes)
+--------------------------------------------------------------------------------------------------
+accept                         ipxwrapper.dll    accept                         12
+bind                           ipxwrapper.dll    bind                           12
+closesocket                    ipxwrapper.dll    closesocket                     4
+connect                        ipxwrapper.dll    connect                        12
+getpeername                    ipxwrapper.dll    getpeername                    12
+getsockname                    ipxwrapper.dll    getsockname                    12
+getsockopt                     ipxwrapper.dll    getsockopt                     20
+htonl                          wsock32.dll       htonl                           4
+htons                          wsock32.dll       htons                           4
+inet_addr                      wsock32.dll       inet_addr                       4
+inet_ntoa                      wsock32.dll       inet_ntoa                       4
+ioctlsocket                    ipxwrapper.dll    ioctlsocket                    12
+listen                         ipxwrapper.dll    listen                          8
+ntohl                          wsock32.dll       ntohl                           4
+ntohs                          wsock32.dll       ntohs                           4
+recv                           ipxwrapper.dll    recv                           16
+recvfrom                       ipxwrapper.dll    recvfrom                       24
+select                         ipxwrapper.dll    select                         20
+send                           ipxwrapper.dll    send                           16
+sendto                         ipxwrapper.dll    sendto                         24
+setsockopt                     ipxwrapper.dll    setsockopt                     20
+shutdown                       ipxwrapper.dll    shutdown                        8
+socket                         ipxwrapper.dll    socket                         12
+MigrateWinsockConfiguration    wsock32.dll       MigrateWinsockConfiguration
+gethostbyaddr                  wsock32.dll       gethostbyaddr                  12
+gethostbyname                  wsock32.dll       gethostbyname                   4
+getprotobyname                 wsock32.dll       getprotobyname                  4
+getprotobynumber               wsock32.dll       getprotobynumber                4
+getservbyname                  wsock32.dll       getservbyname                   8
+getservbyport                  wsock32.dll       getservbyport                   8
+gethostname                    wsock32.dll       gethostname                     8
+WSAAsyncSelect                 ipxwrapper.dll    WSAAsyncSelect                 16
+WSAAsyncGetHostByAddr          wsock32.dll       WSAAsyncGetHostByAddr          28
+WSAAsyncGetHostByName          wsock32.dll       WSAAsyncGetHostByName          20
+WSAAsyncGetProtoByNumber       wsock32.dll       WSAAsyncGetProtoByNumber       20
+WSAAsyncGetProtoByName         wsock32.dll       WSAAsyncGetProtoByName         20
+WSAAsyncGetServByPort          wsock32.dll       WSAAsyncGetServByPort          24
+WSAAsyncGetServByName          wsock32.dll       WSAAsyncGetServByName          24
+WSACancelAsyncRequest          wsock32.dll       WSACancelAsyncRequest           4
+WSASetBlockingHook             wsock32.dll       WSASetBlockingHook              4
+WSAUnhookBlockingHook          wsock32.dll       WSAUnhookBlockingHook           0
+WSAGetLastError                wsock32.dll       WSAGetLastError                 0
+WSASetLastError                wsock32.dll       WSASetLastError                 4
+WSACancelBlockingCall          wsock32.dll       WSACancelBlockingCall           0
+WSAIsBlocking                  wsock32.dll       WSAIsBlocking                   0
+WSAStartup                     wsock32.dll       WSAStartup                      8
+WSACleanup                     wsock32.dll       WSACleanup                      0
+__WSAFDIsSet                   wsock32.dll       __WSAFDIsSet                    8
+WEP                            wsock32.dll       WEP
+WSApSetPostRoutine             wsock32.dll       WSApSetPostRoutine
+inet_network                   wsock32.dll       inet_network
+getnetbyname                   wsock32.dll       getnetbyname
+rcmd                           wsock32.dll       rcmd
+rexec                          wsock32.dll       rexec
+rresvport                      wsock32.dll       rresvport
+sethostname                    wsock32.dll       sethostname
+dn_expand                      wsock32.dll       dn_expand
+WSARecvEx                      ipxwrapper.dll    WSARecvEx                      16
+s_perror                       wsock32.dll       s_perror
+GetAddressByNameA              wsock32.dll       GetAddressByNameA              40
+GetAddressByNameW              wsock32.dll       GetAddressByNameW              40
+EnumProtocolsA                 ipxwrapper.dll    EnumProtocolsA                 12
+EnumProtocolsW                 ipxwrapper.dll    EnumProtocolsW                 12
+GetTypeByNameA                 wsock32.dll       GetTypeByNameA                  8
+GetTypeByNameW                 wsock32.dll       GetTypeByNameW                  8
+GetNameByTypeA                 wsock32.dll       GetNameByTypeA                 12
+GetNameByTypeW                 wsock32.dll       GetNameByTypeW                 12
+SetServiceA                    wsock32.dll       SetServiceA                    24
+SetServiceW                    wsock32.dll       SetServiceW                    24
+GetServiceA                    wsock32.dll       GetServiceA                    28
+GetServiceW                    wsock32.dll       GetServiceW                    28
+NPLoadNameSpaces               wsock32.dll       NPLoadNameSpaces
+TransmitFile                   wsock32.dll       TransmitFile                   28
+AcceptEx                       wsock32.dll       AcceptEx                       32
+GetAcceptExSockaddrs           wsock32.dll       GetAcceptExSockaddrs           32
+WSHEnumProtocols               ipxwrapper.dll    WSHEnumProtocols               16

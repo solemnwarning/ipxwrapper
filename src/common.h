@@ -24,6 +24,7 @@
 #include <stdbool.h>
 
 #include "addr.h"
+#include "funcprof.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -38,6 +39,12 @@ enum ipx_log_level {
 };
 
 extern enum ipx_log_level min_log_level;
+
+/* Defined by stubs */
+extern struct FuncStats stub_fstats[];
+extern const unsigned int NUM_STUBS;
+extern const char *STUBS_DLL_NAME;
+extern unsigned char stubs_enable_profile;
 
 const char *w32_error(DWORD errnum);
 

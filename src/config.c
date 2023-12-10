@@ -33,6 +33,7 @@ main_config_t get_main_config(void)
 	config.encap_type = ENCAP_TYPE_IPXWRAPPER;
 	config.frame_type = FRAME_TYPE_ETH_II;
 	config.log_level  = LOG_INFO;
+	config.profile    = false;
 	
 	config.dosbox_server_addr = NULL;
 	config.dosbox_server_port = 213;
@@ -59,6 +60,7 @@ main_config_t get_main_config(void)
 	config.encap_type = reg_get_dword(reg, "use_pcap",   config.encap_type);
 	config.frame_type = reg_get_dword(reg, "frame_type", config.frame_type);
 	config.log_level  = reg_get_dword(reg, "log_level",  config.log_level);
+	config.profile    = reg_get_dword(reg, "profile",    config.profile);
 	
 	config.dosbox_server_addr = reg_get_string(reg, "dosbox_server_addr", "");
 	config.dosbox_server_port = reg_get_dword(reg, "dosbox_server_port", config.dosbox_server_port);
@@ -91,6 +93,7 @@ bool set_main_config(const main_config_t *config)
 		&& reg_set_dword(reg, "use_pcap",   config->encap_type)
 		&& reg_set_dword(reg, "frame_type", config->frame_type)
 		&& reg_set_dword(reg, "log_level",  config->log_level)
+		&& reg_set_dword(reg, "profile",    config->profile)
 		
 		&& reg_set_string(reg, "dosbox_server_addr", config->dosbox_server_addr)
 		&& reg_set_dword(reg,  "dosbox_server_port", config->dosbox_server_port);

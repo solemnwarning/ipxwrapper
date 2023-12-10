@@ -27,6 +27,7 @@
 #include <uthash.h>
 
 #include "config.h"
+#include "funcprof.h"
 #include "router.h"
 
 /* The standard Windows driver (in XP) only allows 1467 bytes anyway */
@@ -187,6 +188,17 @@ struct spxinit
 
 extern ipx_socket *sockets;
 extern main_config_t main_config;
+
+extern struct FuncStats ipxwrapper_fstats[];
+
+enum {
+	#define FPROF_DECL(func) IPXWRAPPER_FSTATS_ ## func,
+	#include "ipxwrapper_prof_defs.h"
+	#undef FPROF_DECL
+};
+
+extern unsigned int send_packets, send_bytes;  /* Sent from emulated socket */
+extern unsigned int recv_packets, recv_bytes;  /* Forwarded to emulated socket */
 
 ipx_socket *get_socket(SOCKET sockfd);
 ipx_socket *get_socket_wait_for_ready(SOCKET sockfd, int timeout_ms);

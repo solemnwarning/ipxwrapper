@@ -26,6 +26,7 @@
 
 #include "router.h"
 #include "common.h"
+#include "funcprof.h"
 #include "ipxwrapper.h"
 #include "interface.h"
 #include "addrcache.h"
@@ -230,6 +231,8 @@ static void _deliver_packet(
 	const void *data,
 	size_t data_size)
 {
+	FPROF_RECORD_SCOPE(&(ipxwrapper_fstats[IPXWRAPPER_FSTATS__deliver_packet]));
+	
 	{
 		IPX_STRING_ADDR(src_addr, src_net, src_node, src_socket);
 		IPX_STRING_ADDR(dest_addr, dest_net, dest_node, dest_socket);
@@ -344,6 +347,10 @@ static void _deliver_packet(
 		{
 			log_printf(LOG_ERROR, "Error relaying packet: %s", w32_error(WSAGetLastError()));
 		}
+		else{
+			__atomic_add_fetch(&recv_packets, 1, __ATOMIC_RELAXED);
+			__atomic_add_fetch(&recv_bytes, data_size, __ATOMIC_RELAXED);
+		}
 		
 		free(packet);
 	}
@@ -353,6 +360,8 @@ static void _deliver_packet(
 
 static void _handle_udp_recv(ipx_packet *packet, size_t packet_size, struct sockaddr_in src_ip)
 {
+	FPROF_RECORD_SCOPE(&(ipxwrapper_fstats[IPXWRAPPER_FSTATS__handle_udp_recv]));
+	
 	size_t data_size = ntohs(packet->size);
 	
 	if(packet_size < sizeof(ipx_packet) - 1 || data_size > MAX_DATA_SIZE || data_size + sizeof(ipx_packet) - 1 != packet_size)
@@ -536,6 +545,8 @@ static void _handle_dosbox_registration_response(novell_ipx_packet *packet, size
 
 static void _handle_dosbox_recv(novell_ipx_packet *packet, size_t packet_size)
 {
+	FPROF_RECORD_SCOPE(&(ipxwrapper_fstats[IPXWRAPPER_FSTATS__handle_dosbox_recv]));
+	
 	if(packet_size < sizeof(novell_ipx_packet) || ntohs(packet->length) != packet_size)
 	{
 		/* Doesn't look valid. */
@@ -617,6 +628,8 @@ static bool _do_udp_recv(int fd)
 
 static void _handle_pcap_frame(u_char *user, const struct pcap_pkthdr *pkt_header, const u_char *pkt_data)
 {
+	FPROF_RECORD_SCOPE(&(ipxwrapper_fstats[IPXWRAPPER_FSTATS__handle_pcap_frame]));
+	
 	ipx_interface_t *iface = (ipx_interface_t*)(user);
 	
 	const novell_ipx_packet *ipx;

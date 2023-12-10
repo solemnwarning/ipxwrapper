@@ -1,5 +1,5 @@
 /* IPXWrapper - Configuration tool
- * Copyright (C) 2011-2022 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2011-2023 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -41,6 +41,7 @@ enum {
 	ID_OPT_W95       = 22,
 	ID_OPT_LOG_DEBUG = 25,
 	ID_OPT_LOG_TRACE = 26,
+	ID_OPT_PROFILE   = 27,
 	
 	ID_OK     = 31,
 	ID_CANCEL = 32,
@@ -142,6 +143,7 @@ static struct {
 	HWND opt_w95;
 	HWND opt_log_debug;
 	HWND opt_log_trace;
+	HWND opt_profile;
 	
 	HWND ok_btn;
 	HWND can_btn;
@@ -257,6 +259,8 @@ static LRESULT CALLBACK groupbox_wproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
 
 int main()
 {
+	fprof_init(stub_fstats, NUM_STUBS);
+	
 	INITCOMMONCONTROLSEX common_controls;
 	common_controls.dwSize = sizeof(common_controls);
 	common_controls.dwICC  = ICC_LISTVIEW_CLASSES;
@@ -315,6 +319,8 @@ int main()
 			inv_window = NULL;
 		}
 	}
+	
+	fprof_cleanup(stub_fstats, NUM_STUBS);
 	
 	return msg.wParam;
 }
@@ -584,6 +590,8 @@ static bool save_config()
 		}
 	}
 	
+	main_config.profile = get_checkbox(wh.opt_profile);
+	
 	if(main_config.encap_type == ENCAP_TYPE_IPXWRAPPER || main_config.encap_type == ENCAP_TYPE_PCAP)
 	{
 		for(auto i = nics.begin(); i != nics.end(); i++)
@@ -792,6 +800,7 @@ static void main_window_init()
 	 * | □ Enable Windows 95 SO_BROADCAST bug                    |
 	 * | □ Log debugging messages                                |
 	 * | □ Log WinSock API calls                                 |
+	 * | □ Log profiling counters                                |
 	 * +---------------------------------------------------------+
 	*/
 	
@@ -801,10 +810,12 @@ static void main_window_init()
 		wh.opt_w95       = create_checkbox(wh.box_options, "Enable Windows 95 SO_BROADCAST bug", ID_OPT_W95);
 		wh.opt_log_debug = create_checkbox(wh.box_options, "Log debugging messages", ID_OPT_LOG_DEBUG);
 		wh.opt_log_trace = create_checkbox(wh.box_options, "Log WinSock API calls", ID_OPT_LOG_TRACE);
+		wh.opt_profile   = create_checkbox(wh.box_options, "Log profiling counters", ID_OPT_PROFILE);
 		
 		set_checkbox(wh.opt_w95,       main_config.w95_bug);
 		set_checkbox(wh.opt_log_debug, main_config.log_level <= LOG_DEBUG);
 		set_checkbox(wh.opt_log_trace, main_config.log_level <= LOG_CALL);
+		set_checkbox(wh.opt_profile,   main_config.profile);
 	}
 	
 	wh.ok_btn  = create_child(wh.main, "BUTTON", "OK",     BS_PUSHBUTTON | WS_TABSTOP, 0, ID_OK);
@@ -976,6 +987,9 @@ static void main_window_init()
 		box_options_y += text_h + 2;
 		
 		MoveWindow(wh.opt_log_trace, BOX_SIDE_PAD, box_options_y, BOX_INNER_WIDTH, text_h, TRUE);
+		box_options_y += text_h + 2;
+		
+		MoveWindow(wh.opt_profile, BOX_SIDE_PAD, box_options_y, BOX_INNER_WIDTH, text_h, TRUE);
 		box_options_y += text_h + 2;
 		
 		int box_options_h = box_options_y + BOX_BOTTOM_PAD;
