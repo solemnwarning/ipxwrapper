@@ -50,6 +50,7 @@ typedef struct main_config {
 	
 	char *dosbox_server_addr;
 	uint16_t dosbox_server_port;
+	bool dosbox_coalesce;
 	
 	enum ipx_log_level log_level;
 	bool profile;

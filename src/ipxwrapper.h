@@ -150,6 +150,7 @@ struct ipx_packet {
 } __attribute__((__packed__));
 
 #define IPX_MAGIC_SPXLOOKUP 1
+#define IPX_MAGIC_COALESCED 2
 
 typedef struct spxlookup_req spxlookup_req_t;
 
@@ -200,11 +201,15 @@ enum {
 extern unsigned int send_packets, send_bytes;  /* Sent from emulated socket */
 extern unsigned int recv_packets, recv_bytes;  /* Forwarded to emulated socket */
 
+extern unsigned int send_packets_udp, send_bytes_udp;  /* Sent over UDP transport */
+extern unsigned int recv_packets_udp, recv_bytes_udp;  /* Received over UDP transport */
+
 ipx_socket *get_socket(SOCKET sockfd);
 ipx_socket *get_socket_wait_for_ready(SOCKET sockfd, int timeout_ms);
 void lock_sockets(void);
 void unlock_sockets(void);
 uint64_t get_ticks(void);
+uint64_t get_uticks(void);
 
 void add_self_to_firewall(void);
 

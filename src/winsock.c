@@ -25,6 +25,7 @@
 #include <wsnwlink.h>
 
 #include "ipxwrapper.h"
+#include "coalesce.h"
 #include "common.h"
 #include "interface.h"
 #include "router.h"
@@ -770,23 +771,18 @@ static BOOL reclaim_socket(ipx_socket *sockptr, int lookup_fd)
 static int recv_pump(ipx_socket *sockptr, BOOL block)
 {
 	int fd = sockptr->fd;
+	u_long available = -1;
 	
 	if(!block)
 	{
-		fd_set read_fds;
-		FD_ZERO(&read_fds);
+		FPROF_RECORD_SCOPE(&(ipxwrapper_fstats[IPXWRAPPER_FSTATS_recv_pump_select]));
 		
-		FD_SET(fd, &read_fds);
-		
-		struct timeval timeout = { 0, 0 };
-		
-		int r = r_select(-1, &read_fds, NULL, NULL, &timeout);
-		if(r == -1)
+		if(r_ioctlsocket(fd, FIONREAD, &available) != 0)
 		{
 			unlock_sockets();
 			return -1;
 		}
-		else if(r == 0)
+		else if(available == 0)
 		{
 			/* No packet waiting in underlying recv buffer. */
 			return 0;
@@ -797,15 +793,19 @@ static int recv_pump(ipx_socket *sockptr, BOOL block)
 	
 	int recv_slot = -1;
 	
-	for(int i = 0; i < RECV_QUEUE_MAX_PACKETS; ++i)
 	{
-		if(queue->sizes[i] == IPX_RECV_QUEUE_FREE)
+		FPROF_RECORD_SCOPE(&(ipxwrapper_fstats[IPXWRAPPER_FSTATS_recv_pump_find_slot]));
+		
+		for(int i = 0; i < RECV_QUEUE_MAX_PACKETS; ++i)
 		{
-			queue->sizes[i] = IPX_RECV_QUEUE_LOCKED;
-			recv_queue_adjust_refcount(queue, 1);
-			
-			recv_slot = i;
-			break;
+			if(queue->sizes[i] == IPX_RECV_QUEUE_FREE)
+			{
+				queue->sizes[i] = IPX_RECV_QUEUE_LOCKED;
+				recv_queue_adjust_refcount(queue, 1);
+				
+				recv_slot = i;
+				break;
+			}
 		}
 	}
 	
@@ -817,9 +817,19 @@ static int recv_pump(ipx_socket *sockptr, BOOL block)
 	
 	unlock_sockets();
 	
-	int r = r_recv(fd, (char*)(queue->data[recv_slot]), MAX_PKT_SIZE, 0);
+	int r;
+	{
+		FPROF_RECORD_SCOPE(&(ipxwrapper_fstats[IPXWRAPPER_FSTATS_recv_pump_recv]));
+		r = r_recv(fd, (char*)(queue->data[recv_slot]), MAX_PKT_SIZE, 0);
+	}
 	
-	if(!reclaim_socket(sockptr, fd))
+	bool ok;
+	{
+		FPROF_RECORD_SCOPE(&(ipxwrapper_fstats[IPXWRAPPER_FSTATS_recv_pump_reclaim_socket]));
+		ok = reclaim_socket(sockptr, fd);
+	}
+	
+	if(!ok)
 	{
 		/* The application closed the socket while we were in the recv() call.
 		 * Just discard our handle, let the queue be destroyed.
@@ -1375,7 +1385,14 @@ static int send_packet(const ipx_packet *packet, int len, struct sockaddr *addr,
 		log_printf(LOG_DEBUG, "Sending packet from %s to %s (%s:%hu)", src_addr, dest_addr, inet_ntoa(v4->sin_addr), ntohs(v4->sin_port));
 	}
 	
-	return (r_sendto(private_socket, (char*)packet, len, 0, addr, addrlen) == len);
+	int r = r_sendto(private_socket, (char*)packet, len, 0, addr, addrlen);
+	if(r == len)
+	{
+		__atomic_add_fetch(&send_packets_udp, 1, __ATOMIC_RELAXED);
+		__atomic_add_fetch(&send_bytes_udp, len, __ATOMIC_RELAXED);
+	}
+	
+	return r;
 }
 
 static DWORD ipx_send_packet(
@@ -1527,14 +1544,9 @@ static DWORD ipx_send_packet(
 			
 			memcpy(packet->data, data, data_size);
 			
-			DWORD error = ERROR_SUCCESS;
-			
-			if(r_sendto(private_socket, (const void*)(packet), packet_size, 0, (struct sockaddr*)(&dosbox_server_addr), sizeof(dosbox_server_addr)) < 0)
+			DWORD error = coalesce_send(packet, packet_size, dest_net, dest_node, dest_socket);
+			if(error == ERROR_SUCCESS)
 			{
-				error = WSAGetLastError();
-				log_printf(LOG_ERROR, "Error sending DOSBox IPX packet: %s", w32_error(error));
-			}
-			else{
 				__atomic_add_fetch(&send_packets, 1, __ATOMIC_RELAXED);
 				__atomic_add_fetch(&send_bytes, data_size, __ATOMIC_RELAXED);
 			}
@@ -1810,28 +1822,36 @@ int PASCAL ioctlsocket(SOCKET fd, long cmd, u_long *argp)
 		
 		if(cmd == FIONREAD && !(sock->flags & IPX_IS_SPX))
 		{
-			while(1)
 			{
-				int r = recv_pump(sock, FALSE);
-				if(r < 0)
-				{
-					/* Error in recv_pump() */
-					return -1;
-				}
+				FPROF_RECORD_SCOPE(&(ipxwrapper_fstats[IPXWRAPPER_FSTATS_ioctlsocket_recv_pump]));
 				
-				if(r == 0)
+				while(1)
 				{
-					/* No more packets ready to read from underlying socket. */
-					break;
+					int r = recv_pump(sock, FALSE);
+					if(r < 0)
+					{
+						/* Error in recv_pump() */
+						return -1;
+					}
+					
+					if(r == 0)
+					{
+						/* No more packets ready to read from underlying socket. */
+						break;
+					}
 				}
 			}
 			
 			unsigned long accumulated_packet_data = 0;
 			
-			for(int i = 0; i < sock->recv_queue->n_ready; ++i)
 			{
-				const ipx_packet *packet = (const ipx_packet*)(sock->recv_queue->data[ sock->recv_queue->ready[i] ]);
-				accumulated_packet_data += packet->size;
+				FPROF_RECORD_SCOPE(&(ipxwrapper_fstats[IPXWRAPPER_FSTATS_ioctlsocket_accumulate]));
+				
+				for(int i = 0; i < sock->recv_queue->n_ready; ++i)
+				{
+					const ipx_packet *packet = (const ipx_packet*)(sock->recv_queue->data[ sock->recv_queue->ready[i] ]);
+					accumulated_packet_data += packet->size;
+				}
 			}
 			
 			unlock_sockets();

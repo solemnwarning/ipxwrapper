@@ -25,6 +25,7 @@
 #include <Win32-Extensions.h>
 
 #include "router.h"
+#include "coalesce.h"
 #include "common.h"
 #include "funcprof.h"
 #include "ipxwrapper.h"
@@ -33,6 +34,9 @@
 #include "ethernet.h"
 
 #define IPX_SOCK_ECHO 2
+
+/* Maximum number of packets to dispatch per iteration of the router loop. */
+#define MAX_RECV_PER_LOOP 50
 
 static bool router_running   = false;
 static WSAEVENT router_event = WSA_INVALID_EVENT;
@@ -196,6 +200,8 @@ void router_cleanup(void)
 	router_thread = NULL;
 	
 	/* Release resources. */
+	
+	coalesce_cleanup();
 	
 	if(private_socket != -1)
 	{
@@ -554,32 +560,88 @@ static void _handle_dosbox_recv(novell_ipx_packet *packet, size_t packet_size)
 		return;
 	}
 	
-	if(min_log_level <= LOG_DEBUG)
+	if(packet->src_socket == 0 && packet->type == IPX_MAGIC_COALESCED)
 	{
-		IPX_STRING_ADDR(src_addr, addr32_in(packet->src_net), addr48_in(packet->src_node), packet->src_socket);
-		IPX_STRING_ADDR(dest_addr, addr32_in(packet->dest_net), addr48_in(packet->dest_node), packet->dest_socket);
+		/* Sanity check the lengths of each inner packet. */
 		
-		log_printf(LOG_DEBUG, "Recieved packet from %s for %s", src_addr, dest_addr);
+		log_printf(LOG_DEBUG, "Recieved coalesced packet (%zu bytes)", packet_size);
+		
+		novell_ipx_packet *inner_packets = (novell_ipx_packet*)(packet->data);
+		size_t remaining_data = packet_size - sizeof(novell_ipx_packet);
+		
+		novell_ipx_packet *end = (novell_ipx_packet*)(packet->data + remaining_data);
+		
+		for(novell_ipx_packet *p = inner_packets; p < end;)
+		{
+			if(remaining_data < sizeof(novell_ipx_packet) || ntohs(p->length) > remaining_data)
+			{
+				/* Doesn't look valid. */
+				log_printf(LOG_ERROR, "Recieved invalid IPX packet from DOSBox server, ignoring");
+				return;
+			}
+			
+			p = (novell_ipx_packet*)((char*)(p) + ntohs(p->length));
+		}
+		
+		/* Deliver the inner packets. */
+		
+		for(novell_ipx_packet *p = inner_packets; p < end;)
+		{
+			if(min_log_level <= LOG_DEBUG)
+			{
+				IPX_STRING_ADDR(src_addr, addr32_in(p->src_net), addr48_in(p->src_node), p->src_socket);
+				IPX_STRING_ADDR(dest_addr, addr32_in(p->dest_net), addr48_in(p->dest_node), p->dest_socket);
+				
+				log_printf(LOG_DEBUG, "Recieved packet from %s for %s", src_addr, dest_addr);
+			}
+			
+			size_t data_size = ntohs(p->length) - sizeof(novell_ipx_packet);
+			
+			_deliver_packet(
+				p->type,
+				
+				addr32_in(p->src_net),
+				addr48_in(p->src_node),
+				p->src_socket,
+				
+				addr32_in(p->dest_net),
+				addr48_in(p->dest_node),
+				p->dest_socket,
+				
+				p->data,
+				data_size);
+			
+			p = (novell_ipx_packet*)((char*)(p) + ntohs(p->length));
+		}
 	}
-	
-	size_t data_size = ntohs(packet->length) - sizeof(novell_ipx_packet);
-	
-	_deliver_packet(
-		packet->type,
+	else{
+		if(min_log_level <= LOG_DEBUG)
+		{
+			IPX_STRING_ADDR(src_addr, addr32_in(packet->src_net), addr48_in(packet->src_node), packet->src_socket);
+			IPX_STRING_ADDR(dest_addr, addr32_in(packet->dest_net), addr48_in(packet->dest_node), packet->dest_socket);
+			
+			log_printf(LOG_DEBUG, "Recieved packet from %s for %s", src_addr, dest_addr);
+		}
 		
-		addr32_in(packet->src_net),
-		addr48_in(packet->src_node),
-		packet->src_socket,
+		size_t data_size = ntohs(packet->length) - sizeof(novell_ipx_packet);
 		
-		addr32_in(packet->dest_net),
-		addr48_in(packet->dest_node),
-		packet->dest_socket,
-		
-		packet->data,
-		data_size);
+		_deliver_packet(
+			packet->type,
+			
+			addr32_in(packet->src_net),
+			addr48_in(packet->src_node),
+			packet->src_socket,
+			
+			addr32_in(packet->dest_net),
+			addr48_in(packet->dest_node),
+			packet->dest_socket,
+			
+			packet->data,
+			data_size);
+	}
 }
 
-static bool _do_udp_recv(int fd)
+static int _do_udp_recv(int fd)
 {
 	struct sockaddr_in addr;
 	int addrlen = sizeof(addr);
@@ -588,13 +650,18 @@ static bool _do_udp_recv(int fd)
 	int len = recvfrom(fd, buf, sizeof(buf), 0, (struct sockaddr*)(&addr), &addrlen);
 	if(len == -1)
 	{
-		if(WSAGetLastError() == WSAEWOULDBLOCK || WSAGetLastError() == WSAECONNRESET)
-		{
-			return true;
-		}
+		DWORD err = WSAGetLastError();
 		
-		return false;
+		switch(err)
+		{
+			case WSAEWOULDBLOCK: return 0;
+			case WSAECONNRESET: return 1;
+			default: return -1;
+		}
 	}
+	
+	__atomic_add_fetch(&recv_packets_udp, 1, __ATOMIC_RELAXED);
+	__atomic_add_fetch(&recv_bytes_udp, len, __ATOMIC_RELAXED);
 	
 	if(ipx_encap_type == ENCAP_TYPE_DOSBOX)
 	{
@@ -603,7 +670,7 @@ static bool _do_udp_recv(int fd)
 			|| addr.sin_port != dosbox_server_addr.sin_port)
 		{
 			/* Ignore packet from wrong address. */
-			return true;
+			return 1;
 		}
 		
 		if(dosbox_state == DOSBOX_REGISTERING)
@@ -623,7 +690,7 @@ static bool _do_udp_recv(int fd)
 		_handle_udp_recv((ipx_packet*)(buf), len, addr);
 	}
 	
-	return true;
+	return 1;
 }
 
 static void _handle_pcap_frame(u_char *user, const struct pcap_pkthdr *pkt_header, const u_char *pkt_data)
@@ -766,6 +833,10 @@ static DWORD router_main(void *arg)
 		
 		if(ipx_encap_type == ENCAP_TYPE_DOSBOX)
 		{
+			lock_sockets();
+			coalesce_flush_waiting();
+			unlock_sockets();
+			
 			if(dosbox_state == DOSBOX_DISCONNECTED)
 			{
 				uint64_t now = get_ticks();
@@ -819,14 +890,43 @@ static DWORD router_main(void *arg)
 		}
 		else if(ipx_encap_type == ENCAP_TYPE_DOSBOX)
 		{
-			if(!_do_udp_recv(private_socket))
+			int status = 0;
+			
+			for(int i = 0; i < MAX_RECV_PER_LOOP; ++i)
+			{
+				status = _do_udp_recv(private_socket);
+				if(status <= 0)
+				{
+					break;
+				}
+			}
+			
+			if(status < 0)
 			{
 				exit_status = 1;
 				break;
 			}
 		}
 		else{
-			if(!_do_udp_recv(shared_socket) || !_do_udp_recv(private_socket))
+			int status = 0;
+			
+			for(int i = 0; i < MAX_RECV_PER_LOOP; ++i)
+			{
+				int s1 = _do_udp_recv(shared_socket);
+				int s2 = _do_udp_recv(private_socket);
+				
+				if(s1 < 0 || s2 < 0)
+				{
+					status = -1;
+					break;
+				}
+				else if(s1 == 0 && s2 == 0)
+				{
+					break;
+				}
+			}
+			
+			if(status < 0)
 			{
 				exit_status = 1;
 				break;

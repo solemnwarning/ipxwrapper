@@ -57,10 +57,15 @@ struct FuncStats ipxwrapper_fstats[] = {
 	#undef FPROF_DECL
 };
 
+static uint64_t perf_counter_freq = 0;
+
 const unsigned int ipxwrapper_fstats_size = sizeof(ipxwrapper_fstats) / sizeof(*ipxwrapper_fstats);
 
 unsigned int send_packets = 0, send_bytes = 0;  /* Sent from emulated socket */
 unsigned int recv_packets = 0, recv_bytes = 0;  /* Forwarded to emulated socket */
+
+unsigned int send_packets_udp = 0, send_bytes_udp = 0;  /* Sent over UDP transport */
+unsigned int recv_packets_udp = 0, recv_bytes_udp = 0;  /* Received over UDP transport */
 
 static void init_cs(CRITICAL_SECTION *cs)
 {
@@ -82,8 +87,17 @@ static void report_packet_stats(void)
 	unsigned int my_recv_packets = __atomic_exchange_n(&recv_packets, 0, __ATOMIC_RELAXED);
 	unsigned int my_recv_bytes   = __atomic_exchange_n(&recv_bytes,   0, __ATOMIC_RELAXED);
 	
+	unsigned int my_send_packets_udp = __atomic_exchange_n(&send_packets_udp, 0, __ATOMIC_RELAXED);
+	unsigned int my_send_bytes_udp   = __atomic_exchange_n(&send_bytes_udp,   0, __ATOMIC_RELAXED);
+	
+	unsigned int my_recv_packets_udp = __atomic_exchange_n(&recv_packets_udp, 0, __ATOMIC_RELAXED);
+	unsigned int my_recv_bytes_udp   = __atomic_exchange_n(&recv_bytes_udp,   0, __ATOMIC_RELAXED);
+	
 	log_printf(LOG_INFO, "IPX sockets sent %u packets (%u bytes)", my_send_packets, my_send_bytes);
 	log_printf(LOG_INFO, "IPX sockets received %u packets (%u bytes)", my_recv_packets, my_recv_bytes);
+	
+	log_printf(LOG_INFO, "UDP sockets sent %u packets (%u bytes)", my_send_packets_udp, my_send_bytes_udp);
+	log_printf(LOG_INFO, "UDP sockets received %u packets (%u bytes)", my_recv_packets_udp, my_recv_bytes_udp);
 }
 
 static DWORD WINAPI prof_thread_main(LPVOID lpParameter)
@@ -104,6 +118,12 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 {
 	if(fdwReason == DLL_PROCESS_ATTACH)
 	{
+		LARGE_INTEGER pc_freq;
+		if(QueryPerformanceFrequency(&pc_freq))
+		{
+			perf_counter_freq = pc_freq.QuadPart;
+		}
+		
 		fprof_init(stub_fstats, NUM_STUBS);
 		fprof_init(ipxwrapper_fstats, ipxwrapper_fstats_size);
 		
@@ -111,6 +131,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 		
 		log_printf(LOG_INFO, "IPXWrapper %s", version_string);
 		log_printf(LOG_INFO, "Compiled at %s", compile_time);
+		log_printf(LOG_INFO, "Performance counter: %lld Hz", perf_counter_freq);
 		
 		if(!getenv("SystemRoot"))
 		{
@@ -306,5 +327,21 @@ uint64_t get_ticks(void)
 	}
 	else{
 		return GetTickCount();
+	}
+}
+
+uint64_t get_uticks(void)
+{
+	LARGE_INTEGER pc_tick;
+	
+	if(perf_counter_freq == 0 || !QueryPerformanceCounter(&pc_tick))
+	{
+		/* Fall back to GetTickCount() if there is no high-resolution
+		 * performance counter available.
+		*/
+		return get_ticks() * 1000;
+	}
+	else{
+		return pc_tick.QuadPart / (perf_counter_freq / 1000000);
 	}
 }
