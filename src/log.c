@@ -1,5 +1,5 @@
 /* ipxwrapper - Logging functions
- * Copyright (C) 2011 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2011-2024 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -27,11 +27,14 @@
 static HANDLE log_fh = NULL;
 static HANDLE log_mutex = NULL;
 
-void log_open(const char *file) {
+void log_init()
+{
 	if(!(log_mutex = CreateMutex(NULL, FALSE, NULL))) {
 		abort();
 	}
-	
+}
+
+void log_open(const char *file) {
 	log_fh = CreateFile(
 		file,
 		GENERIC_READ | GENERIC_WRITE,
@@ -53,8 +56,10 @@ void log_close() {
 		log_fh = NULL;
 	}
 	
-	CloseHandle(log_mutex);
-	log_mutex = NULL;
+	if(log_mutex) {
+		CloseHandle(log_mutex);
+		log_mutex = NULL;
+	}
 }
 
 void log_printf(enum ipx_log_level level, const char *fmt, ...) {
@@ -65,6 +70,10 @@ void log_printf(enum ipx_log_level level, const char *fmt, ...) {
 	}
 	
 	WaitForSingleObject(log_mutex, INFINITE);
+	
+	if(!log_fh) {
+		log_open("ipxwrapper.log");
+	}
 	
 	if(!log_fh) {
 		ReleaseMutex(log_mutex);

@@ -1,5 +1,5 @@
 /* IPXWrapper - Stub DLL functions
- * Copyright (C) 2008-2023 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2008-2024 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -33,7 +33,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
 	{
 		fprof_init(stub_fstats, NUM_STUBS);
 		
-		log_open("ipxwrapper.log");
+		log_init();
 		
 		main_config_t config = get_main_config();
 		

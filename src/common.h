@@ -1,5 +1,5 @@
 /* IPXWrapper - Common header
- * Copyright (C) 2011-2021 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2011-2024 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -35,7 +35,8 @@ enum ipx_log_level {
 	LOG_DEBUG,
 	LOG_INFO = 4,
 	LOG_WARNING,
-	LOG_ERROR
+	LOG_ERROR,
+	LOG_DISABLED = 7,
 };
 
 extern enum ipx_log_level min_log_level;
@@ -74,6 +75,7 @@ void unload_dlls(void);
 void __stdcall *find_sym(unsigned int dllnum, const char *symbol);
 void __stdcall log_call(unsigned int entry, const char *symbol, unsigned int target);
 
+void log_init();
 void log_open(const char *file);
 void log_close();
 void log_printf(enum ipx_log_level level, const char *fmt, ...);

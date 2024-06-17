@@ -1,5 +1,5 @@
 /* ipxwrapper - Library functions
- * Copyright (C) 2008-2023 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2008-2024 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -127,7 +127,11 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 		fprof_init(stub_fstats, NUM_STUBS);
 		fprof_init(ipxwrapper_fstats, ipxwrapper_fstats_size);
 		
-		log_open("ipxwrapper.log");
+		log_init();
+		
+		main_config = get_main_config();
+		min_log_level = main_config.log_level;
+		ipx_encap_type = main_config.encap_type;
 		
 		log_printf(LOG_INFO, "IPXWrapper %s", version_string);
 		log_printf(LOG_INFO, "Compiled at %s", compile_time);
@@ -143,10 +147,6 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 			log_printf(LOG_INFO, "Setting SystemRoot to '%s'", env+11);
 			_putenv(env);
 		}
-		
-		main_config = get_main_config();
-		min_log_level = main_config.log_level;
-		ipx_encap_type = main_config.encap_type;
 		
 		if(main_config.fw_except)
 		{

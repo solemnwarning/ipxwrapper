@@ -1,5 +1,5 @@
 /* IPXWrapper - Configuration tool
- * Copyright (C) 2011-2023 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2011-2024 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -39,6 +39,7 @@ enum {
 	ID_NIC_NODE    = 14,
 	
 	ID_OPT_W95       = 22,
+	ID_OPT_LOG_ENABLE = 24,
 	ID_OPT_LOG_DEBUG = 25,
 	ID_OPT_LOG_TRACE = 26,
 	ID_OPT_PROFILE   = 27,
@@ -143,6 +144,7 @@ static struct {
 	
 	HWND box_options;
 	HWND opt_w95;
+	HWND opt_log_enable;
 	HWND opt_log_debug;
 	HWND opt_log_trace;
 	HWND opt_profile;
@@ -224,6 +226,7 @@ static LRESULT CALLBACK main_wproc(HWND window, UINT msg, WPARAM wp, LPARAM lp) 
 						break;
 					}
 					
+					case ID_OPT_LOG_ENABLE:
 					case ID_OPT_LOG_DEBUG: {
 						main_window_update();
 						break;
@@ -596,15 +599,20 @@ static bool save_config()
 	}
 	
 	main_config.w95_bug   = get_checkbox(wh.opt_w95);
-	main_config.log_level = LOG_INFO;
+	main_config.log_level = LOG_DISABLED;
 	
-	if(get_checkbox(wh.opt_log_debug))
+	if(get_checkbox(wh.opt_log_enable))
 	{
-		main_config.log_level = LOG_DEBUG;
+		main_config.log_level = LOG_INFO;
 		
-		if(get_checkbox(wh.opt_log_trace))
+		if(get_checkbox(wh.opt_log_debug))
 		{
-			main_config.log_level = LOG_CALL;
+			main_config.log_level = LOG_DEBUG;
+			
+			if(get_checkbox(wh.opt_log_trace))
+			{
+				main_config.log_level = LOG_CALL;
+			}
 		}
 	}
 	
@@ -818,8 +826,9 @@ static void main_window_init()
 	
 	/* +- Other options --------------------------------------+
 	 * | □ Enable Windows 95 SO_BROADCAST bug                    |
-	 * | □ Log debugging messages                                |
-	 * | □ Log WinSock API calls                                 |
+	 * | □ Enable logging                                        |
+	 * | □ Log debugging messages (slow)                         |
+	 * | □ Log WinSock API calls (slower!)                       |
 	 * | □ Log profiling counters                                |
 	 * +---------------------------------------------------------+
 	*/
@@ -827,15 +836,17 @@ static void main_window_init()
 	{
 		wh.box_options = create_GroupBox(wh.main, "Other options");
 		
-		wh.opt_w95       = create_checkbox(wh.box_options, "Enable Windows 95 SO_BROADCAST bug", ID_OPT_W95);
-		wh.opt_log_debug = create_checkbox(wh.box_options, "Log debugging messages", ID_OPT_LOG_DEBUG);
-		wh.opt_log_trace = create_checkbox(wh.box_options, "Log WinSock API calls", ID_OPT_LOG_TRACE);
-		wh.opt_profile   = create_checkbox(wh.box_options, "Log profiling counters", ID_OPT_PROFILE);
+		wh.opt_w95        = create_checkbox(wh.box_options, "Enable Windows 95 SO_BROADCAST bug", ID_OPT_W95);
+		wh.opt_log_enable = create_checkbox(wh.box_options, "Enable logging", ID_OPT_LOG_ENABLE);
+		wh.opt_log_debug  = create_checkbox(wh.box_options, "Log debugging messages (slow)", ID_OPT_LOG_DEBUG);
+		wh.opt_log_trace  = create_checkbox(wh.box_options, "Log WinSock API calls (even slower!)", ID_OPT_LOG_TRACE);
+		wh.opt_profile    = create_checkbox(wh.box_options, "Log profiling counters", ID_OPT_PROFILE);
 		
-		set_checkbox(wh.opt_w95,       main_config.w95_bug);
-		set_checkbox(wh.opt_log_debug, main_config.log_level <= LOG_DEBUG);
-		set_checkbox(wh.opt_log_trace, main_config.log_level <= LOG_CALL);
-		set_checkbox(wh.opt_profile,   main_config.profile);
+		set_checkbox(wh.opt_w95,        main_config.w95_bug);
+		set_checkbox(wh.opt_log_enable, main_config.log_level < LOG_DISABLED);
+		set_checkbox(wh.opt_log_debug,  main_config.log_level <= LOG_DEBUG);
+		set_checkbox(wh.opt_log_trace,  main_config.log_level <= LOG_CALL);
+		set_checkbox(wh.opt_profile,    main_config.profile);
 	}
 	
 	wh.ok_btn  = create_child(wh.main, "BUTTON", "OK",     BS_PUSHBUTTON | WS_TABSTOP, 0, ID_OK);
@@ -1006,6 +1017,9 @@ static void main_window_init()
 		MoveWindow(wh.opt_w95, BOX_SIDE_PAD, box_options_y, BOX_INNER_WIDTH, text_h, TRUE);
 		box_options_y += text_h + 2;
 		
+		MoveWindow(wh.opt_log_enable, BOX_SIDE_PAD, box_options_y, BOX_INNER_WIDTH, text_h, TRUE);
+		box_options_y += text_h + 2;
+		
 		MoveWindow(wh.opt_log_debug, BOX_SIDE_PAD, box_options_y, BOX_INNER_WIDTH, text_h, TRUE);
 		box_options_y += text_h + 2;
 		
@@ -1058,7 +1072,9 @@ static void main_window_update()
 		SetWindowText(wh.nic_node, node_s);
 	}
 	
-	EnableWindow(wh.opt_log_trace, get_checkbox(wh.opt_log_debug));
+	EnableWindow(wh.opt_log_debug, get_checkbox(wh.opt_log_enable));
+	EnableWindow(wh.opt_log_trace, get_checkbox(wh.opt_log_enable) && get_checkbox(wh.opt_log_debug));
+	EnableWindow(wh.opt_profile,   get_checkbox(wh.opt_log_enable));
 	
 	std::vector<HWND> visible_groups = {
 		wh.box_encap,
