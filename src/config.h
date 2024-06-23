@@ -77,7 +77,7 @@ struct v1_iface_config {
 	unsigned char primary;
 } __attribute__((__packed__));
 
-main_config_t get_main_config(void);
+main_config_t get_main_config(bool ignore_ini);
 bool set_main_config(const main_config_t *config);
 
 iface_config_t get_iface_config(addr48_t hwaddr);

@@ -35,7 +35,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
 		
 		log_init();
 		
-		main_config_t config = get_main_config();
+		main_config_t config = get_main_config(false);
 		
 		min_log_level = config.log_level;
 		

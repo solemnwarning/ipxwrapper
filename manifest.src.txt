@@ -1,4 +1,5 @@
 changes.txt
+ipxwrapper.ini.example
 license.txt
 readme.txt
 readme.dev.txt
@@ -7,6 +8,10 @@ Makefile
 manifest.bin.txt
 manifest.src.txt
 mkstubs.pl
+
+inih/LICENSE.txt
+inih/ini.c
+inih/ini.h
 
 src/addr.c
 src/addr.h

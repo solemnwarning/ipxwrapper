@@ -1,5 +1,5 @@
 /* IPXWrapper - Common functions
- * Copyright (C) 2011-2023 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2011-2024 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -368,4 +368,54 @@ void __stdcall *find_sym(unsigned int dllnum, const char *symbol) {
 void __stdcall log_call(unsigned int entry, const char *symbol, unsigned int target)
 {
 	log_printf(LOG_CALL, "%s:%s -> %s", dll_names[entry], symbol, dll_names[target]);
+}
+
+wchar_t *get_module_path(HMODULE module)
+{
+	size_t size   = 256;
+	wchar_t *path = NULL;
+	
+	do {
+		free(path);
+		
+		size *= 2;
+		
+		if(!(path = (wchar_t*)(malloc(sizeof(wchar_t) * size))))
+		{
+			SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+			return NULL;
+		}
+	} while(GetModuleFileNameW(module, path, size) == size);
+	
+	return path;
+}
+
+wchar_t *get_module_relative_path(HMODULE module, const wchar_t *relative_path)
+{
+	wchar_t *module_path = get_module_path(module);
+	if(module_path == NULL)
+	{
+		return NULL;
+	}
+	
+	wchar_t *module_path_last_slash = wcsrchr(module_path, '\\');
+	
+	size_t module_path_base_len = module_path_last_slash != NULL
+		? (module_path_last_slash - module_path) + 1
+		: 0;
+	
+	wchar_t *path = malloc((module_path_base_len + wcslen(relative_path) + 1) * sizeof(wchar_t));
+	if(path == NULL)
+	{
+		free(module_path);
+		SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+		return NULL;
+	}
+	
+	memcpy(path, module_path, (module_path_base_len * sizeof(wchar_t)));
+	wcscpy((path + module_path_base_len), relative_path);
+	
+	free(module_path);
+	
+	return path;
 }

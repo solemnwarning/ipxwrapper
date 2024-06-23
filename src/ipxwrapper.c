@@ -129,7 +129,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 		
 		log_init();
 		
-		main_config = get_main_config();
+		main_config = get_main_config(false);
 		min_log_level = main_config.log_level;
 		ipx_encap_type = main_config.encap_type;
 		

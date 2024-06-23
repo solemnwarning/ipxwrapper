@@ -75,6 +75,9 @@ void unload_dlls(void);
 void __stdcall *find_sym(unsigned int dllnum, const char *symbol);
 void __stdcall log_call(unsigned int entry, const char *symbol, unsigned int target);
 
+wchar_t *get_module_path(HMODULE module);
+wchar_t *get_module_relative_path(HMODULE module, const wchar_t *relative_path);
+
 void log_init();
 void log_open(const char *file);
 void log_close();

@@ -97,7 +97,7 @@ static const bool PCAP_INSTALLED = _pcap_installed();
 
 static std::vector<iface> nics;
 
-static main_config_t main_config = get_main_config();
+static main_config_t main_config = get_main_config(true);
 static addr48_t primary_iface    = get_primary_iface();
 
 static std::string inv_error;

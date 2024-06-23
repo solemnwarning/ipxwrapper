@@ -1,5 +1,5 @@
 /* ipxwrapper - Configuration header
- * Copyright (C) 2011-2021 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2011-2024 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -17,11 +17,15 @@
 
 #include <stdio.h>
 
+#include "../inih/ini.h"
+
 #include "config.h"
 #include "common.h"
 #include "interface.h"
 
-main_config_t get_main_config(void)
+static int process_ini_directive(void *context, const char *section, const char *name, const char *value, int lineno);
+
+main_config_t get_main_config(bool ignore_ini)
 {
 	/* Defaults */
 	
@@ -38,6 +42,35 @@ main_config_t get_main_config(void)
 	config.dosbox_server_addr = NULL;
 	config.dosbox_server_port = 213;
 	config.dosbox_coalesce = false;
+	
+	if(!ignore_ini)
+	{
+		wchar_t *ini_path = get_module_relative_path(NULL, L"ipxwrapper.ini");
+		
+		FILE *ini_file = _wfopen(ini_path, L"r");
+		if(ini_file != NULL)
+		{
+			int ini_result = ini_parse_file(ini_file, &process_ini_directive, &config);
+			
+			if(ini_result > 0)
+			{
+				log_printf(LOG_ERROR, "Parse error in ipxwrapper.ini at line %d", ini_result);
+			}
+			
+			/* Check log_level here because min_log_level isn't initialised yet. */
+			if(config.log_level <= LOG_INFO)
+			{
+				log_printf(LOG_INFO, "Loaded configuration from %S", ini_path);
+			}
+			
+			fclose(ini_file);
+			free(ini_path);
+			
+			return config;
+		}
+		
+		free(ini_path);
+	}
 	
 	HKEY reg = reg_open_main(false);
 	
@@ -83,6 +116,97 @@ main_config_t get_main_config(void)
 	reg_close(reg);
 	
 	return config;
+}
+
+static int process_ini_directive(void *context, const char *section, const char *name, const char *value, int lineno)
+{
+	main_config_t *config = (main_config_t*)(context);
+	
+	if(strcmp(section, "") != 0)
+	{
+		log_printf(LOG_ERROR, "Ignoring directive in unknown ipxwrapper.ini section \"%s\"", section);
+		return 1;
+	}
+	
+	if(strcmp(name, "dosbox server address") == 0)
+	{
+		free(config->dosbox_server_addr);
+		config->dosbox_server_addr = NULL;
+		
+		config->dosbox_server_addr = strdup(value);
+		
+		if(config->dosbox_server_addr != NULL)
+		{
+			config->encap_type = ENCAP_TYPE_DOSBOX;
+		}
+	}
+	else if(strcmp(name, "dosbox server port") == 0)
+	{
+		int port = atoi(value);
+		
+		if(port >= 1 && port <= 65535)
+		{
+			config->dosbox_server_port = port;
+		}
+		else{
+			log_printf(LOG_ERROR, "Invalid \"dosbox server port\" (%s) specified in ipxwrapper.ini", value);
+		}
+	}
+	else if(strcmp(name, "coalesce packets") == 0)
+	{
+		if(strcmp(value, "yes") == 0)
+		{
+			config->dosbox_coalesce = true;
+		}
+		else if(strcmp(value, "no") == 0)
+		{
+			config->dosbox_coalesce = false;
+		}
+		else{
+			log_printf(LOG_ERROR, "Invalid \"coalesce packets\" (%s) specified in ipxwrapper.ini (expected \"yes\" or \"no\")", value);
+		}
+	}
+	else if(strcmp(name, "firewall exception") == 0)
+	{
+		if(strcmp(value, "yes") == 0)
+		{
+			config->fw_except = true;
+		}
+		else if(strcmp(value, "no") == 0)
+		{
+			config->fw_except = false;
+		}
+		else{
+			log_printf(LOG_ERROR, "Invalid \"firewall exception\" (%s) specified in ipxwrapper.ini (expected \"yes\" or \"no\")", value);
+		}
+	}
+	else if(strcmp(name, "logging") == 0)
+	{
+		if(strcmp(value, "none") == 0)
+		{
+			config->log_level = LOG_DISABLED;
+		}
+		else if(strcmp(value, "info") == 0)
+		{
+			config->log_level = LOG_INFO;
+		}
+		else if(strcmp(value, "debug") == 0)
+		{
+			config->log_level = LOG_DEBUG;
+		}
+		else if(strcmp(value, "trace") == 0)
+		{
+			config->log_level = LOG_CALL;
+		}
+		else{
+			log_printf(LOG_ERROR, "Invalid \"logging\" (%s) specified in ipxwrapper.ini (expected \"none\", \"info\", \"debug\" or \"trace\")", value);
+		}
+	}
+	else{
+		log_printf(LOG_ERROR, "Unknown directive \"%s\" in ipxwrapper.ini", name);
+	}
+	
+	return 1;
 }
 
 bool set_main_config(const main_config_t *config)

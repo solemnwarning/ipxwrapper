@@ -1,0 +1,39 @@
+; Example IPXWrapper configuration file
+;
+; If this file is named ipxwrapper.ini and placed alongside the application
+; executable like ipxwrapper.dll, it will be loaded and any settings in the
+; registry created using ipxconfig.exe will be ignored.
+
+; Uncomment the lines below to use a DOSBox IPX server
+;
+; dosbox server address = dosbox.example.com
+; dosbox server port = 213
+
+; Uncomment the line below to enable "packet coalescing"
+;
+; When packet coalescing is enabled and the application sends large numbers of
+; small packets in quick succession, IPXWrapper will batch them up into larger
+; packets to reduce packet loss and improve throughput.
+;
+; NOTE: This requires IPXWrapper 0.7.1 or later on all computers.
+;
+; coalesce packets = yes
+
+; Uncomment the line below to automatically create a Windows Firewall exception
+; for the application at start-up.
+;
+; firewall exception = yes
+
+; Uncomment the line below to disable all logging
+;
+; logging = none
+
+; Uncomment the line below to enable debug logging
+; (this will slow down most games)
+;
+; logging = debug
+
+; Uncomment the line below to enable debug logging with full API tracing
+; (slows down games even more!)
+;
+; logging = trace
