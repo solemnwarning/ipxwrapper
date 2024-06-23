@@ -12,6 +12,8 @@ src/addr.c
 src/addr.h
 src/addrcache.c
 src/addrcache.h
+src/coalesce.c
+src/coalesce.h
 src/common.c
 src/common.h
 src/config.c
@@ -22,6 +24,8 @@ src/directplay.c
 src/dpwsockx.def
 src/dpwsockx_stubs.txt
 src/firewall.c
+src/funcprof.c
+src/funcprof.h
 src/interface.c
 src/interface.h
 src/interface2.c
@@ -29,6 +33,7 @@ src/interface2.h
 src/ipxwrapper.c
 src/ipxwrapper.def
 src/ipxwrapper.h
+src/ipxwrapper_prof_defs.h
 src/ipxwrapper_stubs.txt
 src/log.c
 src/mswsock.def
@@ -37,11 +42,11 @@ src/router.c
 src/router.h
 src/stubdll.c
 src/winsock.c
-src/wpcap_stubs.txt
 src/wsock32.def
 src/wsock32_stubs.txt
 
 src/ipxconfig.cpp
+src/ipxconfig_stubs.txt
 icons/ipxconfig.ico
 icons/ipxconfig.rc
 icons/ipxconfig-16.png
