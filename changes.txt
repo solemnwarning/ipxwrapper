@@ -1,3 +1,13 @@
+Version 0.7.1:
+	Added "packet coalescing" option to improve performance for games which
+	send/receive exceptionally high numbers of packets.
+	
+	Minor optimisations in packet handling code.
+	
+	Added profiling functionality to guide future optimisations.
+	
+	Added option to disable logging entirely.
+
 Version 0.7.0:
 	Added support for DOSBox IPX servers.
 	

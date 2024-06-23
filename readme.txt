@@ -82,5 +82,5 @@ The following have been reported to work:
 License
 -------
 
-Copyright (C) 2008-2023 Daniel Collins <solemnwarning@solemnwarning.net>
+Copyright (C) 2008-2024 Daniel Collins <solemnwarning@solemnwarning.net>
 Read license.txt for licensing terms.
