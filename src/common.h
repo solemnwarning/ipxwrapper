@@ -78,6 +78,10 @@ void __stdcall log_call(unsigned int entry, const char *symbol, unsigned int tar
 wchar_t *get_module_path(HMODULE module);
 wchar_t *get_module_relative_path(HMODULE module, const wchar_t *relative_path);
 
+void init_critical_section(CRITICAL_SECTION *critical_section);
+
+bool windows_at_least_2000();
+
 void log_init();
 void log_open(const char *file);
 void log_close();

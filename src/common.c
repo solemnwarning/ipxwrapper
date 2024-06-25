@@ -345,7 +345,17 @@ void unload_dlls(void) {
 	
 	for(i = 0; dll_names[i]; i++) {
 		if(dll_handles[i]) {
-			FreeLibrary(dll_handles[i]);
+			DWORD flt_id;
+			HANDLE flt_thread = CreateThread(NULL, 0, &FreeLibrary, dll_handles[i], 0, &flt_id);
+			if(flt_thread == NULL)
+			{
+				log_printf(LOG_ERROR, "FreeLibrary thread creation failed (%s) - %s will not be unloaded!\n", w32_error(GetLastError()), dll_names[i]);
+			}
+			else{
+				/* Detatch thread. */
+				CloseHandle(flt_thread);
+			}
+			
 			dll_handles[i] = NULL;
 		}
 	}
@@ -418,4 +428,52 @@ wchar_t *get_module_relative_path(HMODULE module, const wchar_t *relative_path)
 	free(module_path);
 	
 	return path;
+}
+
+void init_critical_section(CRITICAL_SECTION *critical_section)
+{
+	/* > If the function succeeds, the return value is nonzero.  If the
+	 * > function fails, the return value is zero. To get extended error
+	 * > information, call GetLastError().  For Windows Me/98/95:  This
+	 * > function has no return value. If the function fails, it will
+	 * > raise an exception.
+	 *
+	 * - https://www.tenouk.com/crstufunction3.html
+	 *
+	 * The above goes against what the documentation (MSDN '98) says, but
+	 * in testing, it returns FALSE on Windows 98 and GetLastError() yields
+	 * nonsensical error codes, so its probably right and we ignore the
+	 * result when running on pre-Windows 2000 systems.
+	*/
+
+	if(!InitializeCriticalSectionAndSpinCount(critical_section, 0x80000000) && windows_at_least_2000())
+	{
+		log_printf(LOG_ERROR, "Failed to initialise critical section: %s", w32_error(GetLastError()));
+		abort();
+	}
+}
+
+bool windows_at_least_2000()
+{
+	static int result = 0;
+	int result_view = __atomic_load_n(&result, __ATOMIC_SEQ_CST);
+
+	if(result_view == 0)
+	{
+		OSVERSIONINFO osver;
+		osver.dwOSVersionInfoSize = sizeof(osver);
+		GetVersionEx(&osver);
+		
+		if(osver.dwMajorVersion >= 5)
+		{
+			__atomic_store_n(&result, 1, __ATOMIC_SEQ_CST);
+			return true;
+		}
+		else{
+			__atomic_store_n(&result, -1, __ATOMIC_SEQ_CST);
+			return false;
+		}
+	}
+
+	return result_view > 0;
 }

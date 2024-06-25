@@ -36,10 +36,16 @@ void log_init()
 }
 
 void log_open(const char *file) {
+	DWORD log_share_mode = FILE_SHARE_READ | FILE_SHARE_WRITE;
+	if(windows_at_least_2000())
+	{
+		log_share_mode |= FILE_SHARE_DELETE;
+	}
+	
 	log_fh = CreateFile(
 		file,
 		GENERIC_READ | GENERIC_WRITE,
-		FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE,
+		log_share_mode,
 		NULL,
 		OPEN_ALWAYS,
 		FILE_ATTRIBUTE_NORMAL | FILE_FLAG_WRITE_THROUGH,
@@ -90,14 +96,24 @@ void log_printf(enum ipx_log_level level, const char *fmt, ...) {
 	
 	mirtoto_snprintf(tstr, 64, "[%u.%02u, thread %u] ", (unsigned int)(called/1000), (unsigned int)((called % 1000) / 10), (unsigned int)GetCurrentThreadId());
 	
-	OVERLAPPED off;
-	off.Offset = 0;
-	off.OffsetHigh = 0;
-	off.hEvent = 0;
+	/* File locking isn't implemented on Windows 98, so we just skip it and
+	 * hope we don't wind up with any interleaves writes from parallel
+	 * threads (not much chance of an SMP Windows 98 machine anyway).
+	*/
+	bool use_locking = windows_at_least_2000();
 	
-	if(!LockFileEx(log_fh, LOCKFILE_EXCLUSIVE_LOCK, 0, 1, 0, &off)) {
-		ReleaseMutex(log_mutex);
-		return;
+	if(use_locking)
+	{
+		OVERLAPPED off;
+		off.Offset = 0;
+		off.OffsetHigh = 0;
+		off.hEvent = 0;
+		
+		// ERROR_CALL_NOT_IMPLEMENTED
+		if(!LockFileEx(log_fh, LOCKFILE_EXCLUSIVE_LOCK, 0, 1, 0, &off)) {
+			ReleaseMutex(log_mutex);
+			return;
+		}
 	}
 	
 	if(SetFilePointer(log_fh, 0, NULL, FILE_END) != INVALID_SET_FILE_POINTER) {
@@ -108,7 +124,10 @@ void log_printf(enum ipx_log_level level, const char *fmt, ...) {
 		WriteFile(log_fh, "\r\n", 2, &written, NULL);
 	}
 	
-	UnlockFile(log_fh, 0, 0, 1, 0);
+	if(use_locking)
+	{
+		UnlockFile(log_fh, 0, 0, 1, 0);
+	}
 	
 	ReleaseMutex(log_mutex);
 }

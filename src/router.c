@@ -174,7 +174,9 @@ void router_init(void)
 	
 	router_running = true;
 	
-	if(!(router_thread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)(&router_main), NULL, 0, NULL)))
+	DWORD router_thread_id;
+	
+	if(!(router_thread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)(&router_main), NULL, 0, &router_thread_id)))
 	{
 		log_printf(LOG_ERROR, "Cannot create router worker thread: %s", w32_error(GetLastError()));
 		abort();

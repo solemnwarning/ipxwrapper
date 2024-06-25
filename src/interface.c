@@ -1,5 +1,5 @@
 /* IPXWrapper - Interface functions
- * Copyright (C) 2011-2023 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2011-2024 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -399,11 +399,7 @@ void ipx_interfaces_init(void)
 	interface_cache       = NULL;
 	interface_cache_ctime = 0;
 	
-	if(!InitializeCriticalSectionAndSpinCount(&interface_cache_cs, 0x80000000))
-	{
-		log_printf(LOG_ERROR, "Failed to initialise critical section: %s", w32_error(GetLastError()));
-		abort();
-	}
+	init_critical_section(&interface_cache_cs);
 	
 	/* Dump the interface lists for debugging... */
 	

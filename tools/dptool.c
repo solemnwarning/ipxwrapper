@@ -1,5 +1,5 @@
 /* IPXWrapper test tools
- * Copyright (C) 2015 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2015-2024 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -199,7 +199,8 @@ int main(int argc, char **argv)
 		free(conn);
 	}
 	
-	HANDLE recv_thread = CreateThread(NULL, 0, &recv_thread_main, dp, 0, NULL);
+	DWORD recv_thread_id;
+	HANDLE recv_thread = CreateThread(NULL, 0, &recv_thread_main, dp, 0, &recv_thread_id);
 	assert(recv_thread);
 	
 	char line[1024];

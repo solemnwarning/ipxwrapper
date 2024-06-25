@@ -1,5 +1,5 @@
 /* IPXWrapper test tools
- * Copyright (C) 2014-2023 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2014-2024 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -96,7 +96,8 @@ int main(int argc, char **argv)
 	
 	assert(bind(sock, (struct sockaddr*)(&local_addr), sizeof(local_addr)) == 0);
 	
-	HANDLE send_thread_h = CreateThread(NULL, 0, &send_thread, &sock, 0, NULL);
+	DWORD send_thread_id;
+	HANDLE send_thread_h = CreateThread(NULL, 0, &send_thread, &sock, 0, &send_thread_id);
 	assert(send_thread_h != NULL);
 	
 	{

@@ -158,7 +158,8 @@ static BOOL init_worker(IDirectPlaySP *sp, struct sp_data *sp_data)
 		return TRUE;
 	}
 	
-	sp_data->worker_thread = CreateThread(NULL, 0, &worker_main, sp, 0, NULL);
+	DWORD worker_thread_id;
+	sp_data->worker_thread = CreateThread(NULL, 0, &worker_main, sp, 0, &worker_thread_id);
 	if(!sp_data->worker_thread)
 	{
 		log_printf(LOG_ERROR, "Failed to create worker thread");
@@ -676,10 +677,7 @@ HRESULT WINAPI SPInit(LPSPINITDATA data) {
 	
 	struct sp_data sp_data;
 	
-	if(!InitializeCriticalSectionAndSpinCount(&(sp_data.lock), 0x80000000)) {
-		log_printf(LOG_ERROR, "Error initialising critical section: %s", w32_error(GetLastError()));
-		goto FAIL2;
-	}
+	init_critical_section(&(sp_data.lock));
 	
 	if((sp_data.event = WSACreateEvent()) == WSA_INVALID_EVENT) {
 		log_printf(LOG_ERROR, "Error creating WSA event object: %s", w32_error(WSAGetLastError()));
