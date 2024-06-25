@@ -1,5 +1,5 @@
 /* IPXWrapper - Address cache
- * Copyright (C) 2008-2023 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2008-2024 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -101,11 +101,7 @@ static void host_table_delete(host_table_t *host)
 /* Initialise the address cache */
 void addr_cache_init(void)
 {
-	if(!InitializeCriticalSectionAndSpinCount(&host_table_cs, 0x80000000))
-	{
-		log_printf(LOG_ERROR, "Failed to initialise critical section: %s", w32_error(GetLastError()));
-		abort();
-	}
+	init_critical_section(&host_table_cs);
 }
 
 /* Free all resources used by the address cache */

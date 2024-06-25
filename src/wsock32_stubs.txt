@@ -76,3 +76,8 @@ TransmitFile                   wsock32.dll       TransmitFile                   
 AcceptEx                       wsock32.dll       AcceptEx                       32
 GetAcceptExSockaddrs           wsock32.dll       GetAcceptExSockaddrs           32
 WSHEnumProtocols               ipxwrapper.dll    WSHEnumProtocols               16
+Arecv                          wsock32.dll       Arecv
+Asend                          wsock32.dll       Asend
+NSPStartup                     wsock32.dll       NSPStartup
+WsControl                      wsock32.dll       WsControl
+closesockinfo                  wsock32.dll       closesockinfo

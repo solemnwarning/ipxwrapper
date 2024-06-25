@@ -67,15 +67,6 @@ unsigned int recv_packets = 0, recv_bytes = 0;  /* Forwarded to emulated socket 
 unsigned int send_packets_udp = 0, send_bytes_udp = 0;  /* Sent over UDP transport */
 unsigned int recv_packets_udp = 0, recv_bytes_udp = 0;  /* Received over UDP transport */
 
-static void init_cs(CRITICAL_SECTION *cs)
-{
-	if(!InitializeCriticalSectionAndSpinCount(cs, 0x80000000))
-	{
-		log_printf(LOG_ERROR, "Failed to initialise critical section: %s", w32_error(GetLastError()));
-		abort();
-	}
-}
-
 static HANDLE prof_thread_handle = NULL;
 static HANDLE prof_thread_exit = NULL;
 
@@ -137,6 +128,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 		log_printf(LOG_INFO, "Compiled at %s", compile_time);
 		log_printf(LOG_INFO, "Performance counter: %lld Hz", perf_counter_freq);
 		
+		#if 0
 		if(!getenv("SystemRoot"))
 		{
 			log_printf(LOG_WARNING, "SystemRoot is not set in the environment");
@@ -147,6 +139,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 			log_printf(LOG_INFO, "Setting SystemRoot to '%s'", env+11);
 			_putenv(env);
 		}
+		#endif
 		
 		if(main_config.fw_except)
 		{
@@ -158,7 +151,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 		
 		ipx_interfaces_init();
 		
-		init_cs(&sockets_cs);
+		init_critical_section(&sockets_cs);
 		
 		WSADATA wsdata;
 		int err = WSAStartup(MAKEWORD(1,1), &wsdata);
@@ -177,13 +170,14 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 			prof_thread_exit = CreateEvent(NULL, FALSE, FALSE, NULL);
 			if(prof_thread_exit != NULL)
 			{
+				DWORD prof_thread_id;
 				prof_thread_handle = CreateThread(
 					NULL,               /* lpThreadAttributes */
 					0,                  /* dwStackSize */
 					&prof_thread_main,  /* lpStartAddress */
 					NULL,               /* lpParameter */
 					0,                  /* dwCreationFlags */
-					NULL);              /* lpThreadId */
+					&prof_thread_id);   /* lpThreadId */
 				
 				if(prof_thread_handle == NULL)
 				{

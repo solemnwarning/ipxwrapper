@@ -1,5 +1,5 @@
 /* ipxwrapper - Winsock functions
- * Copyright (C) 2008-2023 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2008-2024 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -344,15 +344,7 @@ SOCKET WSAAPI socket(int af, int type, int protocol)
 				return -1;
 			}
 			
-			if(!InitializeCriticalSectionAndSpinCount(&(recv_queue->refcount_lock), 0x80000000))
-			{
-				log_printf(LOG_ERROR, "Failed to initialise critical section: %s", w32_error(GetLastError()));
-				WSASetLastError(GetLastError());
-				
-				free(recv_queue);
-				free(nsock);
-				return -1;
-			}
+			init_critical_section(&(recv_queue->refcount_lock));
 			
 			recv_queue->refcount = 1;
 			recv_queue->n_ready = 0;

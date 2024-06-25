@@ -46,13 +46,14 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
 			prof_thread_exit = CreateEvent(NULL, FALSE, FALSE, NULL);
 			if(prof_thread_exit != NULL)
 			{
+				DWORD prof_thread_id;
 				prof_thread_handle = CreateThread(
 					NULL,               /* lpThreadAttributes */
 					0,                  /* dwStackSize */
 					&prof_thread_main,  /* lpStartAddress */
 					NULL,               /* lpParameter */
 					0,                  /* dwCreationFlags */
-					NULL);              /* lpThreadId */
+					&prof_thread_id);   /* lpThreadId */
 				
 				if(prof_thread_handle == NULL)
 				{
