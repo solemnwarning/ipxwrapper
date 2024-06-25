@@ -61,8 +61,10 @@ The following have been reported to work:
  * Darkstone: Evil Reigns
  * Delta Force 2
  * Diablo
+ * FIFA: Road to World Cup 98
  * Heroes of Might and Magic III
  * Laser Arena
+ * Machines: Wired for War
  * Need For Speed III - Hot Pursuit
  * Outlive
  * Rising Lands
