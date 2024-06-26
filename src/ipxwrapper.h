@@ -215,6 +215,7 @@ void add_self_to_firewall(void);
 
 INT APIENTRY r_EnumProtocolsA(LPINT,LPVOID,LPDWORD);
 INT APIENTRY r_EnumProtocolsW(LPINT,LPVOID,LPDWORD);
+INT WINAPI r_WSHEnumProtocols(LPINT protocols, LPWSTR lpTransportKeyName, LPVOID buf, LPDWORD bsptr);
 int PASCAL FAR r_WSARecvEx(SOCKET,char*,int,int*);
 int WSAAPI r_bind(SOCKET,const struct sockaddr*,int);
 int WSAAPI r_closesocket(SOCKET);

@@ -19,6 +19,7 @@ WSAResetEvent          ws2_32.dll     WSAResetEvent           4
 WSASetEvent            ws2_32.dll     WSASetEvent             4
 r_EnumProtocolsA       mswsock.dll    EnumProtocolsA         12
 r_EnumProtocolsW       mswsock.dll    EnumProtocolsW         12
+r_WSHEnumProtocols     mswsock.dll    WSHEnumProtocols       16
 r_WSARecvEx            mswsock.dll    WSARecvEx              16
 r_bind                 ws2_32.dll     bind                   12
 r_closesocket          ws2_32.dll     closesocket             4

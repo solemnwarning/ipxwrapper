@@ -96,41 +96,31 @@ static int _max_ipx_payload(void)
 	} while(name[i++] != '\0'); \
 }
 
-static int do_EnumProtocols(LPINT protocols, LPVOID buf, LPDWORD bsptr, bool unicode)
+static int do_EnumProtocols(LPINT lpiProtocols, LPVOID lpProtocolBuffer, LPDWORD lpdwBufferLength, bool unicode, int sys_result, DWORD real_bufsize)
 {
 	/* Determine which IPX protocols should be added to the list. */
 	
-	bool want_ipx   = !protocols;
-	bool want_spx   = !protocols;
-	bool want_spxii = !protocols;
+	bool want_ipx   = !lpiProtocols;
+	bool want_spx   = !lpiProtocols;
+	bool want_spxii = !lpiProtocols;
 	
-	for(int i = 0; protocols && protocols[i]; ++i)
+	for(int i = 0; lpiProtocols && lpiProtocols[i]; ++i)
 	{
-		if(protocols[i] == NSPROTO_IPX)
+		if(lpiProtocols[i] == NSPROTO_IPX)
 		{
 			want_ipx = true;
 		}
-		else if(protocols[i] == NSPROTO_SPX)
+		else if(lpiProtocols[i] == NSPROTO_SPX)
 		{
 			want_spx = true;
 		}
-		else if(protocols[i] == NSPROTO_SPXII)
+		else if(lpiProtocols[i] == NSPROTO_SPXII)
 		{
 			want_spxii = true;
 		}
 	}
 	
-	/* Stash the true buffer size and call EnumProtocols to get any
-	 * protocols provided by the OS.
-	*/
-	
-	DWORD bufsize = *bsptr;
-	
-	int rval = unicode
-		? r_EnumProtocolsW(protocols, buf, bsptr)
-		: r_EnumProtocolsA(protocols, buf, bsptr);
-	
-	if(rval == -1 && GetLastError() != ERROR_INSUFFICIENT_BUFFER)
+	if(sys_result == -1 && GetLastError() != ERROR_INSUFFICIENT_BUFFER)
 	{
 		return -1;
 	}
@@ -141,27 +131,22 @@ static int do_EnumProtocols(LPINT protocols, LPVOID buf, LPDWORD bsptr, bool uni
 	
 	if(want_ipx)
 	{
-		*bsptr += sizeof(PROTOCOL_INFO) + (strlen("IPX") + 1) * (!!unicode + 1);
+		*lpdwBufferLength += sizeof(PROTOCOL_INFO) + (strlen("IPX") + 1) * (!!unicode + 1);
 	}
 	
 	if(want_spx)
 	{
-		*bsptr += sizeof(PROTOCOL_INFO) + (strlen("SPX") + 1) * (!!unicode + 1);
+		*lpdwBufferLength += sizeof(PROTOCOL_INFO) + (strlen("SPX") + 1) * (!!unicode + 1);
 	}
 	
 	if(want_spxii)
 	{
-		*bsptr += sizeof(PROTOCOL_INFO) + (strlen("SPX II") + 1) * (!!unicode + 1);
+		*lpdwBufferLength += sizeof(PROTOCOL_INFO) + (strlen("SPX II") + 1) * (!!unicode + 1);
 	}
 	
-	if(*bsptr > bufsize)
+	if(*lpdwBufferLength > real_bufsize || sys_result == -1)
 	{
 		SetLastError(ERROR_INSUFFICIENT_BUFFER);
-		return -1;
-	}
-	
-	if(rval == -1)
-	{
 		return -1;
 	}
 	
@@ -170,13 +155,14 @@ static int do_EnumProtocols(LPINT protocols, LPVOID buf, LPDWORD bsptr, bool uni
 	 * the same under all Windows versions.
 	*/
 	
-	PROTOCOL_INFO *pinfo = buf;
+	PROTOCOL_INFO *pinfo = lpProtocolBuffer;
+	int our_result = sys_result;
 	
-	for(int i = 0; i < rval;)
+	for(int i = 0; i < our_result;)
 	{
 		if(pinfo[i].iAddressFamily == AF_IPX)
 		{
-			pinfo[i] = pinfo[--rval];
+			pinfo[i] = pinfo[--our_result];
 		}
 		else{
 			++i;
@@ -191,9 +177,9 @@ static int do_EnumProtocols(LPINT protocols, LPVOID buf, LPDWORD bsptr, bool uni
 	
 	size_t name_buf_size = 0;
 	
-	for(int i = 0; i < rval; ++i)
+	for(int i = 0; i < our_result; ++i)
 	{
-		if(pinfo[i].lpProtocol >= (char*)(buf) && pinfo[i].lpProtocol < (char*)(buf) + bufsize)
+		if(pinfo[i].lpProtocol >= (char*)(lpProtocolBuffer) && pinfo[i].lpProtocol < (char*)(lpProtocolBuffer) + real_bufsize)
 		{
 			name_buf_size += strsize(pinfo[i].lpProtocol, unicode);
 		}
@@ -206,9 +192,9 @@ static int do_EnumProtocols(LPINT protocols, LPVOID buf, LPDWORD bsptr, bool uni
 		return -1;
 	}
 	
-	for(int i = 0, off = 0; i < rval; ++i)
+	for(int i = 0, off = 0; i < our_result; ++i)
 	{
-		if(pinfo[i].lpProtocol >= (char*)(buf) && pinfo[i].lpProtocol < (char*)(buf) + bufsize)
+		if(pinfo[i].lpProtocol >= (char*)(lpProtocolBuffer) && pinfo[i].lpProtocol < (char*)(lpProtocolBuffer) + real_bufsize)
 		{
 			int len = strsize(pinfo[i].lpProtocol, unicode);
 			
@@ -219,61 +205,61 @@ static int do_EnumProtocols(LPINT protocols, LPVOID buf, LPDWORD bsptr, bool uni
 	
 	/* Calculate buffer offset so start adding names at. */
 	
-	char *name_base = (char*)(buf) + sizeof(PROTOCOL_INFO) * (rval + !!want_ipx + !!want_spx + !!want_spxii);
+	char *name_base = (char*)(lpProtocolBuffer) + sizeof(PROTOCOL_INFO) * (our_result + !!want_ipx + !!want_spx + !!want_spxii);
 	
 	/* Append additional PROTOCOL_INFO structures and name strings. */
 	
 	if(want_ipx)
 	{
-		pinfo[rval].dwServiceFlags = XP_CONNECTIONLESS | XP_MESSAGE_ORIENTED | XP_SUPPORTS_BROADCAST | XP_SUPPORTS_MULTICAST | XP_FRAGMENTATION;
-		pinfo[rval].iAddressFamily = AF_IPX;
-		pinfo[rval].iMaxSockAddr   = 16;
-		pinfo[rval].iMinSockAddr   = 14;
-		pinfo[rval].iSocketType    = SOCK_DGRAM;
-		pinfo[rval].iProtocol      = NSPROTO_IPX;
-		pinfo[rval].dwMessageSize  = 576;
-		pinfo[rval].lpProtocol     = name_base;
+		pinfo[our_result].dwServiceFlags = XP_CONNECTIONLESS | XP_MESSAGE_ORIENTED | XP_SUPPORTS_BROADCAST | XP_SUPPORTS_MULTICAST | XP_FRAGMENTATION;
+		pinfo[our_result].iAddressFamily = AF_IPX;
+		pinfo[our_result].iMaxSockAddr   = 16;
+		pinfo[our_result].iMinSockAddr   = 14;
+		pinfo[our_result].iSocketType    = SOCK_DGRAM;
+		pinfo[our_result].iProtocol      = NSPROTO_IPX;
+		pinfo[our_result].dwMessageSize  = 576;
+		pinfo[our_result].lpProtocol     = name_base;
 		
 		PUSH_NAME("IPX");
 		
-		++rval;
+		++our_result;
 	}
 	
 	if(want_spx)
 	{
-		pinfo[rval].dwServiceFlags = XP_GUARANTEED_DELIVERY | XP_GUARANTEED_ORDER | XP_PSEUDO_STREAM | XP_FRAGMENTATION;
-		pinfo[rval].iAddressFamily = AF_IPX;
-		pinfo[rval].iMaxSockAddr   = 16;
-		pinfo[rval].iMinSockAddr   = 14;
-		pinfo[rval].iSocketType    = SOCK_STREAM;
-		pinfo[rval].iProtocol      = NSPROTO_SPX;
-		pinfo[rval].dwMessageSize  = 0xFFFFFFFF;
-		pinfo[rval].lpProtocol     = name_base;
+		pinfo[our_result].dwServiceFlags = XP_GUARANTEED_DELIVERY | XP_GUARANTEED_ORDER | XP_PSEUDO_STREAM | XP_FRAGMENTATION;
+		pinfo[our_result].iAddressFamily = AF_IPX;
+		pinfo[our_result].iMaxSockAddr   = 16;
+		pinfo[our_result].iMinSockAddr   = 14;
+		pinfo[our_result].iSocketType    = SOCK_STREAM;
+		pinfo[our_result].iProtocol      = NSPROTO_SPX;
+		pinfo[our_result].dwMessageSize  = 0xFFFFFFFF;
+		pinfo[our_result].lpProtocol     = name_base;
 		
 		PUSH_NAME("SPX");
 		
-		++rval;
+		++our_result;
 	}
 	
 	if(want_spxii)
 	{
-		pinfo[rval].dwServiceFlags = XP_GUARANTEED_DELIVERY | XP_GUARANTEED_ORDER | XP_PSEUDO_STREAM | XP_FRAGMENTATION;
-		pinfo[rval].iAddressFamily = AF_IPX;
-		pinfo[rval].iMaxSockAddr   = 16;
-		pinfo[rval].iMinSockAddr   = 14;
-		pinfo[rval].iSocketType    = SOCK_STREAM;
-		pinfo[rval].iProtocol      = NSPROTO_SPXII;
-		pinfo[rval].dwMessageSize  = 0xFFFFFFFF;
-		pinfo[rval].lpProtocol     = name_base;
+		pinfo[our_result].dwServiceFlags = XP_GUARANTEED_DELIVERY | XP_GUARANTEED_ORDER | XP_PSEUDO_STREAM | XP_FRAGMENTATION;
+		pinfo[our_result].iAddressFamily = AF_IPX;
+		pinfo[our_result].iMaxSockAddr   = 16;
+		pinfo[our_result].iMinSockAddr   = 14;
+		pinfo[our_result].iSocketType    = SOCK_STREAM;
+		pinfo[our_result].iProtocol      = NSPROTO_SPXII;
+		pinfo[our_result].dwMessageSize  = 0xFFFFFFFF;
+		pinfo[our_result].lpProtocol     = name_base;
 		
 		PUSH_NAME("SPX II");
 		
-		++rval;
+		++our_result;
 	}
 	
 	/* Replace the names we pulled out of the buffer earlier. */
 	
-	for(int i = 0; i < rval; ++i)
+	for(int i = 0; i < our_result; ++i)
 	{
 		if(pinfo[i].lpProtocol >= name_buf && pinfo[i].lpProtocol < name_buf + name_buf_size)
 		{
@@ -286,22 +272,31 @@ static int do_EnumProtocols(LPINT protocols, LPVOID buf, LPDWORD bsptr, bool uni
 	
 	free(name_buf);
 	
-	return rval;
+	return our_result;
 }
 
-INT APIENTRY EnumProtocolsA(LPINT protocols, LPVOID buf, LPDWORD bsptr)
+INT APIENTRY EnumProtocolsA(LPINT lpiProtocols, LPVOID lpProtocolBuffer, LPDWORD lpdwBufferLength)
 {
-	return do_EnumProtocols(protocols, buf, bsptr, false);
+	DWORD real_bufsize = *lpdwBufferLength;
+	int sys_result = r_EnumProtocolsA(lpiProtocols, lpProtocolBuffer, lpdwBufferLength);
+	
+	return do_EnumProtocols(lpiProtocols, lpProtocolBuffer, lpdwBufferLength, false, sys_result, real_bufsize);
 }
 
-INT APIENTRY EnumProtocolsW(LPINT protocols, LPVOID buf, LPDWORD bsptr)
+INT APIENTRY EnumProtocolsW(LPINT lpiProtocols, LPVOID lpProtocolBuffer, LPDWORD lpdwBufferLength)
 {
-	return do_EnumProtocols(protocols, buf, bsptr, true);
+	DWORD real_bufsize = *lpdwBufferLength;
+	int sys_result = r_EnumProtocolsW(lpiProtocols, lpProtocolBuffer, lpdwBufferLength);
+	
+	return do_EnumProtocols(lpiProtocols, lpProtocolBuffer, lpdwBufferLength, true, sys_result, real_bufsize);
 }
 
-INT WINAPI WSHEnumProtocols(LPINT protocols, LPWSTR ign, LPVOID buf, LPDWORD bsptr)
+INT WINAPI WSHEnumProtocols(LPINT lpiProtocols, LPWSTR lpTransportKeyName, LPVOID lpProtocolBuffer, LPDWORD lpdwBufferLength)
 {
-	return do_EnumProtocols(protocols, buf, bsptr, false);
+	DWORD real_bufsize = *lpdwBufferLength;
+	int sys_result = r_WSHEnumProtocols(lpiProtocols, lpTransportKeyName, lpProtocolBuffer, lpdwBufferLength);
+	
+	return do_EnumProtocols(lpiProtocols, lpProtocolBuffer, lpdwBufferLength, false, sys_result, real_bufsize);
 }
 
 static int recv_queue_adjust_refcount(ipx_recv_queue *recv_queue, int adj)
