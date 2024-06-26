@@ -33,3 +33,9 @@ EXPORTS
 	s_perror			@31
 	sethostname			@32
 	WSHEnumProtocols		@2026
+	Arecv				@2004
+	Asend				@2005
+	WSACleanup			@2023
+	WSAStartup			@2025
+	WsControl			@2027
+	closesockinfo			@2028
