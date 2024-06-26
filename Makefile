@@ -168,7 +168,7 @@ test-prep: $(TESTS) $(TOOLS) $(TOOL_DLLS)
 .PHONY: tools test-prep
 
 tests/addr.exe: tests/addr.o tests/tap/basic.o src/addr.o
-tests/addrcache.exe: tests/addrcache.o tests/tap/basic.o src/addrcache.o src/addr.o
+tests/addrcache.exe: tests/addrcache.o tests/tap/basic.o src/addrcache.o src/addr.o src/common.o
 tests/ethernet.exe: tests/ethernet.o tests/tap/basic.o src/ethernet.o src/addr.o
 
 tests/%.exe: tests/%.o

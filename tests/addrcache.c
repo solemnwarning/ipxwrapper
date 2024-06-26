@@ -1,5 +1,5 @@
 /* IPXWrapper test suite
- * Copyright (C) 2017-2023 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2017-2024 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -33,7 +33,7 @@ static time_t mock_time(void)
 	return now;
 }
 
-/* Need to implement log_printf() and w32_error() for addrcache.c */
+/* Need to implement log_printf() for addrcache.c */
 
 void log_printf(enum ipx_log_level level, const char *fmt, ...)
 {
@@ -44,14 +44,6 @@ void log_printf(enum ipx_log_level level, const char *fmt, ...)
 	va_end(argv);
 	
 	fprintf(stderr, "\n");
-}
-
-const char *w32_error(DWORD errnum) {
-	static char buf[1024] = {'\0'};
-	
-	FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, NULL, errnum, 0, buf, 1023, NULL);
-	buf[strcspn(buf, "\r\n")] = '\0';
-	return buf;
 }
 
 int main()
