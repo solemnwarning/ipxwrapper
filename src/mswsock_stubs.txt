@@ -35,6 +35,12 @@ sethostname                    mswsock.dll       sethostname
 inet_addr                      mswsock.dll       inet_addr                       4
 WSHEnumProtocols               ipxwrapper.dll    WSHEnumProtocols               16
 ntohs                          wsock32.dll       ntohs                           4
+Arecv                          mswsock.dll       Arecv
+Asend                          mswsock.dll       Asend
+WSACleanup                     mswsock.dll       WSACleanup                      0
+WSAStartup                     mswsock.dll       WSAStartup                      8
+WsControl                      mswsock.dll       WsControl
+closesockinfo                  mswsock.dll       closesockinfo
 
 wsock32_closesocket_DIRECT        wsock32.dll    closesocket         4
 wsock32_connect_DIRECT            wsock32.dll    connect            12
