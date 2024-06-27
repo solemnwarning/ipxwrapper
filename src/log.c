@@ -20,6 +20,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdarg.h>
+#include <snprintf.h>
 
 #include "ipxwrapper.h"
 #include "common.h"
@@ -84,10 +85,10 @@ void log_printf(enum ipx_log_level level, const char *fmt, ...) {
 	char msg[1024], tstr[64];
 	
 	va_start(argv, fmt);
-	vsnprintf(msg, 1024, fmt, argv);
+	mirtoto_vsnprintf(msg, 1024, fmt, argv);
 	va_end(argv);
 	
-	snprintf(tstr, 64, "[%u.%02u, thread %u] ", (unsigned int)(called/1000), (unsigned int)((called % 1000) / 10), (unsigned int)GetCurrentThreadId());
+	mirtoto_snprintf(tstr, 64, "[%u.%02u, thread %u] ", (unsigned int)(called/1000), (unsigned int)((called % 1000) / 10), (unsigned int)GetCurrentThreadId());
 	
 	OVERLAPPED off;
 	off.Offset = 0;

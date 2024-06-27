@@ -1,5 +1,5 @@
 /* ipxwrapper - Address manipulation functions
- * Copyright (C) 2012-2014 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2012-2024 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -22,6 +22,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <snprintf.h>
 #include <ctype.h>
 
 #include "addr.h"
@@ -70,8 +71,9 @@ char *addr32_string(char *buf, addr32_t addr)
 	unsigned char c[6];
 	addr32_out(c, addr);
 	
-	sprintf(
+	mirtoto_snprintf(
 		buf,
+		ADDR32_STRING_SIZE,
 		
 		"%02X:%02X:%02X:%02X",
 		
@@ -112,8 +114,9 @@ char *addr48_string(char *buf, addr48_t addr)
 	unsigned char c[6];
 	addr48_out(c, addr);
 	
-	sprintf(
+	mirtoto_snprintf(
 		buf,
+		ADDR48_STRING_SIZE,
 		
 		"%02X:%02X:%02X:%02X:%02X:%02X",
 		
@@ -149,7 +152,7 @@ void ipx_to_string(char *buf, addr32_t net, addr48_t node, uint16_t sock)
 	addr48_string(buf + 12, node);
 	buf[29] = '/';
 	
-	sprintf(buf + 30, "%hu", ntohs(sock));
+	mirtoto_snprintf(buf + 30, IPX_SADDR_SIZE - 30, "%hu", ntohs(sock));
 }
 
 /* Generate a (probably) unique locally-administered MAC address. */
