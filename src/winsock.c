@@ -23,6 +23,7 @@
 #include <mswsock.h>
 #include <nspapi.h>
 #include <wsnwlink.h>
+#include <snprintf.h>
 
 #include "ipxwrapper.h"
 #include "coalesce.h"
@@ -494,7 +495,7 @@ int WSAAPI closesocket(SOCKET sockfd)
 static HANDLE _open_socket_mutex(uint16_t socket, bool exclusive)
 {
 	char mutex_name[256];
-	snprintf(mutex_name, sizeof(mutex_name), "ipxwrapper_socket_%hu", socket);
+	mirtoto_snprintf(mutex_name, sizeof(mutex_name), "ipxwrapper_socket_%hu", socket);
 	
 	HANDLE mutex = CreateMutex(NULL, FALSE, mutex_name);
 	if(!mutex)
@@ -1243,7 +1244,8 @@ int WSAAPI setsockopt(SOCKET fd, int level, int optname, const char FAR *optval,
 				strcat(opt_s, " ");
 			}
 			
-			sprintf(opt_s + i * 3, "%02X", (unsigned int)(unsigned char)optval[i]);
+			int p = i * 3;
+			mirtoto_snprintf(opt_s + p, sizeof(opt_s) - p, "%02X", (unsigned int)(unsigned char)optval[i]);
 		}
 		
 		if(optval)
