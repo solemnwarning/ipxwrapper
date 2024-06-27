@@ -35,7 +35,7 @@ static const char *dll_names[] = {
 	NULL
 };
 
-static HANDLE dll_handles[] = {NULL, NULL, NULL, NULL, NULL, NULL};
+static HANDLE dll_handles[] = {NULL, NULL, NULL, NULL, NULL, NULL, NULL};
 
 /* Convert a windows error number to an error message */
 const char *w32_error(DWORD errnum) {
