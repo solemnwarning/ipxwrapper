@@ -271,9 +271,16 @@ END
 				
 				$func->{name}_go:
 				
+				; Bypass the profiling code and jump straight into the taget
+				; function when not profiling.
+				cmp byte [_stubs_enable_profile], 0
+				je $func->{name}_skip
+				
 				; Record that we were called
 				push dword $func->{name}_fstats
 				call _fprof_record_untimed
+				
+				$func->{name}_skip:
 				
 				; Jump into target function. We have left the stack as we found it
 				; so it can take over our frame.
