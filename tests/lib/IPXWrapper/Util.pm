@@ -1,5 +1,5 @@
 # IPXWrapper test suite
-# Copyright (C) 2014-2017 Daniel Collins <solemnwarning@solemnwarning.net>
+# Copyright (C) 2014-2024 Daniel Collins <solemnwarning@solemnwarning.net>
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License version 2 as published by
@@ -55,6 +55,8 @@ use Net::Libdnet::Eth;
 use NetPacket::IPX;
 use NetPacket::IPXWrapper;
 
+use IPXWrapper::Tool::OSVersion;
+
 sub run_remote_cmd
 {
 	my ($host_ip, $exe_name, @exe_args) = @_;
@@ -78,7 +80,21 @@ sub reg_set_dword
 {
 	my ($host_ip, $key, $value, $data) = @_;
 	
-	run_remote_cmd($host_ip, "REG", "ADD", $key, "/v", $value, "/t", "REG_DWORD", "/d", $data, "/f");
+	if(IPXWrapper::Tool::OSVersion->get($host_ip)->platform_is_winnt())
+	{
+		run_remote_cmd($host_ip, "REG", "ADD", $key, "/v", $value, "/t", "REG_DWORD", "/d", $data, "/f");
+	}
+	else{
+		eval { run_remote_cmd($host_ip, "REG", "QUERY", "$key\\$value"); };
+		
+		if($@)
+		{
+			run_remote_cmd($host_ip, "REG", "ADD", "$key\\$value=$data", "REG_DWORD");
+		}
+		else{
+			run_remote_cmd($host_ip, "REG", "UPDATE", "$key\\$value=$data");
+		}
+	}
 }
 
 sub reg_set_addr
@@ -86,33 +102,71 @@ sub reg_set_addr
 	my ($host_ip, $key, $value, $data) = @_;
 	
 	$data =~ s/://g;
-	run_remote_cmd($host_ip, "REG", "ADD", $key, "/v", $value, "/t", "REG_BINARY", "/d", $data, "/f");
+	
+	if(IPXWrapper::Tool::OSVersion->get($host_ip)->platform_is_winnt())
+	{
+		run_remote_cmd($host_ip, "REG", "ADD", $key, "/v", $value, "/t", "REG_BINARY", "/d", $data, "/f");
+	}
+	else{
+		run_remote_cmd($host_ip, "Z:\\tools\\reg-set-bin.exe", $key, $value, $data);
+	}
 }
 
 sub reg_set_string
 {
 	my ($host_ip, $key, $value, $data) = @_;
 	
-	run_remote_cmd($host_ip, "REG", "ADD", $key, "/v", $value, "/t", "REG_SZ", "/d", $data, "/f");
+	if(IPXWrapper::Tool::OSVersion->get($host_ip)->platform_is_winnt())
+	{
+		run_remote_cmd($host_ip, "REG", "ADD", $key, "/v", $value, "/t", "REG_SZ", "/d", $data, "/f");
+	}
+	else{
+		eval { run_remote_cmd($host_ip, "REG", "QUERY", "$key\\$value"); };
+		
+		if($@)
+		{
+			run_remote_cmd($host_ip, "REG", "ADD", "$key\\$value=$data", "REG_SZ");
+		}
+		else{
+			run_remote_cmd($host_ip, "REG", "UPDATE", "$key\\$value=$data");
+		}
+	}
 }
 
 sub reg_delete_key
 {
 	my ($host_ip, $key) = @_;
 	
-	# Attempting to delete a key which doesn't exist is considered to be an
-	# error, so we touch the key beforehand.
+	eval { run_remote_cmd($host_ip, "REG", "QUERY", $key); };
 	
-	run_remote_cmd($host_ip, "REG", "ADD",    $key, "/f");
-	run_remote_cmd($host_ip, "REG", "DELETE", $key, "/f");
+	unless($@)
+	{
+		if(IPXWrapper::Tool::OSVersion->get($host_ip)->platform_is_winnt())
+		{
+			run_remote_cmd($host_ip, "REG", "DELETE", $key, "/f");
+		}
+		else{
+			run_remote_cmd($host_ip, "REG", "DELETE", $key, "/FORCE");
+		}
+	}
 }
 
 sub reg_delete_value
 {
 	my ($host_ip, $key, $value) = @_;
 	
-	run_remote_cmd($host_ip, "REG", "ADD",    $key, "/v", $value, "/t", "REG_SZ", "/f");
-	run_remote_cmd($host_ip, "REG", "DELETE", $key, "/v", $value, "/f");
+	eval { run_remote_cmd($host_ip, "REG", "QUERY", "$key\\$value"); };
+	
+	unless($@)
+	{
+		if(IPXWrapper::Tool::OSVersion->get($host_ip)->platform_is_winnt())
+		{
+			run_remote_cmd($host_ip, "REG", "DELETE", $key, "/v", $value, "/f");
+		}
+		else{
+			run_remote_cmd($host_ip, "REG", "DELETE", "$key\\$value", "/FORCE");
+		}
+	}
 }
 
 sub send_ipx_over_udp
