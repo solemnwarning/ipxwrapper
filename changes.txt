@@ -7,6 +7,8 @@ Version 0.7.1:
 	Added profiling functionality to guide future optimisations.
 	
 	Added option to disable logging entirely.
+	
+	Optionally load settings from per-directory "ipxwrapper.ini" file.
 
 Version 0.7.0:
 	Added support for DOSBox IPX servers.
