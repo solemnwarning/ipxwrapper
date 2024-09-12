@@ -248,6 +248,19 @@ char *reg_get_string(HKEY key, const char *name, const char *default_value)
 				
 				if(buffer != NULL)
 				{
+					/* RegQueryValueEx() fails with ERROR_INVALID_PARAMETER
+					 * when a size of zero is provided with a non-NULL buffer
+					 * pointer when running under Windows XP compatibility
+					 * mode (but not under actual Windows XP), so we need to
+					 * skip the RegQueryValueEx() call when the value is an
+					 * empty string.
+					*/
+					if(value_size == 0)
+					{
+						buffer[0] = '\0';
+						return buffer;
+					}
+					
 					reg_err = RegQueryValueEx(key, name, NULL, &value_type, (BYTE*)(buffer), &value_size);
 					if(reg_err == ERROR_SUCCESS)
 					{
