@@ -88,13 +88,17 @@ void log_printf(enum ipx_log_level level, const char *fmt, ...) {
 	}
 	
 	va_list argv;
-	char msg[1024], tstr[64];
+	static char line[1024];
+	
+	int line_len = mirtoto_snprintf(line, sizeof(line), "[%u.%02u, thread %u] ", (unsigned int)(called/1000), (unsigned int)((called % 1000) / 10), (unsigned int)GetCurrentThreadId());
 	
 	va_start(argv, fmt);
-	mirtoto_vsnprintf(msg, 1024, fmt, argv);
+	mirtoto_vsnprintf((line + line_len), (sizeof(line) - line_len - 1), fmt, argv);
+	line_len = strlen(line);
 	va_end(argv);
 	
-	mirtoto_snprintf(tstr, 64, "[%u.%02u, thread %u] ", (unsigned int)(called/1000), (unsigned int)((called % 1000) / 10), (unsigned int)GetCurrentThreadId());
+	memcpy((line + line_len), "\r\n", 2);
+	line_len += 2;
 	
 	/* File locking isn't implemented on Windows 98, so we just skip it and
 	 * hope we don't wind up with any interleaves writes from parallel
@@ -118,10 +122,7 @@ void log_printf(enum ipx_log_level level, const char *fmt, ...) {
 	
 	if(SetFilePointer(log_fh, 0, NULL, FILE_END) != INVALID_SET_FILE_POINTER) {
 		DWORD written;
-		
-		WriteFile(log_fh, tstr, strlen(tstr), &written, NULL);
-		WriteFile(log_fh, msg, strlen(msg), &written, NULL);
-		WriteFile(log_fh, "\r\n", 2, &written, NULL);
+		WriteFile(log_fh, line, line_len, &written, NULL);
 	}
 	
 	if(use_locking)
