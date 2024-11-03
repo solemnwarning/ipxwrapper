@@ -155,15 +155,20 @@ sub reg_delete_value
 {
 	my ($host_ip, $key, $value) = @_;
 	
-	eval { run_remote_cmd($host_ip, "REG", "QUERY", "$key\\$value"); };
-	
-	unless($@)
+	if(IPXWrapper::Tool::OSVersion->get($host_ip)->platform_is_winnt())
 	{
-		if(IPXWrapper::Tool::OSVersion->get($host_ip)->platform_is_winnt())
+		eval { run_remote_cmd($host_ip, "REG", "QUERY", $key, "/v", $value); };
+		
+		unless($@)
 		{
 			run_remote_cmd($host_ip, "REG", "DELETE", $key, "/v", $value, "/f");
 		}
-		else{
+	}
+	else{
+		eval { run_remote_cmd($host_ip, "REG", "QUERY", "$key\\$value"); };
+		
+		unless($@)
+		{
 			run_remote_cmd($host_ip, "REG", "DELETE", "$key\\$value", "/FORCE");
 		}
 	}
