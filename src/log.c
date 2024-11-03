@@ -30,7 +30,14 @@ static HANDLE log_mutex = NULL;
 
 void log_init()
 {
-	if(!(log_mutex = CreateMutex(NULL, FALSE, NULL))) {
+	const char *mutex_name = NULL;
+	
+	if(!windows_at_least_2000())
+	{
+		mutex_name = "ipxwrapper_global_log_mutex";
+	}
+	
+	if(!(log_mutex = CreateMutex(NULL, FALSE, mutex_name))) {
 		abort();
 	}
 }
@@ -100,9 +107,9 @@ void log_printf(enum ipx_log_level level, const char *fmt, ...) {
 	memcpy((line + line_len), "\r\n", 2);
 	line_len += 2;
 	
-	/* File locking isn't implemented on Windows 98, so we just skip it and
-	 * hope we don't wind up with any interleaves writes from parallel
-	 * threads (not much chance of an SMP Windows 98 machine anyway).
+	/* File locking isn't implemented on Windows 98, so we instead use a
+	 * single global mutex to syncronise log file access between all
+	 * processes and skip the file locking.
 	*/
 	bool use_locking = windows_at_least_2000();
 	
