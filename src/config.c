@@ -39,6 +39,9 @@ main_config_t get_main_config(bool ignore_ini)
 	config.log_level  = LOG_INFO;
 	config.profile    = false;
 	
+	config.log_server_addr = NULL;
+	config.log_server_port = 0;
+	
 	config.dosbox_server_addr = NULL;
 	config.dosbox_server_port = 213;
 	config.dosbox_coalesce = false;
@@ -95,6 +98,9 @@ main_config_t get_main_config(bool ignore_ini)
 	config.frame_type = reg_get_dword(reg, "frame_type", config.frame_type);
 	config.log_level  = reg_get_dword(reg, "log_level",  config.log_level);
 	config.profile    = reg_get_dword(reg, "profile",    config.profile);
+	
+	config.log_server_addr = reg_get_string(reg, "log_server_addr", "");
+	config.log_server_port = reg_get_dword(reg, "log_server_port", config.log_server_port);
 	
 	config.dosbox_server_addr = reg_get_string(reg, "dosbox_server_addr", "");
 	config.dosbox_server_port = reg_get_dword(reg, "dosbox_server_port", config.dosbox_server_port);

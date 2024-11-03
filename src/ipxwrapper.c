@@ -124,6 +124,8 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 		min_log_level = main_config.log_level;
 		ipx_encap_type = main_config.encap_type;
 		
+		log_connect(main_config.log_server_addr, main_config.log_server_port);
+		
 		log_printf(LOG_INFO, "IPXWrapper %s", version_string);
 		log_printf(LOG_INFO, "Compiled at %s", compile_time);
 		log_printf(LOG_INFO, "Performance counter: %lld Hz", perf_counter_freq);

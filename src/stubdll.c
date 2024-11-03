@@ -39,6 +39,8 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
 		
 		min_log_level = config.log_level;
 		
+		log_connect(config.log_server_addr, config.log_server_port);
+		
 		if(config.profile)
 		{
 			stubs_enable_profile = true;

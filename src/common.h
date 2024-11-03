@@ -70,7 +70,7 @@ bool reg_set_addr48(HKEY key, const char *name, addr48_t value);
 char *reg_get_string(HKEY key, const char *name, const char *default_value);
 bool reg_set_string(HKEY key, const char *name, const char *value);
 
-void load_dll(unsigned int dllnum);
+void load_dll(unsigned int dllnum, bool direct);
 void unload_dlls(void);
 void __stdcall *find_sym(unsigned int dllnum, const char *symbol);
 void __stdcall log_call(unsigned int entry, const char *symbol, unsigned int target);
@@ -85,6 +85,7 @@ bool windows_at_least_2000();
 void log_init();
 void log_open(const char *file);
 void log_close();
+void log_connect(const char *log_server_addr, uint16_t log_server_port);
 void log_printf(enum ipx_log_level level, const char *fmt, ...);
 
 #ifdef __cplusplus

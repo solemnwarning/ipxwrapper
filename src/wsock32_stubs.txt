@@ -81,3 +81,14 @@ Asend                          wsock32.dll       Asend
 NSPStartup                     wsock32.dll       NSPStartup
 WsControl                      wsock32.dll       WsControl
 closesockinfo                  wsock32.dll       closesockinfo
+
+wsock32_closesocket_DIRECT        wsock32.dll    closesocket         4
+wsock32_connect_DIRECT            wsock32.dll    connect            12
+wsock32_htons_DIRECT              wsock32.dll    htons               4
+wsock32_inet_addr_DIRECT          wsock32.dll    inet_addr           4
+wsock32_send_DIRECT               wsock32.dll    send               16
+wsock32_setsockopt_DIRECT         wsock32.dll    setsockopt         20
+wsock32_socket_DIRECT             wsock32.dll    socket             12
+wsock32_WSAGetLastError_DIRECT    wsock32.dll    WSAGetLastError     0
+wsock32_WSASetLastError_DIRECT    wsock32.dll    WSASetLastError     4
+wsock32_WSAStartup_DIRECT         wsock32.dll    WSAStartup          8

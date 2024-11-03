@@ -727,7 +727,11 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
 		
 		log_init();
 		
-		min_log_level = get_main_config(false).log_level;
+		main_config_t config = get_main_config(false);
+		
+		min_log_level = config.log_level;
+		
+		log_connect(config.log_server_addr, config.log_server_port);
 	}
 	else if(fdwReason == DLL_PROCESS_DETACH)
 	{

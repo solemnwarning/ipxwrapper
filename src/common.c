@@ -312,15 +312,20 @@ bool reg_set_string(HKEY key, const char *name, const char *value)
 	return false;
 }
 
-void load_dll(unsigned int dllnum) {
+void load_dll(unsigned int dllnum, bool direct) {
 	char path[512];
 	const char *dll;
 	
 	if(dllnum && dllnum != 5) {
 		GetSystemDirectory(path, sizeof(path));
 		
-		if(strlen(path) + strlen(dll_names[dllnum]) + 2 > sizeof(path)) {
-			log_printf(LOG_ERROR, "Path buffer too small, cannot load %s", dll_names[dllnum]);
+		if(strlen(path) + strlen(dll_names[dllnum]) + 2 > sizeof(path))
+		{
+			if(!direct)
+			{
+				log_printf(LOG_ERROR, "Path buffer too small, cannot load %s", dll_names[dllnum]);
+			}
+			
 			abort();
 		}
 		
@@ -334,8 +339,13 @@ void load_dll(unsigned int dllnum) {
 	}
 	
 	dll_handles[dllnum] = LoadLibrary(dll);
-	if(!dll_handles[dllnum]) {
-		log_printf(LOG_ERROR, "Error loading %s: %s", dll, w32_error(GetLastError()));
+	if(!dll_handles[dllnum])
+	{
+		if(!direct)
+		{
+			log_printf(LOG_ERROR, "Error loading %s: %s", dll, w32_error(GetLastError()));
+		}
+		
 		abort();
 	}
 }
@@ -363,12 +373,26 @@ void unload_dlls(void) {
 
 void __stdcall *find_sym(unsigned int dllnum, const char *symbol) {
 	if(!dll_handles[dllnum]) {
-		load_dll(dllnum);
+		load_dll(dllnum, false);
 	}
 	
 	void *ptr = GetProcAddress(dll_handles[dllnum], symbol);
 	if(!ptr) {
 		log_printf(LOG_ERROR, "Missing symbol in %s: %s", dll_names[dllnum], symbol);
+		abort();
+	}
+	
+	return ptr;
+}
+
+void __stdcall *find_sym_direct(unsigned int dllnum, const char *symbol) {
+	if(!dll_handles[dllnum]) {
+		load_dll(dllnum, true);
+	}
+	
+	void *ptr = GetProcAddress(dll_handles[dllnum], symbol);
+	if(!ptr)
+	{
 		abort();
 	}
 	
