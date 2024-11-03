@@ -23,6 +23,7 @@ use FindBin;
 use lib "$FindBin::Bin/lib/";
 
 use IPXWrapper::DOSBoxServer;
+use IPXWrapper::Tool::OSVersion;
 use IPXWrapper::Util;
 
 require "$FindBin::Bin/config.pm";
@@ -117,6 +118,12 @@ describe "IPXWrapper" => sub
 	
 	describe "using Ethernet encapsulation" => sub
 	{
+		if(!IPXWrapper::Tool::OSVersion->get($remote_ip_a)->platform_is_winnt())
+		{
+			# Skip Ethernet encapsulation tests under Windows 98
+			return;
+		}
+		
 		before all => sub
 		{
 			reg_delete_key($remote_ip_a, "HKCU\\Software\\IPXWrapper");

@@ -24,6 +24,7 @@ use lib "$FindBin::Bin/lib/";
 
 use IPXWrapper::DOSBoxServer;
 use IPXWrapper::Tool::Bind;
+use IPXWrapper::Tool::OSVersion;
 use IPXWrapper::Util;
 
 require "$FindBin::Bin/config.pm";
@@ -175,6 +176,13 @@ describe "IPXWrapper" => sub
 	
 	describe "using Ethernet encapsulation" => sub
 	{
+		if(!IPXWrapper::Tool::OSVersion->get($remote_ip_a)->platform_is_winnt())
+		{
+			# Skip these tests under Windows 98
+			it "(not implemented)";
+			return;
+		}
+		
 		before all => sub
 		{
 			reg_delete_key($remote_ip_a, "HKCU\\Software\\IPXWrapper");
@@ -206,6 +214,13 @@ describe "IPXWrapper" => sub
 	
 	describe "using Novell Ethernet encapsulation" => sub
 	{
+		if(!IPXWrapper::Tool::OSVersion->get($remote_ip_a)->platform_is_winnt())
+		{
+			# Skip these tests under Windows 98
+			it "(not implemented)";
+			return;
+		}
+		
 		before all => sub
 		{
 			reg_delete_key($remote_ip_a, "HKCU\\Software\\IPXWrapper");
@@ -237,6 +252,13 @@ describe "IPXWrapper" => sub
 	
 	describe "using LLC (802.2) Ethernet encapsulation" => sub
 	{
+		if(!IPXWrapper::Tool::OSVersion->get($remote_ip_a)->platform_is_winnt())
+		{
+			# Skip these tests under Windows 98
+			it "(not implemented)";
+			return;
+		}
+		
 		before all => sub
 		{
 			reg_delete_key($remote_ip_a, "HKCU\\Software\\IPXWrapper");
