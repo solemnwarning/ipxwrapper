@@ -120,7 +120,7 @@ static BOOL FAR PASCAL list_players_cb(
 
 static DWORD WINAPI recv_thread_main(LPVOID lpParameter)
 {
-	IDirectPlay4 *dp = (IDirectPlay4*)(lpParameter);
+	IDirectPlay3 *dp = (IDirectPlay3*)(lpParameter);
 	
 	DWORD bufsize = 0;
 	char *buf = NULL;
@@ -150,7 +150,7 @@ static DWORD WINAPI recv_thread_main(LPVOID lpParameter)
 		}
 		else if(err != DP_OK)
 		{
-			fprintf(stderr, "IDirectPlay4::Receive: %u\n", (unsigned int)(err));
+			fprintf(stderr, "IDirectPlay3::Receive: %u\n", (unsigned int)(err));
 			exit(1);
 		}
 		
@@ -181,19 +181,19 @@ int main(int argc, char **argv)
 		}
 	}
 	
-	IDirectPlay4 *dp;
+	IDirectPlay3 *dp;
 	assert_dp_call("CoCreateInstance",
 		CoCreateInstance(
-			&CLSID_DirectPlay, NULL, CLSCTX_INPROC_SERVER, &IID_IDirectPlay4A, (void**)(&dp)));
+			&CLSID_DirectPlay, NULL, CLSCTX_INPROC_SERVER, &IID_IDirectPlay3A, (void**)(&dp)));
 	
 	{
 		void *conn = NULL;
 		
-		assert_dp_call("IDirectPlay4::EnumConnections",
+		assert_dp_call("IDirectPlay3::EnumConnections",
 			IDirectPlayX_EnumConnections(
 				dp, NULL, (LPDPENUMCONNECTIONSCALLBACK)(&copy_ipx_conn), &conn, 0));
 		
-		assert_dp_call("IDirectPlay4::InitializeConnection",
+		assert_dp_call("IDirectPlay3::InitializeConnection",
 			IDirectPlayX_InitializeConnection(dp, conn, 0));
 		
 		free(conn);
@@ -219,7 +219,7 @@ int main(int argc, char **argv)
 			session.guidApplication  = TEST_APP_GUID;
 			session.lpszSessionNameA = session_name;
 			
-			assert_dp_call("IDirectPlay4::Open",
+			assert_dp_call("IDirectPlay3::Open",
 				       IDirectPlayX_Open(dp, &session, DPOPEN_CREATE));
 			
 			DWORD bufsize = 0;
@@ -233,7 +233,7 @@ int main(int argc, char **argv)
 			DPSESSIONDESC2 *sd = malloc(bufsize);
 			assert(sd);
 			
-			assert_dp_call("IDirectPlay4::GetSessionDesc",
+			assert_dp_call("IDirectPlay3::GetSessionDesc",
 				IDirectPlayX_GetSessionDesc(dp, sd, &bufsize));
 			
 			unsigned char *uuid_str;
@@ -253,7 +253,7 @@ int main(int argc, char **argv)
 			session.dwSize          = sizeof(session);
 			session.guidApplication = TEST_APP_GUID;
 			
-			assert_dp_call("IDirectPlay4::EnumSessions",
+			assert_dp_call("IDirectPlay3::EnumSessions",
 				IDirectPlayX_EnumSessions(dp, &session, 3000, &list_sessions_cb, NULL, 0));
 		}
 		else if(strcmp(cmd, "join_session") == 0)
@@ -266,7 +266,7 @@ int main(int argc, char **argv)
 			session.dwSize = sizeof(session);
 			UuidFromString((RPC_CSTR)(session_guid), &(session.guidInstance));
 			
-			assert_dp_call("IDirectPlay4::Open",
+			assert_dp_call("IDirectPlay3::Open",
 				IDirectPlayX_Open(dp, &session, DPOPEN_JOIN));
 		}
 		else if(strcmp(cmd, "create_player") == 0)
@@ -279,7 +279,7 @@ int main(int argc, char **argv)
 			name.dwSize        = sizeof(name);
 			name.lpszLongNameA = strtok(NULL, " \n");
 			
-			assert_dp_call("IDirectPlay4::CreatePlayer",
+			assert_dp_call("IDirectPlay3::CreatePlayer",
 				IDirectPlayX_CreatePlayer(dp, &player_id, &name, NULL, NULL, 0, 0));
 			
 			lock_printf("player_id %u\n", (unsigned int)(player_id));
@@ -294,7 +294,7 @@ int main(int argc, char **argv)
 			DPID player_to   = strtoul(strtok(NULL, " \n"), NULL, 10);
 			char *message    = strtok(NULL, " \n");
 			
-			assert_dp_call("IDirectPlay4::Send",
+			assert_dp_call("IDirectPlay3::Send",
 				IDirectPlayX_Send(dp, player_from, player_to, 0, message, strlen(message) + 1));
 		}
 		else if(strcmp(cmd, "exit") == 0)
