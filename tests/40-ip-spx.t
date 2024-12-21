@@ -23,6 +23,7 @@ use FindBin;
 use lib "$FindBin::Bin/lib/";
 
 use IPXWrapper::Capture::IPXOverUDP;
+use IPXWrapper::LogServer;
 use IPXWrapper::SPX;
 use IPXWrapper::Tool::Generic;
 use IPXWrapper::Util;
@@ -48,6 +49,27 @@ describe "IPXWrapper using IP encapsulation" => sub
 		reg_set_addr(  $remote_ip_a, "HKCU\\Software\\IPXWrapper\\00:00:00:00:00:00", "net", "00:00:00:01");
 		reg_set_addr(  $remote_ip_a, "HKCU\\Software\\IPXWrapper\\$remote_mac_a", "net", "00:00:00:01");
 		reg_set_addr(  $remote_ip_a, "HKCU\\Software\\IPXWrapper\\$remote_mac_b", "net", "00:00:00:02");
+	};
+	
+	my $log = undef;
+	
+	before each => sub
+	{
+		$log = IPXWrapper::LogServer->new();
+		
+		reg_set_string($remote_ip_a, "HKCU\\Software\\IPXWrapper", "log_server_addr", $local_ip_a);
+		reg_set_dword( $remote_ip_a, "HKCU\\Software\\IPXWrapper", "log_server_port", $log->port());
+	};
+	
+	after each => sub
+	{
+		# TODO: Call this if the test succeeded.
+		#
+		# If a test fails due to an exception, the after blocks won't be called, however a
+		# test failing due to an assertion still calls the after blocks. I haven't found
+		# any way to actually determine if the test passed from code.
+		
+		# $log->discard();
 	};
 	
 	it "responds to SPX lookups" => sub
