@@ -1,5 +1,5 @@
 /* IPXWrapper test tools
- * Copyright (C) 2014 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2014-2024 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -113,7 +113,11 @@ int main(int argc, char **argv)
 	for(int i = 0; i < sizeof(data);)
 	{
 		int r = recv(sock, buf + i, sizeof(data) - i, 0);
-		assert(r != -1);
+		if(r < 0)
+		{
+			printf("recv: %u\n", (unsigned int)(WSAGetLastError()));
+			return 1;
+		}
 		
 		printf("Read %d bytes from socket\n", r);
 		i += r;

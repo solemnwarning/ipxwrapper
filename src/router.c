@@ -867,8 +867,12 @@ static DWORD router_main(void *arg)
 			}
 		}
 		
+		wait_ms = 50;
+		
 		WaitForMultipleObjects(n_events, wait_events, FALSE, wait_ms);
 		WSAResetEvent(router_event);
+		
+		log_printf(LOG_INFO, "router tick");
 		
 		if(!router_running)
 		{
