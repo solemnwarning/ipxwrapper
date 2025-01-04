@@ -26,6 +26,7 @@ src/config.h
 src/ethernet.c
 src/ethernet.h
 src/directplay.c
+src/dplay-setup.c
 src/dpwsockx.def
 src/dpwsockx_stubs.txt
 src/firewall.c
