@@ -67,9 +67,6 @@ include/uthash.h
 include/utlist.h
 include/wsnwlink.h
 
-directplay-win32.reg
-directplay-win64.reg
-
 tests/05-addr.t
 tests/07-addrcache.t
 tests/07-ethernet.t
