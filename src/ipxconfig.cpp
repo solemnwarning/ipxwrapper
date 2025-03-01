@@ -1,5 +1,5 @@
 /* IPXWrapper - Configuration tool
- * Copyright (C) 2011-2024 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2011-2025 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -68,6 +68,38 @@ struct iface {
 	addr48_t hwaddr;
 	
 	iface_config_t config;
+};
+
+struct ratelimit_value
+{
+	const char *label;
+	DWORD value;
+};
+
+static const ratelimit_value PACKET_LIMIT_VALUES[] = {
+	{ "Unlimited", 0 },
+	{ "100 packets/sec", 100 },
+	{ "250 packets/sec", 250 },
+	{ "500 packets/sec", 500 },
+	{ "1,000 packets/sec", 1000 },
+	{ "2,500 packets/sec", 2500 },
+	{ "5,000 packets/sec", 5000 },
+	{ "10,000 packets/sec", 10000 },
+	{ "25,000 packets/sec", 25000 },
+	{ "50,000 packets/sec", 50000 },
+	{ "100,000 packets/sec", 100000 },
+	{ NULL, 0 },
+};
+
+static const ratelimit_value BYTE_LIMIT_VALUES[] = {
+	{ "Unlimited", 0 },
+	{ "1 KiB/sec", 1024 },
+	{ "10 KiB/sec", 10240 },
+	{ "100 KiB/sec", 102400 },
+	{ "256 KiB/sec", 256000 },
+	{ "512 KiB/sec", 512000 },
+	{ "1 MiB/sec", 1024000 },
+	{ NULL, 0 },
 };
 
 static void reload_nics();
@@ -148,6 +180,10 @@ static struct {
 	HWND opt_log_debug;
 	HWND opt_log_trace;
 	HWND opt_profile;
+	HWND opt_rate_limit_packets_lbl;
+	HWND opt_rate_limit_packets;
+	HWND opt_rate_limit_bytes_lbl;
+	HWND opt_rate_limit_bytes;
 	
 	HWND ok_btn;
 	HWND can_btn;
@@ -618,6 +654,9 @@ static bool save_config()
 	
 	main_config.profile = get_checkbox(wh.opt_profile);
 	
+	main_config.rate_limit_packets = PACKET_LIMIT_VALUES[ ComboBox_GetCurSel(wh.opt_rate_limit_packets) ].value;
+	main_config.rate_limit_bytes = BYTE_LIMIT_VALUES[ ComboBox_GetCurSel(wh.opt_rate_limit_bytes) ].value;
+	
 	if(main_config.encap_type == ENCAP_TYPE_IPXWRAPPER || main_config.encap_type == ENCAP_TYPE_PCAP)
 	{
 		for(auto i = nics.begin(); i != nics.end(); i++)
@@ -842,11 +881,37 @@ static void main_window_init()
 		wh.opt_log_trace  = create_checkbox(wh.box_options, "Log WinSock API calls (even slower!)", ID_OPT_LOG_TRACE);
 		wh.opt_profile    = create_checkbox(wh.box_options, "Log profiling counters", ID_OPT_PROFILE);
 		
+		wh.opt_rate_limit_packets_lbl = create_STATIC(wh.box_options, "Rate limit packets");
+		wh.opt_rate_limit_packets = create_child(wh.box_options, WC_COMBOBOX, NULL, CBS_DROPDOWNLIST | CBS_HASSTRINGS, 0);
+		
+		wh.opt_rate_limit_bytes_lbl = create_STATIC(wh.box_options, "Rate limit data");
+		wh.opt_rate_limit_bytes = create_child(wh.box_options, WC_COMBOBOX, NULL, CBS_DROPDOWNLIST | CBS_HASSTRINGS, 0);
+		
 		set_checkbox(wh.opt_w95,        main_config.w95_bug);
 		set_checkbox(wh.opt_log_enable, main_config.log_level < LOG_DISABLED);
 		set_checkbox(wh.opt_log_debug,  main_config.log_level <= LOG_DEBUG);
 		set_checkbox(wh.opt_log_trace,  main_config.log_level <= LOG_CALL);
 		set_checkbox(wh.opt_profile,    main_config.profile);
+		
+		for(int i = 0; PACKET_LIMIT_VALUES[i].label != NULL; ++i)
+		{
+			ComboBox_AddString(wh.opt_rate_limit_packets, PACKET_LIMIT_VALUES[i].label);
+			
+			if(PACKET_LIMIT_VALUES[i].value == main_config.rate_limit_packets)
+			{
+				ComboBox_SetCurSel(wh.opt_rate_limit_packets, i);
+			}
+		}
+		
+		for(int i = 0; BYTE_LIMIT_VALUES[i].label != NULL; ++i)
+		{
+			ComboBox_AddString(wh.opt_rate_limit_bytes, BYTE_LIMIT_VALUES[i].label);
+			
+			if(BYTE_LIMIT_VALUES[i].value == main_config.rate_limit_bytes)
+			{
+				ComboBox_SetCurSel(wh.opt_rate_limit_bytes, i);
+			}
+		}
 	}
 	
 	wh.ok_btn  = create_child(wh.main, "BUTTON", "OK",     BS_PUSHBUTTON | WS_TABSTOP, 0, ID_OK);
@@ -1028,6 +1093,14 @@ static void main_window_init()
 		
 		MoveWindow(wh.opt_profile, BOX_SIDE_PAD, box_options_y, BOX_INNER_WIDTH, text_h, TRUE);
 		box_options_y += text_h + 2;
+		
+		MoveWindow(wh.opt_rate_limit_packets_lbl, BOX_SIDE_PAD, box_options_y, lbl_w2, text_h, TRUE);
+		MoveWindow(wh.opt_rate_limit_packets, 15 + lbl_w2, box_options_y, node_w, 300, TRUE);
+		box_options_y += edit_h + 2;
+		
+		MoveWindow(wh.opt_rate_limit_bytes_lbl, BOX_SIDE_PAD, box_options_y, lbl_w2, text_h, TRUE);
+		MoveWindow(wh.opt_rate_limit_bytes, 15 + lbl_w2, box_options_y, node_w, 300, TRUE);
+		box_options_y += edit_h + 2;
 		
 		int box_options_h = box_options_y + BOX_BOTTOM_PAD;
 		

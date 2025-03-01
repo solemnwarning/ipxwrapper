@@ -73,6 +73,7 @@ include/utlist.h
 include/wsnwlink.h
 
 tests/05-addr.t
+tests/05-ratelimit.t
 tests/07-addrcache.t
 tests/07-ethernet.t
 tests/10-socket.t
@@ -86,6 +87,7 @@ tests/40-ip-spx.t
 tests/50-dplay.t
 tests/addr.c
 tests/addrcache.c
+tests/ratelimit.c
 tests/config.pm
 tests/ethernet.c
 tests/fionread.c

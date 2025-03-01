@@ -1,5 +1,5 @@
 /* IPXWrapper - Common functions
- * Copyright (C) 2011-2024 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2011-2025 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -17,6 +17,7 @@
 
 #include <windows.h>
 #include <iphlpapi.h>
+#include <assert.h>
 
 #include "common.h"
 #include "config.h"
@@ -431,4 +432,63 @@ wchar_t *get_module_relative_path(HMODULE module, const wchar_t *relative_path)
 	free(module_path);
 	
 	return path;
+}
+
+unsigned int ratelimit_get_delay(ratelimit *self, unsigned int add_count, unsigned int max_counts_per_second, DWORD current_time)
+{
+	unsigned int this_second_total;
+	
+	if(current_time < self->time_base)
+	{
+		RESET:
+		
+		memset(self->counts, 0, sizeof(self->counts));
+		self->time_base = current_time;
+		
+		self->counts[0] += add_count;
+		
+		this_second_total = add_count;
+	}
+	else{
+		DWORD ms_since_start = current_time - self->time_base;
+		
+		if(ms_since_start >= 1000)
+		{
+			int slots_to_erase = min((((ms_since_start - 1000) / 100) + 1), RATELIMIT_COUNTS_SIZE);
+			
+			if(slots_to_erase == RATELIMIT_COUNTS_SIZE)
+			{
+				goto RESET;
+			}
+			
+			assert(slots_to_erase >= 0);
+			assert(slots_to_erase < RATELIMIT_COUNTS_SIZE);
+			
+			memmove(self->counts, (self->counts + slots_to_erase), (sizeof(self->counts) - (sizeof(*(self->counts)) * slots_to_erase)));
+			memset((self->counts + RATELIMIT_COUNTS_SIZE - slots_to_erase), 0, (sizeof(*(self->counts)) * slots_to_erase));
+			
+			self->time_base += slots_to_erase * 100;
+			
+			ms_since_start = current_time - self->time_base;
+		}
+		
+		self->counts[ms_since_start / 100] += add_count;
+		
+		this_second_total = 0;
+		
+		for(int i = 0; i < 10; ++i)
+		{
+			this_second_total += self->counts[i];
+		}
+	}
+	
+	unsigned int sleep_msecs = 0;
+	
+	if(this_second_total > max_counts_per_second)
+	{
+		unsigned int excess_counts = this_second_total - max_counts_per_second;
+		sleep_msecs = ((excess_counts * 100) / max_counts_per_second) * 10;
+	}
+	
+	return sleep_msecs;
 }
