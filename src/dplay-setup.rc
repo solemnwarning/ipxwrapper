@@ -1,0 +1,4 @@
+#include <winuser.h>
+
+CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "dplay-setup.exe.manifest"
+1 ICON "../icons/dplay-setup.ico"

@@ -11,8 +11,7 @@ Quick start
 -----------
 
 Copy the four included DLL files to the directory containing the program that
-needs it and run directplay-win32.reg or directplay-win64.reg, depending whether
-you are running 32-bit or 64-bit Windows.
+needs it and run dplay-setup.exe (only required for DirectPlay games).
 
 Choosing network interfaces
 ---------------------------
@@ -84,5 +83,5 @@ The following have been reported to work:
 License
 -------
 
-Copyright (C) 2008-2024 Daniel Collins <solemnwarning@solemnwarning.net>
+Copyright (C) 2008-2025 Daniel Collins <solemnwarning@solemnwarning.net>
 Read license.txt for licensing terms.

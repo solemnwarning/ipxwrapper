@@ -4,3 +4,4 @@
 *.exe
 ipxwrapper.log
 /.d/
+/src/dplay-setup.res

@@ -1,5 +1,5 @@
 # IPXWrapper - Makefile
-# Copyright (C) 2011-2024 Daniel Collins <solemnwarning@solemnwarning.net>
+# Copyright (C) 2011-2025 Daniel Collins <solemnwarning@solemnwarning.net>
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License version 2 as published by
@@ -142,8 +142,11 @@ src/ipxconfig_stubs.s: src/ipxwrapper_stubs.txt
 # DPLAY-SETUP.EXE
 #
 
-dplay-setup.exe: src/dplay-setup.c
+dplay-setup.exe: src/dplay-setup.o src/dplay-setup.res
 	$(CC) $(CFLAGS) -static-libgcc -mwindows -o $@ $^
+
+src/dplay-setup.res: src/dplay-setup.rc src/dplay-setup.exe.manifest icons/dplay-setup.ico
+	$(WINDRES) $< -O coff -o $@
 
 #
 # SHARED TARGETS
