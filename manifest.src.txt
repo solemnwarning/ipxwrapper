@@ -26,6 +26,9 @@ src/config.h
 src/ethernet.c
 src/ethernet.h
 src/directplay.c
+src/dplay-setup.c
+src/dplay-setup.exe.manifest
+src/dplay-setup.rc
 src/dpwsockx.def
 src/dpwsockx_stubs.txt
 src/firewall.c
@@ -56,6 +59,9 @@ icons/ipxconfig.ico
 icons/ipxconfig.rc
 icons/ipxconfig-16.png
 icons/ipxconfig-32.png
+icons/dplay-setup.ico
+icons/dplay-setup16.png
+icons/dplay-setup32.png
 
 include/dplay.h
 include/dplaysp.h
@@ -65,9 +71,6 @@ include/stdbool.h
 include/uthash.h
 include/utlist.h
 include/wsnwlink.h
-
-directplay-win32.reg
-directplay-win64.reg
 
 tests/05-addr.t
 tests/07-addrcache.t

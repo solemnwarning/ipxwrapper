@@ -8,5 +8,4 @@ wsock32.dll
 dpwsockx.dll
 ipxconfig.exe
 
-directplay-win32.reg
-directplay-win64.reg
+dplay-setup.exe

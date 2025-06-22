@@ -1,5 +1,5 @@
 # IPXWrapper - Makefile
-# Copyright (C) 2011-2024 Daniel Collins <solemnwarning@solemnwarning.net>
+# Copyright (C) 2011-2025 Daniel Collins <solemnwarning@solemnwarning.net>
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License version 2 as published by
@@ -56,7 +56,7 @@ TOOLS := tools/socket.exe tools/list-interfaces.exe tools/bind.exe tools/ipx-sen
 # DLLs to copy to the tools/ directory before running the test suite.
 TOOL_DLLS := tools/ipxwrapper.dll tools/wsock32.dll tools/mswsock.dll tools/dpwsockx.dll
 
-all: ipxwrapper.dll wsock32.dll mswsock.dll ipxconfig.exe dpwsockx.dll
+all: ipxwrapper.dll wsock32.dll mswsock.dll ipxconfig.exe dpwsockx.dll dplay-setup.exe
 
 clean:
 	rm -f ipxwrapper.dll wsock32.dll mswsock.dll ipxconfig.exe dpwsockx.dll
@@ -137,6 +137,16 @@ ipxconfig.exe: $(IPXCONFIG_OBJS)
 
 src/ipxconfig_stubs.s: src/ipxwrapper_stubs.txt
 	perl mkstubs.pl src/ipxconfig_stubs.txt src/ipxconfig_stubs.s ipxconfig.exe
+
+#
+# DPLAY-SETUP.EXE
+#
+
+dplay-setup.exe: src/dplay-setup.o src/dplay-setup.res
+	$(CC) $(CFLAGS) -static-libgcc -mwindows -o $@ $^
+
+src/dplay-setup.res: src/dplay-setup.rc src/dplay-setup.exe.manifest icons/dplay-setup.ico
+	$(WINDRES) $< -O coff -o $@
 
 #
 # SHARED TARGETS
