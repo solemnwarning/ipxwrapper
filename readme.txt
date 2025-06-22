@@ -55,6 +55,7 @@ Software that uses WinSock 1.x and/or DirectPlay (before version 8) is supported
 The following have been reported to work:
 
  * Atomic Bomberman
+ * Call to Power II
  * Carmageddon
  * Carmageddon II
  * Command & Conquer: Red Alert 2
@@ -62,6 +63,7 @@ The following have been reported to work:
  * Delta Force 2
  * Diablo
  * FIFA: Road to World Cup 98
+ * Hardwar: The Future Is Greedy
  * Heroes of Might and Magic III
  * Laser Arena
  * Machines: Wired for War
