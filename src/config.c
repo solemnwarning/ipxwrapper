@@ -208,6 +208,30 @@ static int process_ini_directive(void *context, const char *section, const char 
 			log_printf(LOG_ERROR, "Invalid \"logging\" (%s) specified in ipxwrapper.ini (expected \"none\", \"info\", \"debug\" or \"trace\")", value);
 		}
 	}
+	else if(strcmp(name, "send packet limit") == 0)
+	{
+		int rate_limit_packets = atoi(value);
+		
+		if(rate_limit_packets > 0)
+		{
+			config->rate_limit_packets = rate_limit_packets;
+		}
+		else{
+			log_printf(LOG_ERROR, "Invalid \"send packet limit\" (%s) specified in ipxwrapper.ini", value);
+		}
+	}
+	else if(strcmp(name, "send byte limit") == 0)
+	{
+		int rate_limit_bytes = atoi(value);
+		
+		if(rate_limit_bytes > 0)
+		{
+			config->rate_limit_bytes = rate_limit_bytes;
+		}
+		else{
+			log_printf(LOG_ERROR, "Invalid \"send byte limit\" (%s) specified in ipxwrapper.ini", value);
+		}
+	}
 	else{
 		log_printf(LOG_ERROR, "Unknown directive \"%s\" in ipxwrapper.ini", name);
 	}
