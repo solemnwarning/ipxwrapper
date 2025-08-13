@@ -669,6 +669,11 @@ static HRESULT WINAPI IPX_ShutdownEx(LPDPSP_SHUTDOWNDATA data) {
 HRESULT WINAPI r_SPInit(LPSPINITDATA);
 
 HRESULT WINAPI SPInit(LPSPINITDATA data) {
+	log_printf(LOG_DEBUG, "SPInit called with provider GUID {%08lX-%04hX-%04hX-%02hhX%02hhX-%02hhX%02hhX%02hhX%02hhX%02hhX%02hhX}",
+		data->lpGuid->Data1, data->lpGuid->Data2, data->lpGuid->Data3,
+		data->lpGuid->Data4[0], data->lpGuid->Data4[1], data->lpGuid->Data4[2], data->lpGuid->Data4[3],
+		data->lpGuid->Data4[4], data->lpGuid->Data4[5], data->lpGuid->Data4[6], data->lpGuid->Data4[7]);
+	
 	if(!IsEqualGUID(data->lpGuid, &DPSPGUID_IPX)) {
 		return r_SPInit(data);
 	}

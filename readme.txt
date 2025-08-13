@@ -11,8 +11,7 @@ Quick start
 -----------
 
 Copy the four included DLL files to the directory containing the program that
-needs it and run directplay-win32.reg or directplay-win64.reg, depending whether
-you are running 32-bit or 64-bit Windows.
+needs it and run dplay-setup.exe (only required for DirectPlay games).
 
 Choosing network interfaces
 ---------------------------
@@ -55,6 +54,7 @@ Software that uses WinSock 1.x and/or DirectPlay (before version 8) is supported
 The following have been reported to work:
 
  * Atomic Bomberman
+ * Call to Power II
  * Carmageddon
  * Carmageddon II
  * Command & Conquer: Red Alert 2
@@ -62,6 +62,7 @@ The following have been reported to work:
  * Delta Force 2
  * Diablo
  * FIFA: Road to World Cup 98
+ * Hardwar: The Future Is Greedy
  * Heroes of Might and Magic III
  * Laser Arena
  * Machines: Wired for War
@@ -84,5 +85,5 @@ The following have been reported to work:
 License
 -------
 
-Copyright (C) 2008-2024 Daniel Collins <solemnwarning@solemnwarning.net>
+Copyright (C) 2008-2025 Daniel Collins <solemnwarning@solemnwarning.net>
 Read license.txt for licensing terms.

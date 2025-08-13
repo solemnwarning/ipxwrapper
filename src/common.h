@@ -1,5 +1,5 @@
 /* IPXWrapper - Common header
- * Copyright (C) 2011-2024 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2011-2025 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -87,6 +87,18 @@ void log_open(const char *file);
 void log_close();
 void log_connect(const char *log_server_addr, uint16_t log_server_port);
 void log_printf(enum ipx_log_level level, const char *fmt, ...);
+
+#define RATELIMIT_COUNTS_SIZE 10
+
+struct ratelimit_data
+{
+	DWORD time_base;
+	unsigned int counts[RATELIMIT_COUNTS_SIZE];
+};
+
+typedef struct ratelimit_data ratelimit;
+
+unsigned int ratelimit_get_delay(ratelimit *self, unsigned int add_count, unsigned int max_counts_per_second, DWORD current_time);
 
 #ifdef __cplusplus
 }

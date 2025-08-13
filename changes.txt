@@ -1,3 +1,14 @@
+Version 0.7.2:
+	Fix error when loading settings under Windows XP compatibility mode.
+	
+	Replace DirectPlay registry files with setup application to work
+	correctly on non-English-language systems.
+	
+	Add outgoing packet rate limit options to improve performance of games
+	which otherwise saturate the network.
+	
+	Fix receiving of maximum-size datagrams when using Npcap.
+
 Version 0.7.1:
 	Added "packet coalescing" option to improve performance for games which
 	send/receive exceptionally high numbers of packets.
@@ -7,6 +18,8 @@ Version 0.7.1:
 	Added profiling functionality to guide future optimisations.
 	
 	Added option to disable logging entirely.
+	
+	Optionally load settings from per-directory "ipxwrapper.ini" file.
 
 Version 0.7.0:
 	Added support for DOSBox IPX servers.

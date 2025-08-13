@@ -1,5 +1,5 @@
 /* ipxwrapper - Configuration header
- * Copyright (C) 2011-2024 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2011-2025 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -45,6 +45,9 @@ main_config_t get_main_config(bool ignore_ini)
 	config.dosbox_server_addr = NULL;
 	config.dosbox_server_port = 213;
 	config.dosbox_coalesce = false;
+	
+	config.rate_limit_packets = 0;
+	config.rate_limit_bytes = 0;
 	
 	if(!ignore_ini)
 	{
@@ -105,6 +108,9 @@ main_config_t get_main_config(bool ignore_ini)
 	config.dosbox_server_addr = reg_get_string(reg, "dosbox_server_addr", "");
 	config.dosbox_server_port = reg_get_dword(reg, "dosbox_server_port", config.dosbox_server_port);
 	config.dosbox_coalesce    = reg_get_dword(reg, "dosbox_coalesce", config.dosbox_coalesce);
+	
+	config.rate_limit_packets = reg_get_dword(reg, "rate_limit_packets", config.rate_limit_packets);
+	config.rate_limit_bytes = reg_get_dword(reg, "rate_limit_bytes", config.rate_limit_bytes);
 	
 	/* Check for valid frame_type */
 	
@@ -208,6 +214,30 @@ static int process_ini_directive(void *context, const char *section, const char 
 			log_printf(LOG_ERROR, "Invalid \"logging\" (%s) specified in ipxwrapper.ini (expected \"none\", \"info\", \"debug\" or \"trace\")", value);
 		}
 	}
+	else if(strcmp(name, "send packet limit") == 0)
+	{
+		int rate_limit_packets = atoi(value);
+		
+		if(rate_limit_packets > 0)
+		{
+			config->rate_limit_packets = rate_limit_packets;
+		}
+		else{
+			log_printf(LOG_ERROR, "Invalid \"send packet limit\" (%s) specified in ipxwrapper.ini", value);
+		}
+	}
+	else if(strcmp(name, "send byte limit") == 0)
+	{
+		int rate_limit_bytes = atoi(value);
+		
+		if(rate_limit_bytes > 0)
+		{
+			config->rate_limit_bytes = rate_limit_bytes;
+		}
+		else{
+			log_printf(LOG_ERROR, "Invalid \"send byte limit\" (%s) specified in ipxwrapper.ini", value);
+		}
+	}
 	else{
 		log_printf(LOG_ERROR, "Unknown directive \"%s\" in ipxwrapper.ini", name);
 	}
@@ -229,7 +259,10 @@ bool set_main_config(const main_config_t *config)
 		
 		&& reg_set_string(reg, "dosbox_server_addr", config->dosbox_server_addr)
 		&& reg_set_dword(reg,  "dosbox_server_port", config->dosbox_server_port)
-		&& reg_set_dword(reg,  "dosbox_coalesce",    config->dosbox_coalesce);
+		&& reg_set_dword(reg,  "dosbox_coalesce",    config->dosbox_coalesce)
+		
+		&& reg_set_dword(reg, "rate_limit_packets", config->rate_limit_packets)
+		&& reg_set_dword(reg, "rate_limit_bytes", config->rate_limit_bytes);
 	
 	reg_close(reg);
 	

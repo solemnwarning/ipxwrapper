@@ -19,6 +19,17 @@
 ;
 ; coalesce packets = yes
 
+; Uncomment the line below to rate limit outgoing traffic to 100 packets/sec.
+;
+; Rate limiting may help with games which over-saturate the network and do not
+; handle packet loss or latency well.
+;
+; send packet limit = 100
+;
+; Uncomment the line below to rate limit outgoing traffic to 10KiB/sec.
+;
+; send byte limit = 10240
+
 ; Uncomment the line below to automatically create a Windows Firewall exception
 ; for the application at start-up.
 ;

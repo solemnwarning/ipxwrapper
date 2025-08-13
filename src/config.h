@@ -1,5 +1,5 @@
 /* ipxwrapper - Configuration header
- * Copyright (C) 2011-2024 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2011-2025 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -56,6 +56,9 @@ typedef struct main_config {
 	bool profile;
 	char *log_server_addr;
 	uint16_t log_server_port;
+	
+	unsigned int rate_limit_packets;
+	unsigned int rate_limit_bytes;
 } main_config_t;
 
 struct v1_global_config {

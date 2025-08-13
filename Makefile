@@ -1,5 +1,5 @@
 # IPXWrapper - Makefile
-# Copyright (C) 2011-2024 Daniel Collins <solemnwarning@solemnwarning.net>
+# Copyright (C) 2011-2025 Daniel Collins <solemnwarning@solemnwarning.net>
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License version 2 as published by
@@ -46,7 +46,7 @@ BIN_FILES := $(shell cat manifest.bin.txt)
 SRC_FILES := $(shell cat manifest.src.txt)
 
 # Tests to compile before running the test suite.
-TESTS := tests/addr.exe tests/addrcache.exe tests/ethernet.exe tools/fionread.exe
+TESTS := tests/addr.exe tests/addrcache.exe tests/ethernet.exe tests/ratelimit.exe tools/fionread.exe
 
 # Tools to compile before running the test suite.
 TOOLS := tools/socket.exe tools/list-interfaces.exe tools/bind.exe tools/ipx-send.exe \
@@ -56,7 +56,7 @@ TOOLS := tools/socket.exe tools/list-interfaces.exe tools/bind.exe tools/ipx-sen
 # DLLs to copy to the tools/ directory before running the test suite.
 TOOL_DLLS := tools/ipxwrapper.dll tools/wsock32.dll tools/mswsock.dll tools/dpwsockx.dll
 
-all: ipxwrapper.dll wsock32.dll mswsock.dll ipxconfig.exe dpwsockx.dll
+all: ipxwrapper.dll wsock32.dll mswsock.dll ipxconfig.exe dpwsockx.dll dplay-setup.exe
 
 clean:
 	rm -f ipxwrapper.dll wsock32.dll mswsock.dll ipxconfig.exe dpwsockx.dll
@@ -139,6 +139,16 @@ src/ipxconfig_stubs.s: src/ipxwrapper_stubs.txt
 	perl mkstubs.pl src/ipxconfig_stubs.txt src/ipxconfig_stubs.s ipxconfig.exe
 
 #
+# DPLAY-SETUP.EXE
+#
+
+dplay-setup.exe: src/dplay-setup.o src/dplay-setup.res
+	$(CC) $(CFLAGS) -static-libgcc -mwindows -o $@ $^
+
+src/dplay-setup.res: src/dplay-setup.rc src/dplay-setup.exe.manifest icons/dplay-setup.ico
+	$(WINDRES) $< -O coff -o $@
+
+#
 # SHARED TARGETS
 #
 
@@ -170,6 +180,7 @@ test-prep: $(TESTS) $(TOOLS) $(TOOL_DLLS)
 tests/addr.exe: tests/addr.o tests/tap/basic.o src/addr.o src/snprintf.o
 tests/addrcache.exe: tests/addrcache.o tests/tap/basic.o src/addrcache.o src/addr.o src/common.o src/snprintf.o
 tests/ethernet.exe: tests/ethernet.o tests/tap/basic.o src/ethernet.o src/addr.o src/snprintf.o
+tests/ratelimit.exe: tests/ratelimit.o src/addr.o src/common.o tests/tap/basic.o src/snprintf.o
 
 tests/%.exe: tests/%.o src/snprintf.o
 	$(CC) $(CFLAGS) -o $@ $^ -lwsock32

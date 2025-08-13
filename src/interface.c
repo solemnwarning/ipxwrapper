@@ -1,5 +1,5 @@
 /* IPXWrapper - Interface functions
- * Copyright (C) 2011-2024 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2011-2025 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -361,7 +361,7 @@ static void _init_pcap_interfaces(void)
 		}
 		
 		char errbuf[PCAP_ERRBUF_SIZE];
-		pcap_t *pcap = pcap_open(i->name, ETHERNET_MTU, PCAP_OPENFLAG_MAX_RESPONSIVENESS, -1, NULL, errbuf);
+		pcap_t *pcap = pcap_open(i->name, PCAP_SNAPLEN, PCAP_OPENFLAG_MAX_RESPONSIVENESS, -1, NULL, errbuf);
 		if(!pcap)
 		{
 			log_printf(LOG_ERROR, "Could not open WinPcap interface '%s': %s", i->name, errbuf);

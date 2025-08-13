@@ -1,5 +1,5 @@
 /* ipxwrapper - Winsock functions
- * Copyright (C) 2008-2024 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2008-2025 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -1754,7 +1754,20 @@ int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct s
 		
 		DWORD error = ipx_send_packet(type, src_net, src_node, src_socket, dest_net, dest_node, dest_socket, buf, len);
 		
+		static ratelimit packet_rate;
+		static ratelimit byte_rate;
+		
+		unsigned int packet_rate_delay = main_config.rate_limit_packets > 0
+			? ratelimit_get_delay(&packet_rate, 1, main_config.rate_limit_packets, GetTickCount())
+			: 0;
+		
+		unsigned int byte_rate_delay = main_config.rate_limit_bytes > 0
+			? ratelimit_get_delay(&byte_rate, len, main_config.rate_limit_bytes, GetTickCount())
+			: 0;
+		
 		unlock_sockets();
+		
+		Sleep(max(packet_rate_delay, byte_rate_delay));
 		
 		if(error == ERROR_SUCCESS)
 		{
@@ -2449,9 +2462,12 @@ int PASCAL send(SOCKET fd, const char *buf, int len, int flags)
 				return -1;
 			}
 			
-			int ret = sendto(fd, buf, len, 0, (struct sockaddr*)&(sock->remote_addr), sizeof(struct sockaddr_ipx));
+			/* Copy remote address to ensure it remains valid after we unlock the sockets. */
+			struct sockaddr_ipx dest_addr = sock->remote_addr;
 			
 			unlock_sockets();
+			
+			int ret = sendto(fd, buf, len, 0, (struct sockaddr*)&(dest_addr), sizeof(struct sockaddr_ipx));
 			
 			return ret;
 		}
