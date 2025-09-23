@@ -54,6 +54,7 @@ Software that uses WinSock 1.x and/or DirectPlay (before version 8) is supported
 The following have been reported to work:
 
  * Atomic Bomberman
+ * Civilization: Call to Power
  * Call to Power II
  * Carmageddon
  * Carmageddon II
