@@ -1,5 +1,5 @@
 /* ipxwrapper - Library functions
- * Copyright (C) 2008-2024 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2008-2025 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -50,6 +50,9 @@ static CRITICAL_SECTION sockets_cs;
 
 typedef ULONGLONG WINAPI (*GetTickCount64_t)(void);
 static HMODULE kernel32 = NULL;
+
+typedef UINT WINAPI (*GetSystemWindowsDirectory_t)(LPSTR lpBuffer, UINT uSize);
+static GetSystemWindowsDirectory_t GetSystemWindowsDirectory_ptr = NULL;
 
 struct FuncStats ipxwrapper_fstats[] = {
 	#define FPROF_DECL(func) { #func },
@@ -130,18 +133,28 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 		log_printf(LOG_INFO, "Compiled at %s", compile_time);
 		log_printf(LOG_INFO, "Performance counter: %lld Hz", perf_counter_freq);
 		
-		#if 0
 		if(!getenv("SystemRoot"))
 		{
 			log_printf(LOG_WARNING, "SystemRoot is not set in the environment");
 			
 			char env[268] = "SystemRoot=";
-			GetSystemWindowsDirectory(env+11, 256);
+			
+			if(!kernel32 && (kernel32 = LoadLibrary("kernel32.dll")))
+			{
+				GetSystemWindowsDirectory_ptr = (GetSystemWindowsDirectory_t)(GetProcAddress(kernel32, "GetSystemWindowsDirectoryA"));
+			}
+			
+			if(GetSystemWindowsDirectory_ptr != NULL)
+			{
+				GetSystemWindowsDirectory_ptr(env+11, 256);
+			}
+			else{
+				GetWindowsDirectory(env+11, 256);
+			}
 			
 			log_printf(LOG_INFO, "Setting SystemRoot to '%s'", env+11);
 			_putenv(env);
 		}
-		#endif
 		
 		if(main_config.fw_except)
 		{
