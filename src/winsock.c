@@ -2602,6 +2602,7 @@ SOCKET PASCAL accept(SOCKET s, struct sockaddr *addr, int *addrlen)
 			for(int i = 0; i < sizeof(spxinit);)
 			{
 				int r = recv(nsock->fd, (char*)(&spxinit) + i, sizeof(spxinit) - i, 0);
+				log_printf(LOG_INFO, "r = %d", r);;
 				if(r <= 0)
 				{
 					if(r == -1)
@@ -2619,6 +2620,8 @@ SOCKET PASCAL accept(SOCKET s, struct sockaddr *addr, int *addrlen)
 				
 				i += r;
 			}
+
+			log_printf(LOG_INFO, "A");
 			
 			nsock->flags = IPX_IS_SPX | IPX_BOUND | IPX_CONNECTED | (sock->flags & IPX_IS_SPXII);
 			
@@ -2644,6 +2647,8 @@ SOCKET PASCAL accept(SOCKET s, struct sockaddr *addr, int *addrlen)
 				WSASetLastError(WSAENETDOWN);
 				return -1;
 			}
+
+			log_printf(LOG_INFO, "B");
 			
 			/* Copy remote address from the spxinit packet. */
 			
@@ -2651,15 +2656,23 @@ SOCKET PASCAL accept(SOCKET s, struct sockaddr *addr, int *addrlen)
 			memcpy(nsock->remote_addr.sa_netnum, spxinit.net, 4);
 			memcpy(nsock->remote_addr.sa_nodenum, spxinit.node, 6);
 			nsock->remote_addr.sa_socket = spxinit.socket;
+
+			log_printf(LOG_INFO, "C");
 			
 			HASH_ADD_INT(sockets, fd, nsock);
+
+			log_printf(LOG_INFO, "D");
 			
 			if(addr)
 			{
 				*(struct sockaddr_ipx*)(addr) = nsock->remote_addr;
 			}
+
+			log_printf(LOG_INFO, "D");
 			
 			unlock_sockets();
+
+			log_printf(LOG_INFO, "E");
 			
 			return nsock->fd;
 		}
