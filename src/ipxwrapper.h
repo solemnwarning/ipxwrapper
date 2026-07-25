@@ -28,6 +28,7 @@
 
 #include "config.h"
 #include "funcprof.h"
+#include "mclock.h"
 #include "router.h"
 
 /* The standard Windows driver (in XP) only allows 1467 bytes anyway */
@@ -57,6 +58,11 @@
 #define IPX_IS_SPXII	(int)(1<<11)
 #define IPX_LISTENING	(int)(1<<12)
 #define IPX_CONNECT_OK	(int)(1<<13)
+#define IPX_CONNECTING	(int)(1<<14)
+#define IPX_CLOSING (int)(1<<15) /**< SPX socket closed locally, awaiting acknowledgement of disconnection from peer, or spx_abort_time */
+#define IPX_CLOSED (int)(1<<16) /**< SPX socket closed by peer, awaiting acknowledgement by application and spx_abort_time */
+#define IPX_ABORTED (int)(1<<17) /**< SPX socket closed by timeout */
+#define IPX_NONBLOCK (int)(1<<18) /**< Socket is in non-blocking mode. */
 
 typedef struct ipx_socket ipx_socket;
 typedef struct ipx_packet ipx_packet;
@@ -110,6 +116,9 @@ struct ipx_recv_queue
 
 typedef struct ipx_recv_queue ipx_recv_queue;
 
+struct spx_queue;
+struct spx_pending_connection;
+
 struct ipx_socket {
 	SOCKET fd;
 	
@@ -128,10 +137,34 @@ struct ipx_socket {
 	
 	/* Address used with connect call, only set when IPX_CONNECTED is */
 	struct sockaddr_ipx remote_addr;
+
+	uint16_t local_conn;   /**< Local SPX connection ID (only valid when IPX_IS_SPX and IPX_LISTENING, IPX_CONNECTING or IPX_CONNECTED is set). */
+	uint16_t remote_conn;  /**< Peer SPX connection ID (only valid when IPX_IS_SPX and IPX_CONNECTED is set). */
 	
 	struct ipx_recv_queue *recv_queue;
 	
+	SOCKET spx_master_fd;
+	HANDLE spx_connect_event;
+	
+	struct spx_pending_connection *spx_connection_queue;
+	size_t spx_max_backlog, spx_current_backlog;
+	
+	struct spx_queue *spx_recv_queue;
+	uint16_t spx_recv_seq; /**< Sequence number of next expected SPX data packet (host byte order). */
+	size_t spx_recv_inflight; /**< Number of received bytes written to the socket and awaiting confirmation from recv_packet(). */
+	
+	struct spx_queue *spx_send_queue;
+	uint16_t spx_send_seq; /**< Sequence number of next SPX data packet to send (host byte order). */
+
+	mclock_point_t spx_retransmit_time; /**< Time when last packet needs to be retransmitted. */
+	
+	mclock_point_t spx_verify_time; /**< Time when watchdog request will next be transmitted. */
+	mclock_point_t spx_abort_time;  /**< Time when connection will be aborted due to a (assumed) dead peer. */
+	
 	UT_hash_handle hh;
+
+	ipx_socket *prev;
+	ipx_socket *next;
 };
 
 struct ipx_packet {
@@ -152,42 +185,9 @@ struct ipx_packet {
 #define IPX_MAGIC_SPXLOOKUP 1
 #define IPX_MAGIC_COALESCED 2
 
-typedef struct spxlookup_req spxlookup_req_t;
+extern ipx_socket *socket_by_fd;
+extern ipx_socket *all_sockets;
 
-struct spxlookup_req
-{
-	unsigned char net[4];
-	unsigned char node[6];
-	uint16_t socket;
-	
-	char padding[20];
-}  __attribute__((__packed__));
-
-typedef struct spxlookup_reply spxlookup_reply_t;
-
-struct spxlookup_reply
-{
-	unsigned char net[4];
-	unsigned char node[6];
-	uint16_t socket;
-	
-	uint16_t port;
-	
-	char padding[18];
-}  __attribute__((__packed__));
-
-typedef struct spxinit spxinit_t;
-
-struct spxinit
-{
-	unsigned char net[4];
-	unsigned char node[6];
-	uint16_t socket;
-	
-	char padding[20];
-} __attribute__((__packed__));
-
-extern ipx_socket *sockets;
 extern main_config_t main_config;
 
 extern struct FuncStats ipxwrapper_fstats[];

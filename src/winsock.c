@@ -31,6 +31,7 @@
 #include "router.h"
 #include "addrcache.h"
 #include "ethernet.h"
+#include "spx.h"
 
 struct sockaddr_ipx_ext {
 	short sa_family;
@@ -380,31 +381,24 @@ SOCKET WSAAPI socket(int af, int type, int protocol)
 			
 			nsock->recv_queue = recv_queue;
 			
+			nsock->spx_recv_queue = NULL;
+			nsock->spx_send_queue = NULL;
+			
+			nsock->spx_connection_queue = NULL;
+			nsock->spx_current_backlog = 0;
+			nsock->spx_current_backlog = 0;
+			
 			log_printf(LOG_INFO, "IPX socket created (fd = %d)", nsock->fd);
 			
 			lock_sockets();
-			HASH_ADD_INT(sockets, fd, nsock);
+			DL_APPEND(all_sockets, nsock);
+			HASH_ADD_INT(socket_by_fd, fd, nsock);
 			unlock_sockets();
 			
 			return nsock->fd;
 		}
 		else if(type == SOCK_STREAM)
 		{
-			if(ipx_encap_type == ENCAP_TYPE_PCAP)
-			{
-				log_printf(LOG_WARNING, "Application attempted to create an SPX socket, this isn't supported when using Ethernet encapsulation");
-				
-				WSASetLastError(WSAEPROTONOSUPPORT);
-				return -1;
-			}
-			else if(ipx_encap_type == ENCAP_TYPE_DOSBOX)
-			{
-				log_printf(LOG_WARNING, "Application attempted to create an SPX socket, this isn't supported when using DOSBox encapsulation");
-				
-				WSASetLastError(WSAEPROTONOSUPPORT);
-				return -1;
-			}
-			
 			if(protocol != 0 && protocol != NSPROTO_SPX && protocol != NSPROTO_SPXII)
 			{
 				log_printf(LOG_DEBUG, "Unknown protocol (%d) for AF_INET/SOCK_STREAM", protocol);
@@ -420,10 +414,40 @@ SOCKET WSAAPI socket(int af, int type, int protocol)
 				return -1;
 			}
 			
+			nsock->spx_recv_queue = spx_queue_alloc();
+			if(nsock->spx_recv_queue == NULL)
+			{
+				free(nsock);
+				
+				WSASetLastError(ERROR_OUTOFMEMORY);
+				return -1;
+			}
+			
+			nsock->spx_send_queue = spx_queue_alloc();
+			if(nsock->spx_send_queue == NULL)
+			{
+				spx_queue_free(nsock->spx_recv_queue);
+				free(nsock);
+				
+				WSASetLastError(ERROR_OUTOFMEMORY);
+				return -1;
+			}
+			
+			nsock->spx_connection_queue = NULL;
+			nsock->spx_current_backlog = 0;
+			nsock->spx_current_backlog = 0;
+			
 			if((nsock->fd = r_socket(AF_INET, SOCK_STREAM, 0)) == -1)
 			{
-				log_printf(LOG_ERROR, "Cannot create TCP socket: %s", w32_error(WSAGetLastError()));
+				DWORD socket_err = WSAGetLastError();
+				
+				log_printf(LOG_ERROR, "Cannot create TCP socket: %s", w32_error(socket_err));
+				
+				spx_queue_free(nsock->spx_send_queue);
+				spx_queue_free(nsock->spx_recv_queue);
 				free(nsock);
+				
+				WSASetLastError(socket_err);
 				
 				return -1;
 			}
@@ -437,10 +461,16 @@ SOCKET WSAAPI socket(int af, int type, int protocol)
 			
 			nsock->recv_queue = NULL;
 			
+			nsock->spx_recv_seq = 0;
+			nsock->spx_recv_inflight = 0;
+			
+			nsock->spx_send_seq = 0;
+			
 			log_printf(LOG_INFO, "SPX socket created (fd = %d)", nsock->fd);
 			
 			lock_sockets();
-			HASH_ADD_INT(sockets, fd, nsock);
+			DL_APPEND(all_sockets, nsock);
+			HASH_ADD_INT(socket_by_fd, fd, nsock);
 			unlock_sockets();
 			
 			return nsock->fd;
@@ -477,19 +507,71 @@ int WSAAPI closesocket(SOCKET sockfd)
 	}
 	
 	log_printf(LOG_INFO, "Socket %d (%s) closed", sockfd, (sock->flags & IPX_IS_SPX ? "SPX" : "IPX"));
+
+	HASH_DEL(socket_by_fd, sock);
+	sock->fd = SOCKET_ERROR;
+	
+	if(sock->spx_connection_queue != NULL)
+	{
+		spx_pending_free(sock->spx_connection_queue, sock->spx_current_backlog);
+		sock->spx_connection_queue = NULL;
+	}
+	
+	if(sock->spx_send_queue != NULL)
+	{
+		spx_queue_free(sock->spx_send_queue);
+		sock->spx_send_queue = NULL;
+	}
+	
+	if(sock->spx_recv_queue != NULL)
+	{
+		spx_queue_free(sock->spx_recv_queue);
+		sock->spx_recv_queue = NULL;
+	}
 	
 	if(sock->recv_queue != NULL)
 	{
 		release_recv_queue(sock->recv_queue);
+		sock->recv_queue = NULL;
 	}
 	
 	if(sock->flags & IPX_BOUND)
 	{
 		CloseHandle(sock->sock_mut);
+		sock->flags &= ~IPX_BOUND;
 	}
-	
-	HASH_DEL(sockets, sock);
-	free(sock);
+
+	/* Okay... if we are CONNECTED to an SPX peer, we must (additionally) close the master
+	 * socket, send an informed disconnect message to the peer and set up the timers to
+	 * retransmit the informed disconnect until the peer acknowledges it, or the connection
+	 * times out and we discard the remains of the connection.
+	 *
+	 * If we WERE connected, but the connection was already terminated by the peer sending
+	 * us an informed disconnect message, we let the connection linger so we can correctly
+	 * respond to a retransmitted disconnect from the peer until it times out.
+	*/
+
+	if((sock->flags & IPX_IS_SPX) != 0 && (sock->flags & IPX_CONNECTED) != 0)
+	{
+		assert(sock->spx_master_fd != SOCKET_ERROR);
+		
+		closesocket(sock->spx_master_fd);
+		sock->spx_master_fd = SOCKET_ERROR;
+		
+		spx_send_informed_disconnect(sock);
+		sock->flags |= IPX_CLOSING;
+
+		mclock_point_t now = mclock_now();
+
+		sock->spx_retransmit_time = mclock_add_ms(now, 1000); // TODO: Adjust interval
+		sock->spx_abort_time  = mclock_add_ms(now, SPX_ABORT_TIMEOUT);
+		sock->spx_verify_time = mclock_never();
+	}
+	else if((sock->flags & IPX_CLOSED) == 0)
+	{
+		DL_DELETE(all_sockets, sock);
+		free(sock);
+	}
 	
 	unlock_sockets();
 	
@@ -657,7 +739,7 @@ int WSAAPI bind(SOCKET fd, const struct sockaddr *addr, int addrlen)
 		struct sockaddr_in bind_addr;
 		
 		bind_addr.sin_family      = AF_INET;
-		bind_addr.sin_addr.s_addr = htonl(sock->flags & IPX_IS_SPX ? INADDR_ANY : INADDR_LOOPBACK);
+		bind_addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 		bind_addr.sin_port        = 0;
 		
 		if(r_bind(fd, (struct sockaddr*)&bind_addr, sizeof(bind_addr)) == -1)
@@ -980,10 +1062,11 @@ int WSAAPI recvfrom(SOCKET fd, char *buf, int len, int flags, struct sockaddr *a
 			 * The from and fromlen parameters are ignored for
 			 * connection-oriented sockets.
 			*/
-			
+		
+			int result = recv(fd, buf, len, flags);
 			unlock_sockets();
 			
-			return r_recv(fd, buf, len, flags);
+			return result;
 		}
 		else{
 			if(addr && addrlen && *addrlen < sizeof(struct sockaddr_ipx))
@@ -1029,9 +1112,31 @@ int WSAAPI recv(SOCKET fd, char *buf, int len, int flags)
 	{
 		if(sock->flags & IPX_IS_SPX)
 		{
+			if((sock->flags & IPX_CLOSED) != 0)
+			{
+				unlock_sockets();
+				return 0;
+			}
+
 			unlock_sockets();
 			
-			return r_recv(fd, buf, len, flags);
+			int recv_len = r_recv(fd, buf, len, flags);
+			
+			if(!(reclaim_socket(sock, fd)))
+			{
+				/* Socket was closed while the recv operation was in progress. */
+				WSASetLastError(WSAENOTSOCK);
+				return -1;
+			}
+			
+			if(recv_len > 0)
+			{
+				spx_recv_advance(sock, recv_len);
+			}
+			
+			unlock_sockets();
+			
+			return recv_len;
 		}
 		else{
 			int rval = recv_packet(sock, buf, len, flags, NULL, 0);
@@ -1058,9 +1163,7 @@ int PASCAL WSARecvEx(SOCKET fd, char *buf, int len, int *flags)
 	{
 		if(sock->flags & IPX_IS_SPX)
 		{
-			unlock_sockets();
-			
-			return r_WSARecvEx(fd, buf, len, flags);
+			abort(); // TODO
 		}
 		else{
 			int rval = recv_packet(sock, buf, len, 0, NULL, 0);
@@ -1395,7 +1498,7 @@ static int send_packet(const ipx_packet *packet, int len, struct sockaddr *addr,
 	return r;
 }
 
-static DWORD ipx_send_packet(
+DWORD ipx_send_packet(
 	uint8_t type,
 	addr32_t src_net,
 	addr48_t src_node,
@@ -1688,9 +1791,10 @@ int WSAAPI sendto(SOCKET fd, const char *buf, int len, int flags, const struct s
 	{
 		if(sock->flags & IPX_IS_SPX)
 		{
+			int result = send(fd, buf, len, flags);
 			unlock_sockets();
 			
-			return r_send(sock->fd, buf, len, flags);
+			return result;
 		}
 		
 		if(!addr)
@@ -1885,34 +1989,21 @@ int PASCAL ioctlsocket(SOCKET fd, long cmd, u_long *argp)
 			return 0;
 		}
 		
+		if(cmd == FIONBIO)
+		{
+			if(*argp)
+			{
+				sock->flags |= IPX_NONBLOCK;
+			}
+			else{
+				sock->flags &= ~IPX_NONBLOCK;
+			}
+		}
+		
 		unlock_sockets();
 	}
 	
 	return r_ioctlsocket(fd, cmd, argp);
-}
-
-#define MAX_CONNECT_BCAST_ADDRS 64
-
-static void _connect_bcast_push(uint32_t *bcast_addrs, int *bcast_count, ipx_interface_ip_t *ips)
-{
-	ipx_interface_ip_t *ip;
-	DL_FOREACH(ips, ip)
-	{
-		for(int i = 0; i < *bcast_count; ++i)
-		{
-			if(bcast_addrs[i] == ip->bcast)
-			{
-				goto NEXT;
-			}
-		}
-		
-		if(*bcast_count < MAX_CONNECT_BCAST_ADDRS)
-		{
-			bcast_addrs[(*bcast_count)++] = ip->bcast;
-		}
-		
-		NEXT:;
-	}
 }
 
 static int _connect_spx(ipx_socket *sock, struct sockaddr_ipx *ipxaddr)
@@ -1924,439 +2015,127 @@ static int _connect_spx(ipx_socket *sock, struct sockaddr_ipx *ipxaddr)
 		WSASetLastError(WSAEAFNOSUPPORT);
 		return -1;
 	}
-	
-	/* SPX is implemented here as a very thin layer over the top of TCP, so
-	 * we need to ask all the hosts on the network if they have an
-	 * IPXWrapper SPX socket listening on the requested address.
-	 * 
-	 * We begin by determining which IP broadcast addresses to send the
-	 * lookup requests to.
-	 * 
-	 * If the socket is already bound, we broadcast to all of the IP subnets
-	 * on that interface.
-	 * 
-	 * If the socket is unbound, we broadcast to all IPX interfaces, this is
-	 * the best we can do since every interface has the same network number
-	 * by default.
-	*/
-	
-	uint32_t bcast_addrs[MAX_CONNECT_BCAST_ADDRS];
-	int bcast_count = 0;
-	
-	if(sock->flags & IPX_BOUND)
+
+	if(!(sock->flags & IPX_BOUND))
 	{
-		ipx_interface_t *iface = ipx_interface_by_addr(
-			addr32_in(sock->addr.sa_netnum),
-			addr48_in(sock->addr.sa_nodenum));
+		log_printf(LOG_WARNING, "connect() on unbound socket, attempting implicit bind");
 		
-		if(iface)
+		struct sockaddr_ipx bind_addr;
+		
+		bind_addr.sa_family = AF_IPX;
+		memcpy(bind_addr.sa_netnum, ipxaddr->sa_netnum, 4);
+		memset(bind_addr.sa_nodenum, 0, 6);
+		bind_addr.sa_socket = 0;
+		
+		if(bind(sock->fd, (struct sockaddr*)&bind_addr, sizeof(bind_addr)) == -1)
 		{
-			_connect_bcast_push(bcast_addrs, &bcast_count, iface->ipaddr);
-		}
-		
-		free_ipx_interface(iface);
-	}
-	else{
-		ipx_interface_t *interfaces = get_ipx_interfaces();
-		
-		ipx_interface_t *iface;
-		DL_FOREACH(interfaces, iface)
-		{
-			_connect_bcast_push(bcast_addrs, &bcast_count, iface->ipaddr);
-		}
-		
-		free_ipx_interface_list(&interfaces);
-	}
-	
-	if(bcast_count == 0)
-	{
-		/* There isn't anywhere for us to probe. */
-		
-		unlock_sockets();
-		
-		WSASetLastError(WSAENETUNREACH);
-		return -1;
-	}
-	
-	{
-		IPX_STRING_ADDR(
-			addr_s,
-			addr32_in(ipxaddr->sa_netnum),
-			addr48_in(ipxaddr->sa_nodenum),
-			ipxaddr->sa_socket
-		);
-		
-		log_printf(LOG_DEBUG, "Trying to connect SPX socket %d to %s", sock->fd, addr_s);
-	}
-	
-	/* Construct the request packet. */
-	
-	spxlookup_req_t req;
-	memset(&req, 0, sizeof(req));
-	
-	memcpy(req.net, ipxaddr->sa_netnum, 4);
-	memcpy(req.node, ipxaddr->sa_nodenum, 6);
-	req.socket = ipxaddr->sa_socket;
-	
-	size_t packet_len  = sizeof(ipx_packet) - 1 + sizeof(req);
-	ipx_packet *packet = malloc(packet_len);
-	if(!packet)
-	{
-		unlock_sockets();
-		
-		WSASetLastError(ERROR_OUTOFMEMORY);
-		return -1;
-	}
-	
-	memset(packet, 0, sizeof(ipx_packet));
-	
-	packet->ptype = IPX_MAGIC_SPXLOOKUP;
-	
-	packet->size = htons(sizeof(req));
-	memcpy(packet->data, &req, sizeof(req));
-	
-	/* Set up a UDP socket for sending the spxlookup_req_t packets and
-	 * receiving the spxlookup_reply_t packets.
-	 * 
-	 * A dedicated socket is used so connect() can block without having to
-	 * worry about interaction with the router thread.
-	*/
-	
-	int lookup_fd = socket(AF_INET, SOCK_DGRAM, 0);
-	if(lookup_fd == -1)
-	{
-		log_printf(LOG_ERROR, "Cannot create UDP socket: %s", w32_error(WSAGetLastError()));
-		
-		free(packet);
-		unlock_sockets();
-		
-		return -1;
-	}
-	
-	unsigned long argp = 1;
-	ioctlsocket(lookup_fd, FIONBIO, &argp);
-	
-	BOOL bcast = TRUE;
-	setsockopt(lookup_fd, SOL_SOCKET, SO_BROADCAST, (char*)(&bcast), sizeof(bcast));
-	
-	struct sockaddr_in in_addr;
-	in_addr.sin_family      = AF_INET;
-	in_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-	in_addr.sin_port        = htons(0);
-	
-	if(bind(lookup_fd, (struct sockaddr*)(&in_addr), sizeof(in_addr)) == -1)
-	{
-		log_printf(LOG_ERROR, "Cannot bind UDP socket for SPX address lookup: %s", w32_error(WSAGetLastError()));
-		
-		closesocket(lookup_fd);
-		free(packet);
-		unlock_sockets();
-		
-		return -1;
-	}
-	
-	/* Try to find a host listening on the named SPX address. */
-	
-	bool got_reply = false;
-	
-	for(int i = 0; i < IPX_CONNECT_TRIES && !got_reply; ++i)
-	{
-		/* Send a batch of requests to the previously determined
-		 * broadcast addresses.
-		*/
-		
-		bool sent_req = false;
-		
-		for(int n = 0; n < bcast_count; ++n)
-		{
-			in_addr.sin_addr.s_addr = bcast_addrs[n];
-			in_addr.sin_port        = htons(main_config.udp_port);
-			
-			log_printf(LOG_DEBUG, "Sending IPX_MAGIC_SPXLOOKUP packet to %s:%hu", inet_ntoa(in_addr.sin_addr), main_config.udp_port);
-			
-			if(sendto(lookup_fd, (char*)(packet), packet_len, 0, (struct sockaddr*)(&in_addr), sizeof(in_addr)) == -1)
-			{
-				log_printf(LOG_ERROR, "Cannot send IPX_MAGIC_SPXLOOKUP packet: %s", w32_error(WSAGetLastError()));
-			}
-			else{
-				sent_req = true;
-			}
-		}
-		
-		if(!sent_req)
-		{
-			/* Give up if none of them could be sent. */
-			
-			closesocket(lookup_fd);
-			free(packet);
 			unlock_sockets();
-			
-			WSASetLastError(WSAENETUNREACH);
 			return -1;
 		}
-		
-		/* Wait for any replies to the batch.
-		 * 
-		 * BUG: Batch may time out or wait (effectively) forever if the
-		 * batch is sent just before the system tick count rolls over.
-		*/
-		
-		uint64_t wait_until = get_ticks() + (IPX_CONNECT_TIMEOUT / IPX_CONNECT_TRIES) * 1000;
-		
-		for(uint64_t now; (now = get_ticks()) < wait_until;)
+	}
+	
+	sock->local_conn = spx_allocate_connection_id();
+	
+	sock->remote_addr = *ipxaddr;
+	sock->remote_conn = 0xFFFF;
+	
+	if((sock->flags & IPX_NONBLOCK) != 0)
+	{
+		sock->spx_connect_event = NULL;
+	}
+	else{
+		sock->spx_connect_event = CreateEvent(NULL, TRUE, FALSE, NULL);
+		if(sock->spx_connect_event == NULL)
 		{
-			/* Release the socket table in case the remote address
-			 * in question is in the same process and we block the
-			 * router from replying.
-			*/
+			log_printf(LOG_ERROR, "Error creating SPX connection event object: %s", w32_error(GetLastError()));
 			
-			int reclaim_fd = sock->fd;
 			unlock_sockets();
 			
-			fd_set fdset;
-			FD_ZERO(&fdset);
-			FD_SET(lookup_fd, &fdset);
-			
-			struct timeval tv = {
-				.tv_sec  = (wait_until - now) / 1000,
-				.tv_usec = ((wait_until - now) % 1000) * 1000
-			};
-			
-			if(r_select(1, &fdset, NULL, NULL, &tv) == -1)
+			WSASetLastError(WSAENETDOWN);
+			return -1;
+		}
+	}
+	
+	DWORD conn_request_error = spx_send_connection_request(sock);
+	if(conn_request_error != ERROR_SUCCESS)
+	{
+		if(sock->spx_connect_event != NULL)
+		{
+			CloseHandle(sock->spx_connect_event);
+		}
+		
+		unlock_sockets();
+		
+		WSASetLastError(conn_request_error);
+		return -1;
+	}
+	
+	sock->flags |= IPX_CONNECTING;
+	
+	mclock_point_t now = mclock_now();
+
+	sock->spx_retransmit_time = mclock_add_ms(now, 1000); // TODO: Adjust time
+	sock->spx_abort_time      = mclock_add_ms(now, 30000); // TODO: Adjust time
+	
+	if((sock->flags & IPX_NONBLOCK) != 0)
+	{
+		unlock_sockets();
+		
+		WSASetLastError(WSAEWOULDBLOCK);
+		return -1;
+	}
+	else{
+		fd_set write_fds, except_fds;
+		
+		FD_ZERO(&write_fds);
+		FD_SET(sock->fd, &write_fds);
+		
+		FD_ZERO(&except_fds);
+		FD_SET(sock->fd, &except_fds);
+		
+		int fd = sock->fd;
+		
+		unlock_sockets();
+		
+		int r = select(-1, NULL, &write_fds, &except_fds, NULL);
+		
+		if(r > 0)
+		{
+			if(!(reclaim_socket(sock, fd)))
 			{
-				closesocket(lookup_fd);
-				free(packet);
-				
-				return -1;
-			}
-			
-			/* Reclaim the lock, ensure the socket hasn't been
-			 * closed by the application (naughty!) while we were
-			 * waiting.
-			*/
-			
-			ipx_socket *reclaim_sock = get_socket(reclaim_fd);
-			if(sock != reclaim_sock)
-			{
-				log_printf(LOG_DEBUG, "Application closed socket during connect!");
-				
-				closesocket(lookup_fd);
-				free(packet);
-				
-				if(reclaim_sock)
-				{
-					unlock_sockets();
-				}
-				
+				/* Socket was closed while the recv operation was in progress. */
 				WSASetLastError(WSAENOTSOCK);
 				return -1;
 			}
 			
-			/* Read and process a single packet if available. */
+			assert((sock->flags & (IPX_CONNECTED | IPX_ABORTED)) != 0);
 			
-			spxlookup_reply_t reply;
-			int addrlen = sizeof(in_addr);
-			
-			if(recvfrom(lookup_fd, (char*)(&reply), sizeof(reply), 0, (struct sockaddr*)(&in_addr), &addrlen) == sizeof(reply)
-				&& memcmp(reply.net, req.net, 4) == 0
-				&& memcmp(reply.node, req.node, 6) == 0
-				&& reply.socket == req.socket)
+			if((sock->flags & IPX_CONNECTED) != 0)
 			{
-				if(!(sock->flags & IPX_BOUND))
-				{
-					/* Connecting has to implicitly bind the
-					 * socket if it isn't already. Fill in
-					 * the local net/node numbers with those
-					 * of the interface that received the
-					 * reply.
-					*/
-					
-					ipx_interface_t *iface = ipx_interface_by_subnet(in_addr.sin_addr.s_addr);
-					
-					if(iface)
-					{
-						addr32_out(sock->addr.sa_netnum, iface->ipx_net);
-						addr48_out(sock->addr.sa_nodenum, iface->ipx_node);
-					}
-					
-					free_ipx_interface(iface);
-					
-					if(!iface)
-					{
-						continue;
-					}
-				}
+				unlock_sockets();
+				return 0;
+			}
+			else{
+				unlock_sockets();
 				
-				in_addr.sin_port = reply.port;
-				got_reply = true;
-				
-				break;
+				WSASetLastError(WSAENETDOWN); // TODO: Confirm correct error code for SPX timeout
+				return -1;
 			}
 		}
-	}
-	
-	closesocket(lookup_fd);
-	free(packet);
-	
-	if(!got_reply)
-	{
-		/* Didn't receive any replies. */
-		
-		log_printf(LOG_DEBUG, "Didn't get any replies to IPX_MAGIC_SPXLOOKUP");
-		
-		unlock_sockets();
-		
-		WSASetLastError(WSAENETUNREACH);
-		return -1;
-	}
-	
-	log_printf(LOG_DEBUG, "Got reply to IPX_MAGIC_SPXLOOKUP; connecting to %s:%hu", inet_ntoa(in_addr.sin_addr), htons(in_addr.sin_port));
-	
-	/* Attempt to connect the underlying TCP socket to the address we got in
-	 * response to the IPX_MAGIC_SPXLOOKUP packet.
-	*/
-	
-	if(r_connect(sock->fd, (struct sockaddr*)(&in_addr), sizeof(in_addr)) == -1)
-	{
-		if(WSAGetLastError() == WSAEWOULDBLOCK)
+		else if(r == SOCKET_ERROR)
 		{
-			/* The socket is in non-blocking mode, so we wait for
-			 * the asynchronous connect call to complete.
-			 * 
-			 * Keeping it synchronous until it is proven this breaks
-			 * something for simplicity.
-			*/
+			log_printf(LOG_ERROR, "Unexpected error from select during blocking SPX connection: %s", w32_error(WSAGetLastError()));
 			
-			fd_set w_fdset;
-			FD_ZERO(&w_fdset);
-			FD_SET(sock->fd, &w_fdset);
-			
-			fd_set e_fdset;
-			FD_ZERO(&e_fdset);
-			FD_SET(sock->fd, &e_fdset);
-			
-			if(r_select(1, NULL, &w_fdset, &e_fdset, NULL) == 1 && FD_ISSET(sock->fd, &w_fdset))
-			{
-				goto CONNECTED;
-			}
-			
-			int errnum, len = sizeof(int);
-			getsockopt(sock->fd, SOL_SOCKET, SO_ERROR, (char*)(&errnum), &len);
-			
-			log_printf(LOG_DEBUG, "Connection failed: %s", w32_error(errnum));
-			
-			unlock_sockets();
-			
-			WSASetLastError(WSAEWOULDBLOCK);
+			WSASetLastError(WSAENETDOWN);
 			return -1;
 		}
-		
-		unlock_sockets();
-		return -1;
-	}
-	
-	CONNECTED:
-	
-	log_printf(LOG_DEBUG, "Connection succeeded");
-	
-	/* Set the IPX_CONNECT_OK bit which indicates the next WSAAsyncSelect
-	 * call with FD_CONNECT set should send a message indicating the
-	 * connection succeeded and then clear this bit.
-	 * 
-	 * This is a hack to make asynchronous connect calls vaguely work as
-	 * they should.
-	*/
-	
-	sock->flags |= IPX_CONNECT_OK;
-	
-	/* The TCP connection is up!
-	 * 
-	 * Store the remote IPX address in remote_addr and mark the socket as
-	 * connected for getpeername.
-	*/
-	
-	memcpy(&(sock->remote_addr), ipxaddr, sizeof(*ipxaddr));
-	sock->flags |= IPX_CONNECTED;
-	
-	/* If the socket wasn't previously bound to an IPX address, we need to
-	 * make it so now.
-	*/
-	
-	if(!(sock->flags & IPX_BOUND))
-	{
-		sock->addr.sa_family = AF_IPX;
-		
-		struct sockaddr_in local_addr;
-		int addrlen = sizeof(local_addr);
-		
-		if(r_getsockname(sock->fd, (struct sockaddr*)(&local_addr), &addrlen) == -1)
-		{
-			log_printf(LOG_ERROR, "Cannot get local TCP port of SPX socket: %s", w32_error(WSAGetLastError()));
-			log_printf(LOG_WARNING, "Socket %d is NOW INCONSISTENT!", sock->fd);
+		else{
+			log_printf(LOG_ERROR, "Unexpected return code from select during blocking SPX connection: %d", r);
 			
-			unlock_sockets();
-			
+			WSASetLastError(WSAENETDOWN);
 			return -1;
 		}
-		
-		sock->port = local_addr.sin_port;
-		log_printf(LOG_DEBUG, "Socket %d bound to TCP port %hu by connect", sock->fd, ntohs(sock->port));
-		
-		/* The sa_netnum and sa_nodenum fields are filled out above. */
-		
-		if(!_complete_bind(sock))
-		{
-			log_printf(LOG_ERROR, "Cannot allocate socket number for SPX socket");
-			log_printf(LOG_WARNING, "Socket %d is NOW INCONSISTENT!", sock->fd);
-			
-			unlock_sockets();
-			
-			return -1;
-		}
-		
-		{
-			IPX_STRING_ADDR(
-				addr_s,
-				addr32_in(sock->addr.sa_netnum),
-				addr48_in(sock->addr.sa_nodenum),
-				sock->addr.sa_socket
-			);
-			
-			log_printf(LOG_DEBUG, "Socket implicitly bound to %s", addr_s);
-		}
 	}
-	
-	/* Populate an spxinit_t structure and send it over the stream for the
-	 * IPXWrapper instance on the other end to receive inside accept and
-	 * initialise the new ipx_socket.
-	*/
-	
-	spxinit_t spxinit;
-	memset(&spxinit, 0, sizeof(spxinit));
-	
-	memcpy(spxinit.net, sock->addr.sa_netnum, 4);
-	memcpy(spxinit.node, sock->addr.sa_nodenum, 6);
-	spxinit.socket = sock->addr.sa_socket;
-	
-	for(int c = 0; c < sizeof(spxinit);)
-	{
-		int s = send(sock->fd, (char*)(&spxinit) + c, sizeof(spxinit) - c, 0);
-		if(s == -1)
-		{
-			log_printf(LOG_ERROR, "Cannot send spxinit structure: %s", w32_error(WSAGetLastError()));
-			log_printf(LOG_WARNING, "Socket %d is NOW INCONSISTENT!", sock->fd);
-			
-			unlock_sockets();
-			
-			return -1;
-		}
-		
-		c += s;
-	}
-	
-	unlock_sockets();
-	
-	return 0;
 }
 
 int PASCAL connect(SOCKET fd, const struct sockaddr *addr, int addrlen)
@@ -2472,9 +2251,24 @@ int PASCAL send(SOCKET fd, const char *buf, int len, int flags)
 	{
 		if(sock->flags & IPX_IS_SPX)
 		{
-			unlock_sockets();
-			
-			return r_send(fd, buf, len, flags);
+			if((sock->flags & IPX_CONNECTED))
+			{
+				DWORD error = spx_queue_message(sock, buf, len);
+				unlock_sockets();
+				
+				if(error == ERROR_SUCCESS)
+				{
+					return len;
+				}
+				else{
+					WSASetLastError(error);
+					return -1;
+				}
+			}
+			else{
+				WSASetLastError(WSAENOTCONN);
+				return -1;
+			}
 		}
 		else{
 			if(!(sock->flags & IPX_CONNECTED))
@@ -2549,13 +2343,28 @@ int PASCAL listen(SOCKET s, int backlog)
 				return -1;
 			}
 			
-			if(sock->flags & IPX_LISTENING)
+			if(sock->flags & (IPX_LISTENING | IPX_CONNECTED | IPX_CONNECTING))
 			{
 				unlock_sockets();
 				
 				WSASetLastError(WSAEISCONN);
 				return -1;
 			}
+			
+			free(sock->spx_connection_queue);
+			sock->spx_connection_queue = NULL;
+			
+			sock->spx_connection_queue = spx_pending_alloc(backlog);
+			if(sock->spx_connection_queue == NULL)
+			{
+				unlock_sockets();
+				
+				WSASetLastError(ERROR_OUTOFMEMORY);
+				return -1;
+			}
+			
+			sock->spx_max_backlog = backlog;
+			sock->spx_current_backlog = 0;
 			
 			if(r_listen(sock->fd, backlog) == -1)
 			{
@@ -2564,6 +2373,15 @@ int PASCAL listen(SOCKET s, int backlog)
 				return -1;
 			}
 			
+			#if 0
+			struct sockaddr_in listener_addr;
+			int listener_addrlen = sizeof(listener_addr);
+			
+			r_getpeername(sock->fd, (struct sockaddr*)(&listener_addr), &listener_addrlen);
+			sock->port = listener_addr.sin_port;
+			#endif
+			
+			sock->local_conn = 0xFFFF;
 			sock->flags |= IPX_LISTENING;
 			
 			unlock_sockets();
@@ -2590,10 +2408,10 @@ SOCKET PASCAL accept(SOCKET s, struct sockaddr *addr, int *addrlen)
 	{
 		if(sock->flags & IPX_IS_SPX)
 		{
+			unlock_sockets();
+
 			if(addrlen && *addrlen < sizeof(struct sockaddr_ipx))
 			{
-				unlock_sockets();
-				
 				WSASetLastError(WSAEFAULT);
 				return -1;
 			}
@@ -2604,44 +2422,105 @@ SOCKET PASCAL accept(SOCKET s, struct sockaddr *addr, int *addrlen)
 				WSASetLastError(ERROR_OUTOFMEMORY);
 				return -1;
 			}
+
+			nsock->recv_queue = NULL;
 			
-			if((nsock->fd = r_accept(s, NULL, NULL)) == -1)
+			nsock->spx_recv_queue = spx_queue_alloc();
+			if(nsock->spx_recv_queue == NULL)
 			{
 				free(nsock);
-				unlock_sockets();
 				
+				WSASetLastError(ERROR_OUTOFMEMORY);
+				return -1;
+			}
+			
+			nsock->spx_send_queue = spx_queue_alloc();
+			if(nsock->spx_send_queue == NULL)
+			{
+				spx_queue_free(nsock->spx_recv_queue);
+				free(nsock);
+				
+				WSASetLastError(ERROR_OUTOFMEMORY);
+				return -1;
+			}
+			
+			nsock->spx_connection_queue = NULL;
+			nsock->spx_current_backlog = 0;
+			nsock->spx_current_backlog = 0;
+			
+			nsock->spx_recv_seq = 0;
+			nsock->spx_recv_inflight = 0;
+			
+			nsock->spx_send_seq = 0;
+			
+			struct sockaddr_in slave_remote_addr;
+			int slave_remote_addrlen = sizeof(slave_remote_addr);
+			
+			if((nsock->fd = r_accept(s, (struct sockaddr*)(&slave_remote_addr), &slave_remote_addrlen)) == -1)
+			{
+				spx_queue_free(nsock->spx_send_queue);
+				spx_queue_free(nsock->spx_recv_queue);
+				free(nsock);
+				
+				return -1;
+			}
+
+			if(!(reclaim_socket(sock, s)))
+			{
+				/* Socket was closed while the accept operation was in progress. */
+
+				spx_queue_free(nsock->spx_send_queue);
+				spx_queue_free(nsock->spx_recv_queue);
+				free(nsock);
+
+				WSASetLastError(WSAENOTSOCK);
+				return -1;
+			}
+			
+			bool found_master = false;
+			
+			for(size_t i = 0; i < sock->spx_current_backlog; ++i)
+			{
+				struct spx_pending_connection *pc = &(sock->spx_connection_queue[i]);
+				
+				if(pc->master_local_addr.sin_family == slave_remote_addr.sin_family
+					&& pc->master_local_addr.sin_addr.s_addr == slave_remote_addr.sin_addr.s_addr
+					&& pc->master_local_addr.sin_port == slave_remote_addr.sin_port)
+				{
+					nsock->spx_master_fd = pc->master_fd;
+					
+					nsock->remote_addr.sa_family = AF_IPX;
+					addr32_out(nsock->remote_addr.sa_netnum, pc->remote_net);
+					addr48_out(nsock->remote_addr.sa_nodenum, pc->remote_node);
+					nsock->remote_addr.sa_socket = pc->remote_socket;
+					
+					nsock->remote_conn = pc->remote_connection_id;
+					nsock->local_conn = spx_allocate_connection_id();
+					
+					memmove(pc, (pc + 1), (sizeof(*pc) * (sock->spx_current_backlog - i - 1)));
+					sock->spx_current_backlog -= 1;
+					
+					found_master = true;
+					break;
+				}
+			}
+			
+			if(!found_master)
+			{
+				unlock_sockets();
+
+				log_printf(LOG_ERROR, "Could not identify connection on SPX listening socket from %s:%d", inet_ntoa(slave_remote_addr.sin_addr), ntohs(slave_remote_addr.sin_port));
+				
+				closesocket(nsock->fd);
+				spx_queue_free(nsock->spx_send_queue);
+				spx_queue_free(nsock->spx_recv_queue);
+				free(nsock);
+				
+				WSASetLastError(WSAENETDOWN);
 				return -1;
 			}
 			
 			log_printf(LOG_INFO, "Accepted SPX connection (fd = %d)", nsock->fd);
-			
-			/* The first thing sent over an SPX connection is the
-			 * spxinit structure which contains the IPX address of
-			 * the client.
-			*/
-			
-			spxinit_t spxinit;
-			
-			for(int i = 0; i < sizeof(spxinit);)
-			{
-				int r = recv(nsock->fd, (char*)(&spxinit) + i, sizeof(spxinit) - i, 0);
-				if(r <= 0)
-				{
-					if(r == -1)
-					{
-						log_printf(LOG_ERROR, "Error receiving spxinit structure: %s", w32_error(WSAGetLastError()));
-					}
-					
-					closesocket(nsock->fd);
-					free(nsock);
-					unlock_sockets();
-					
-					WSASetLastError(WSAECONNRESET);
-					return -1;
-				}
-				
-				i += r;
-			}
 			
 			nsock->flags = IPX_IS_SPX | IPX_BOUND | IPX_CONNECTED | (sock->flags & IPX_IS_SPXII);
 			
@@ -2661,6 +2540,8 @@ SOCKET PASCAL accept(SOCKET s, struct sockaddr *addr, int *addrlen)
 				log_printf(LOG_ERROR, "Could not duplicate socket mutex: %s", w32_error(GetLastError()));
 				
 				closesocket(nsock->fd);
+				spx_queue_free(nsock->spx_send_queue);
+				spx_queue_free(nsock->spx_recv_queue);
 				free(nsock);
 				unlock_sockets();
 				
@@ -2668,19 +2549,36 @@ SOCKET PASCAL accept(SOCKET s, struct sockaddr *addr, int *addrlen)
 				return -1;
 			}
 			
-			/* Copy remote address from the spxinit packet. */
-			
-			nsock->remote_addr.sa_family = AF_IPX;
-			memcpy(nsock->remote_addr.sa_netnum, spxinit.net, 4);
-			memcpy(nsock->remote_addr.sa_nodenum, spxinit.node, 6);
-			nsock->remote_addr.sa_socket = spxinit.socket;
-			
-			HASH_ADD_INT(sockets, fd, nsock);
+			DL_APPEND(all_sockets, nsock);
+			HASH_ADD_INT(socket_by_fd, fd, nsock);
 			
 			if(addr)
 			{
 				*(struct sockaddr_ipx*)(addr) = nsock->remote_addr;
 			}
+			
+			log_printf(LOG_DEBUG, "Sending acknowledgement for SPX connection request");
+			
+			struct spx_packet_header ack_header;
+
+			ack_header.connection_control = SPX_CONNCTRL_SYS;
+			ack_header.datastream_type = 0;
+			ack_header.src_connection_id = nsock->local_conn;
+			ack_header.dst_connection_id = nsock->remote_conn;
+			ack_header.seq_number = 0;
+			ack_header.ack_number = 0;
+			ack_header.allocation_number = 0;
+
+			ipx_send_packet(
+				IPX_TYPE_SPX,
+				addr32_in(nsock->addr.sa_netnum),
+				addr48_in(nsock->addr.sa_nodenum),
+				nsock->addr.sa_socket,
+				addr32_in(nsock->remote_addr.sa_netnum),
+				addr48_in(nsock->remote_addr.sa_nodenum),
+				nsock->remote_addr.sa_socket,
+				&ack_header,
+				sizeof(ack_header));
 			
 			unlock_sockets();
 			

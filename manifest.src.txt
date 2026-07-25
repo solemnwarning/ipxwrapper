@@ -44,10 +44,14 @@ src/ipxwrapper.h
 src/ipxwrapper_prof_defs.h
 src/ipxwrapper_stubs.txt
 src/log.c
+src/mclock.c
+src/mclock.h
 src/mswsock.def
 src/mswsock_stubs.txt
 src/router.c
 src/router.h
+src/spx.c
+src/spx.h
 src/stubdll.c
 src/winsock.c
 src/wsock32.def

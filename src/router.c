@@ -32,6 +32,7 @@
 #include "interface.h"
 #include "addrcache.h"
 #include "ethernet.h"
+#include "spx.h"
 
 #define IPX_SOCK_ECHO 2
 
@@ -249,6 +250,17 @@ void deliver_packet(
 {
 	FPROF_RECORD_SCOPE(&(ipxwrapper_fstats[IPXWRAPPER_FSTATS_deliver_packet]));
 	
+	if(type == IPX_TYPE_SPX)
+	{
+		IPX_STRING_ADDR(src_addr, src_net, src_node, src_socket);
+		IPX_STRING_ADDR(dest_addr, dest_net, dest_node, dest_socket);
+		
+		log_printf(LOG_DEBUG, "Processing SPX packet from %s for %s", src_addr, dest_addr);
+		
+		spx_process_packet(src_net, src_node, src_socket, dest_net, dest_node, dest_socket, data, data_size);
+		return;
+	}
+	
 	{
 		IPX_STRING_ADDR(src_addr, src_net, src_node, src_socket);
 		IPX_STRING_ADDR(dest_addr, dest_net, dest_node, dest_socket);
@@ -260,7 +272,7 @@ void deliver_packet(
 	lock_sockets();
 	
 	ipx_socket *sock, *tmp;
-	HASH_ITER(hh, sockets, sock, tmp)
+	HASH_ITER(hh, socket_by_fd, sock, tmp)
 	{
 		if(sock->flags & IPX_IS_SPX)
 		{
@@ -400,58 +412,14 @@ static void _handle_udp_recv(ipx_packet *packet, size_t packet_size, struct sock
 		
 		if(packet->ptype == IPX_MAGIC_SPXLOOKUP)
 		{
-			/* The other system is trying to resolve the IP address
-			 * and port number of a listening SPX socket.
+			/* Older versions of IPXWrapper implemented SPX as a direct TCP connection, using this
+			 * IPX_MAGIC_SPXLOOKUP packet to discover any hosts with a listening SPX socket bound
+			 * to the requested address. We now implement real SPX on top of IPX, so just warn if
+			 * we see a message from an older version of IPXWrapper trying to use SPX.
 			*/
 			
-			if(data_size != sizeof(spxlookup_req_t))
-			{
-				log_printf(LOG_DEBUG, "Recieved IPX_MAGIC_SPXLOOKUP packet with %hu byte payload, dropping", data_size);
-				return;
-			}
-			
-			spxlookup_req_t *req = (spxlookup_req_t*)(packet->data);
-			
-			/* Search the sockets table for a listening socket which
-			 * is bound to the requested address.
-			*/
-			
-			lock_sockets();
-			
-			ipx_socket *s, *tmp;
-			HASH_ITER(hh, sockets, s, tmp)
-			{
-				if(
-					s->flags & IPX_IS_SPX
-					&& s->flags & IPX_LISTENING
-					&& (memcmp(req->net, s->addr.sa_netnum, 4) == 0
-						|| addr32_in(req->net) == ZERO_NET)
-					&& memcmp(req->node, s->addr.sa_nodenum, 6) == 0
-					&& req->socket == s->addr.sa_socket)
-				{
-					/* This socket seems to fit the bill.
-					 * Reply with the port number.
-					*/
-					
-					spxlookup_reply_t reply;
-					memset(&reply, 0, sizeof(reply));
-					
-					memcpy(reply.net, req->net, 4);
-					memcpy(reply.node, req->node, 6);
-					reply.socket = req->socket;
-					
-					reply.port = s->port;
-					
-					if(sendto(private_socket, (char*)(&reply), sizeof(reply), 0, (struct sockaddr*)(&src_ip), sizeof(src_ip)) == -1)
-					{
-						log_printf(LOG_ERROR, "Cannot send spxlookup_reply packet: %s", w32_error(WSAGetLastError()));
-					}
-					
-					break;
-				}
-			}
-			
-			unlock_sockets();
+			IPX_STRING_ADDR(src_addr, addr32_in(packet->src_net), addr48_in(packet->src_node), packet->src_socket);
+			log_printf(LOG_WARNING, "Recieved IPX_MAGIC_SPXLOOKUP packet from %s (%s) running an older version of IPXWrapper, dropping", src_addr, inet_ntoa(src_ip.sin_addr));
 		}
 		else{
 			log_printf(LOG_DEBUG, "Recieved magic packet unknown ptype %u, dropping", (unsigned int)(packet->ptype));
@@ -998,6 +966,8 @@ static DWORD router_main(void *arg)
 				dosbox_registration_retry_interval_ms = min(dosbox_registration_retry_interval_ms, MAX_DOSBOX_REGISTRATION_RETRY_INTERVAL_MS);
 			}
 		}
+
+		spx_retransmit_lost();
 	}
 	
 	if(ipx_encap_type == ENCAP_TYPE_PCAP)

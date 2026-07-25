@@ -38,6 +38,7 @@ inet_ntoa              ws2_32.dll     inet_ntoa               4
 __WSAFDIsSet           ws2_32.dll     __WSAFDIsSet            8
 r_WSAAsyncSelect       ws2_32.dll     WSAAsyncSelect         16
 gethostbyname          ws2_32.dll     gethostbyname           4
+WSASend                ws2_32.dll     WSASend                32
 
 pcap_open              wpcap.dll      pcap_open
 pcap_close             wpcap.dll      pcap_close
