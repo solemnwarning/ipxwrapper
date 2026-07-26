@@ -53,7 +53,7 @@ src/winsock.c
 src/wsock32.def
 src/wsock32_stubs.txt
 
-src/ipxconfig.cpp
+src/ipxconfig.c
 src/ipxconfig_stubs.txt
 icons/ipxconfig.ico
 icons/ipxconfig.rc

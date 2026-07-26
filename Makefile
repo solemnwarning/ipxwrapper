@@ -1,5 +1,5 @@
 # IPXWrapper - Makefile
-# Copyright (C) 2011-2025 Daniel Collins <solemnwarning@solemnwarning.net>
+# Copyright (C) 2011-2026 Daniel Collins <solemnwarning@solemnwarning.net>
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License version 2 as published by
@@ -15,8 +15,7 @@
 # Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 ifdef HOST
-CC  := $(HOST)-gcc
-CXX := $(HOST)-g++
+CC := $(HOST)-gcc
 endif
 
 WINDRES ?= $(shell \
@@ -32,8 +31,7 @@ endif
 
 INCLUDE := -I./include/ -I./winpcap/include/ -D_WIN32_WINNT=0x0500 -D_WIN32_IE=0x0500 -DHAVE_REMOTE
 
-CFLAGS   := -std=c99   -mno-ms-bitfields -Wall -DINI_HANDLER_LINENO=1 $(DBG_OPT) $(INCLUDE)
-CXXFLAGS := -std=c++0x -mno-ms-bitfields -Wall -DINI_HANDLER_LINENO=1 $(DBG_OPT) $(INCLUDE)
+CFLAGS := -std=c99   -mno-ms-bitfields -Wall -DINI_HANDLER_LINENO=1 $(DBG_OPT) $(INCLUDE)
 
 DEPDIR := .d
 $(shell mkdir -p $(DEPDIR)/src/ $(DEPDIR)/tools/ $(DEPDIR)/tests/tap/)
@@ -133,7 +131,7 @@ IPXCONFIG_OBJS := src/ipxconfig.o icons/ipxconfig.o src/addr.o src/interface2.o 
 	src/config.o src/ipxconfig_stubs.o src/funcprof.o inih/ini.o
 
 ipxconfig.exe: $(IPXCONFIG_OBJS)
-	$(CXX) $(CXXFLAGS) -Wl,--enable-stdcall-fixup -static-libgcc -static-libstdc++ -mwindows -o $@ $^ -liphlpapi -lcomctl32 -lws2_32
+	$(CC) $(CCFLAGS) -Wl,--enable-stdcall-fixup -static-libgcc -mwindows -o $@ $^ -liphlpapi -lcomctl32 -lws2_32
 
 src/ipxconfig_stubs.s: src/ipxwrapper_stubs.txt
 	perl mkstubs.pl src/ipxconfig_stubs.txt src/ipxconfig_stubs.s ipxconfig.exe
@@ -160,10 +158,6 @@ src/%_stubs.o: src/%_stubs.s
 
 src/%.o: src/%.c
 	$(CC) $(CFLAGS) $(DEPFLAGS) -c -o $@ $<
-	$(DEPPOST)
-
-src/%.o: src/%.cpp
-	$(CXX) $(CXXFLAGS) $(DEPFLAGS) -c -o $@ $<
 	$(DEPPOST)
 
 #
