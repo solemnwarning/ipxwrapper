@@ -1,3 +1,7 @@
+Version UNRELEASED:
+	Fix delivery of locally-generated packets to the same process when using
+	IPXWrapper UDP or DOSBox encapsulation.
+
 Version 0.7.2:
 	Fix error when loading settings under Windows XP compatibility mode.
 	

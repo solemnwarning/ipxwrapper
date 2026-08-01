@@ -1,5 +1,5 @@
 # IPXWrapper test suite
-# Copyright (C) 2014-2017 Daniel Collins <solemnwarning@solemnwarning.net>
+# Copyright (C) 2014-2026 Daniel Collins <solemnwarning@solemnwarning.net>
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License version 2 as published by
@@ -35,7 +35,11 @@ our ($local_dev_b, $local_mac_b, $local_ip_b);
 our ($remote_mac_a, $remote_ip_a);
 our ($remote_mac_b, $remote_ip_b);
 
+require "$FindBin::Bin/loopback.pm";
 require "$FindBin::Bin/ptype.pm";
+
+our $loopback_bind_net;
+our $loopback_bind_node;
 
 our $ptype_send_func;
 our $ptype_capture_class;
@@ -619,6 +623,14 @@ shared_examples_for "ipx over ethernet" => sub
 	};
 	
 	it_should_behave_like "ipx packet type handling";
+
+	before all => sub
+	{
+		$loopback_bind_net  = "00:00:00:01";
+		$loopback_bind_node = $remote_mac_a;
+	};
+	
+	it_should_behave_like "ipx loopback packet delivery";
 };
 
 describe "IPXWrapper using Ethernet encapsulation" => sub

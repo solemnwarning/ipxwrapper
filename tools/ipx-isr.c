@@ -1,5 +1,5 @@
 /* IPXWrapper test tools
- * Copyright (C) 2014-2023 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2014-2026 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -19,7 +19,6 @@
 #include <windows.h>
 #include <wsipx.h>
 #include <wsnwlink.h>
-#include <getopt.h>
 #include <stdio.h>
 #include <assert.h>
 #include <stdlib.h>
@@ -28,14 +27,23 @@
 #include "addr.h"
 #include "tools.h"
 
+#define MAX_SOCKETS 16
+
 static DWORD WINAPI send_thread(LPVOID sock_p)
 {
-	int sock = *(int*)(sock_p);
+	int *sockets = (int*)(sock_p);
+	int num_sockets = 0;
+	
+	while(num_sockets < MAX_SOCKETS && sockets[num_sockets] != -1)
+	{
+		++num_sockets;
+	}
 	
 	char line[1024];
 	while(fgets(line, sizeof(line), stdin))
 	{
-		char *net_s  = strtok(line, " ");
+		char *idx_s  = strtok(line, " ");
+		char *net_s  = strtok(NULL, " ");
 		char *node_s = strtok(NULL, " ");
 		char *sock_s = strtok(NULL, " ");
 		
@@ -44,7 +52,10 @@ static DWORD WINAPI send_thread(LPVOID sock_p)
 		
 		struct sockaddr_ipx send_addr = read_sockaddr(net_s, node_s, sock_s);
 		
-		assert(sendto(sock, data, len, 0, (struct sockaddr*)(&send_addr), sizeof(send_addr)) == len);
+		int sock_idx = atoi(idx_s);
+		assert(sock_idx < num_sockets);
+		
+		assert(sendto(sockets[sock_idx], data, len, 0, (struct sockaddr*)(&send_addr), sizeof(send_addr)) == len);
 	}
 	
 	return 0;
@@ -55,76 +66,117 @@ int main(int argc, char **argv)
 	setbuf(stdout, NULL);
 	setbuf(stderr, NULL);
 	
-	BOOL bcast = FALSE;
-	BOOL reuse = FALSE;
+	struct sockaddr_ipx sock_addrs[MAX_SOCKETS];
+	BOOL sock_bcast[MAX_SOCKETS];
+	BOOL sock_reuse[MAX_SOCKETS];
 	
-	int opt;
-	while((opt = getopt(argc, argv, "br")) != -1)
+	int num_sockets = 0;
+	
+	for(int i = 1; i < argc;)
 	{
-		if(opt == 'b')
+		BOOL bcast = FALSE;
+		BOOL reuse = FALSE;
+		
+		while(i < argc && argv[i][0] == '-')
 		{
-			bcast = TRUE;
+			if(strcmp(argv[i], "-b") == 0)
+			{
+				bcast = TRUE;
+			}
+			else if(strcmp(argv[i], "-r") == 0)
+			{
+				reuse = TRUE;
+			}
+			else{
+				fprintf(stderr, "Unknown option: %s\n", argv[i]);
+				return 1;
+			}
+			
+			++i;
 		}
-		else if(opt == 'r')
+		
+		if((argc - i) < 3)
 		{
-			reuse = TRUE;
-		}
-		else{
-			/* getopt has already printed an error message. */
+			fprintf(stderr, "Usage: %s [-b] [-r] <network number>  <node number>  <socket numer> ...\n", argv[0]);
 			return 1;
 		}
+		
+		struct sockaddr_ipx bind_addr = read_sockaddr(argv[i], argv[i + 1], argv[i + 2]);
+		i += 3;
+		
+		if(num_sockets >= MAX_SOCKETS)
+		{
+			fprintf(stderr, "Too many socket addresses specified\n");
+			return 1;
+		}
+		
+		sock_addrs[num_sockets] = bind_addr;
+		sock_bcast[num_sockets] = bcast;
+		sock_reuse[num_sockets] = reuse;
+		++num_sockets;
 	}
 	
-	if((argc - optind) != 3)
+	if(num_sockets == 0)
 	{
-		fprintf(stderr, "Usage: %s [-b] [-r] <network number>  <node number>  <socket numer>\n", argv[0]);
+		fprintf(stderr, "Usage: %s [-b] [-r] <network number>  <node number>  <socket numer> ...\n", argv[0]);
 		return 1;
 	}
-	
-	struct sockaddr_ipx local_addr = read_sockaddr(argv[optind], argv[optind + 1], argv[optind + 2]);
 	
 	{
 		WSADATA wsaData;
 		assert(WSAStartup(MAKEWORD(1,1), &wsaData) == 0);
 	}
 	
-	int sock = socket(AF_IPX, SOCK_DGRAM, NSPROTO_IPX);
-	assert(sock != -1);
+	int sockets[MAX_SOCKETS];
 	
-	assert(setsockopt(sock, SOL_SOCKET, SO_BROADCAST, (void*)(&bcast), sizeof(bcast)) == 0);
-	assert(setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (void*)(&reuse), sizeof(reuse)) == 0);
-	
-	assert(bind(sock, (struct sockaddr*)(&local_addr), sizeof(local_addr)) == 0);
-	
-	HANDLE send_thread_h = CreateThread(NULL, 0, &send_thread, &sock, 0, NULL);
-	assert(send_thread_h != NULL);
-	
+	for(int i = 0; i < num_sockets; ++i)
 	{
-		int addrlen = sizeof(local_addr);
-		assert(getsockname(sock, (struct sockaddr*)(&local_addr), &addrlen) == 0);
+		sockets[i] = socket(AF_IPX, SOCK_DGRAM, NSPROTO_IPX);
+		assert(sockets[i] != -1);
+		
+		assert(setsockopt(sockets[i], SOL_SOCKET, SO_BROADCAST, (void*)(&(sock_bcast[i])), sizeof(*sock_bcast)) == 0);
+		assert(setsockopt(sockets[i], SOL_SOCKET, SO_REUSEADDR, (void*)(&(sock_reuse[i])), sizeof(*sock_reuse)) == 0);
+		
+		assert(bind(sockets[i], (struct sockaddr*)(&(sock_addrs[i])), sizeof(*sock_addrs)) == 0);
+		
+		struct sockaddr_ipx bound_addr;
+		int addrlen = sizeof(bound_addr);
+		assert(getsockname(sockets[i], (struct sockaddr*)(&bound_addr), &addrlen) == 0);
 		
 		char net_s[ADDR32_STRING_SIZE];
-		addr32_string(net_s, addr32_in(local_addr.sa_netnum));
+		addr32_string(net_s, addr32_in(bound_addr.sa_netnum));
 		
 		char node_s[ADDR48_STRING_SIZE];
-		addr48_string(node_s, addr48_in(local_addr.sa_nodenum));
+		addr48_string(node_s, addr48_in(bound_addr.sa_nodenum));
 		
-		printf("Ready %s %s %hu\n", net_s, node_s, ntohs(local_addr.sa_socket));
+		printf("%s %s %s %hu\n", ((i + 1) == num_sockets ? "Ready" : "Bound"), net_s, node_s, ntohs(bound_addr.sa_socket));
 	}
+	
+	if(num_sockets < MAX_SOCKETS)
+	{
+		sockets[num_sockets] = -1;
+	}
+	
+	HANDLE send_thread_h = CreateThread(NULL, 0, &send_thread, sockets, 0, NULL);
+	assert(send_thread_h != NULL);
 	
 	char buf[1024];
 	while(1)
 	{
 		fd_set read_fds;
 		FD_ZERO(&read_fds);
-		FD_SET(sock, &read_fds);
+		
+		for(int i = 0; i < num_sockets; ++i)
+		{
+			FD_SET(sockets[i], &read_fds);
+		}
 		
 		struct timeval timeout = {
 			.tv_sec = 0,
 			.tv_usec = 100000, /* 1/10th sec */
 		};
 		
-		assert(select(sock + 1, &read_fds, NULL, NULL, &timeout) >= 0);
+		assert(select(-1, &read_fds, NULL, NULL, &timeout) >= 0);
 		
 		if(WaitForSingleObject(send_thread_h, 0) == WAIT_OBJECT_0)
 		{
@@ -132,31 +184,37 @@ int main(int argc, char **argv)
 			break;
 		}
 		
-		if(FD_ISSET(sock, &read_fds))
+		for(int i = 0; i < num_sockets; ++i)
 		{
-			/* Packet waiting to be read. */
-			
-			struct sockaddr_ipx recv_addr;
-			int addrlen = sizeof(recv_addr);
-			
-			int r = recvfrom(sock, buf, sizeof(buf), 0, (struct sockaddr*)(&recv_addr), &addrlen);
-			assert(r > 0);
-			
-			buf[r] = '\0';
-			
-			char net_s[ADDR32_STRING_SIZE];
-			addr32_string(net_s, addr32_in(recv_addr.sa_netnum));
-			
-			char node_s[ADDR48_STRING_SIZE];
-			addr48_string(node_s, addr48_in(recv_addr.sa_nodenum));
-			
-			printf("%s %s %hu %s\n", net_s, node_s, ntohs(recv_addr.sa_socket), buf);
+			if(FD_ISSET(sockets[i], &read_fds))
+			{
+				/* Packet waiting to be read. */
+				
+				struct sockaddr_ipx recv_addr;
+				int addrlen = sizeof(recv_addr);
+				
+				int r = recvfrom(sockets[i], buf, sizeof(buf), 0, (struct sockaddr*)(&recv_addr), &addrlen);
+				assert(r > 0);
+				
+				buf[r] = '\0';
+				
+				char net_s[ADDR32_STRING_SIZE];
+				addr32_string(net_s, addr32_in(recv_addr.sa_netnum));
+				
+				char node_s[ADDR48_STRING_SIZE];
+				addr48_string(node_s, addr48_in(recv_addr.sa_nodenum));
+				
+				printf("%d %s %s %hu %s\n", i, net_s, node_s, ntohs(recv_addr.sa_socket), buf);
+			}
 		}
 	}
 	
 	CloseHandle(send_thread_h);
 	
-	closesocket(sock);
+	for(int i = 0; i < num_sockets; ++i)
+	{
+		closesocket(sockets[i]);
+	}
 	
 	WSACleanup();
 	

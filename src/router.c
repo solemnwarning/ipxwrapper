@@ -1,5 +1,5 @@
 /* IPXWrapper - Router code
- * Copyright (C) 2011-2023 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2011-2026 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -61,6 +61,7 @@ static HANDLE router_thread  = NULL;
 
 SOCKET shared_socket  = -1;
 SOCKET private_socket = -1;
+uint16_t private_port = 0; /**< Local port of private UDP socket (network byte order) */
 
 struct sockaddr_in dosbox_server_addr;
 static HANDLE dosbox_ready_event = NULL;
@@ -171,6 +172,19 @@ void router_init(void)
 		_init_socket(&shared_socket, main_config.udp_port, TRUE, TRUE);
 		_init_socket(&private_socket, 0, TRUE, FALSE);
 	}
+
+	{
+		struct sockaddr_in private_addr;
+		int addrlen = sizeof(private_addr);
+
+		if(r_getsockname(private_socket, (struct sockaddr*)(&private_addr), &addrlen) == SOCKET_ERROR)
+		{
+			log_printf(LOG_ERROR, "Unable to identify private UDP port address: %s", w32_error(WSAGetLastError()));
+		}
+		else{
+			private_port = private_addr.sin_port;
+		}
+	}
 	
 	router_running = true;
 	
@@ -222,11 +236,7 @@ void router_cleanup(void)
 	}
 }
 
-#define BCAST_NET  addr32_in((unsigned char[]){0xFF,0xFF,0xFF,0xFF})
-#define BCAST_NODE addr48_in((unsigned char[]){0xFF,0xFF,0xFF,0xFF,0xFF,0xFF})
-#define ZERO_NET   addr32_in((unsigned char[]){0x00,0x00,0x00,0x00})
-
-static void _deliver_packet(
+void deliver_packet(
 	uint8_t type,
 	addr32_t src_net,
 	addr48_t src_node,
@@ -237,7 +247,7 @@ static void _deliver_packet(
 	const void *data,
 	size_t data_size)
 {
-	FPROF_RECORD_SCOPE(&(ipxwrapper_fstats[IPXWRAPPER_FSTATS__deliver_packet]));
+	FPROF_RECORD_SCOPE(&(ipxwrapper_fstats[IPXWRAPPER_FSTATS_deliver_packet]));
 	
 	{
 		IPX_STRING_ADDR(src_addr, src_net, src_node, src_socket);
@@ -507,7 +517,7 @@ static void _handle_udp_recv(ipx_packet *packet, size_t packet_size, struct sock
 		addr32_in(packet->src_net), addr48_in(packet->src_node), packet->src_socket
 	);
 	
-	_deliver_packet(packet->ptype,
+	deliver_packet(packet->ptype,
 		addr32_in(packet->src_net),
 		addr48_in(packet->src_node),
 		packet->src_socket,
@@ -597,7 +607,7 @@ static void _handle_dosbox_recv(novell_ipx_packet *packet, size_t packet_size)
 			
 			size_t data_size = ntohs(p->length) - sizeof(novell_ipx_packet);
 			
-			_deliver_packet(
+			deliver_packet(
 				p->type,
 				
 				addr32_in(p->src_net),
@@ -625,7 +635,7 @@ static void _handle_dosbox_recv(novell_ipx_packet *packet, size_t packet_size)
 		
 		size_t data_size = ntohs(packet->length) - sizeof(novell_ipx_packet);
 		
-		_deliver_packet(
+		deliver_packet(
 			packet->type,
 			
 			addr32_in(packet->src_net),
@@ -687,7 +697,10 @@ static int _do_udp_recv(int fd)
 		}
 	}
 	else{
-		_handle_udp_recv((ipx_packet*)(buf), len, addr);
+		if(addr.sin_port != private_port || !ipv4_address_is_local(addr.sin_addr.s_addr))
+		{
+			_handle_udp_recv((ipx_packet*)(buf), len, addr);
+		}
 	}
 	
 	return 1;
@@ -754,7 +767,7 @@ static void _handle_pcap_frame(u_char *user, const struct pcap_pkthdr *pkt_heade
 		}
 	}
 	
-	_deliver_packet(ipx->type,
+	deliver_packet(ipx->type,
 		addr32_in(ipx->src_net),
 		addr48_in(ipx->src_node),
 		ipx->src_socket,

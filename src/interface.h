@@ -1,5 +1,5 @@
 /* IPXWrapper - Interface header
- * Copyright (C) 2011-2025 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2011-2026 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -91,6 +91,11 @@ ipx_interface_t *ipx_interface_by_addr(addr32_t net, addr48_t node);
 ipx_interface_t *ipx_interface_by_subnet(uint32_t ipaddr);
 ipx_interface_t *ipx_interface_by_index(int index);
 int ipx_interface_count(void);
+
+/**
+ * @brief Check if an IPv4 address is assigned to the local system.
+*/
+BOOL ipv4_address_is_local(addr32_t ipaddr);
 
 ipx_interface_t *load_dosbox_interfaces(void);
 

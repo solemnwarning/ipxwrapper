@@ -1,5 +1,5 @@
 # IPXWrapper test suite
-# Copyright (C) 2014-2017 Daniel Collins <solemnwarning@solemnwarning.net>
+# Copyright (C) 2014-2026 Daniel Collins <solemnwarning@solemnwarning.net>
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License version 2 as published by
@@ -219,7 +219,7 @@ sub cmp_hashes_partial
 	{
 		foreach my $key(keys(%missing))
 		{
-			next if(grep { $hash->{$_} ne $missing{$key}->{$_} }
+			next if(grep { !(defined $hash->{$_}) || $hash->{$_} ne $missing{$key}->{$_} }
 				keys(%{ $missing{$key} }));
 			
 			delete $missing{$key};

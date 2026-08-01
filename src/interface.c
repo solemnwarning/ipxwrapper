@@ -1,5 +1,5 @@
 /* IPXWrapper - Interface functions
- * Copyright (C) 2011-2025 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2011-2026 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -673,6 +673,46 @@ int ipx_interface_count(void)
 	LeaveCriticalSection(&interface_cache_cs);
 	
 	return count;
+}
+
+#define LOOPBACK_NET  addr32_in((unsigned char[]){0x7F, 0x00, 0x00, 0x00})
+#define LOOPBACK_MASK addr32_in((unsigned char[]){0xFF, 0x00, 0x00, 0x00})
+
+BOOL ipv4_address_is_local(addr32_t ipaddr)
+{
+	if((ipaddr & LOOPBACK_MASK) == LOOPBACK_NET)
+	{
+		return TRUE;
+	}
+
+	EnterCriticalSection(&interface_cache_cs);
+	
+	renew_interface_cache(false);
+	
+	ipx_interface_t *iface;
+	BOOL is_local = FALSE;
+
+	DL_FOREACH(interface_cache, iface)
+	{
+		ipx_interface_ip_t *ip;
+		DL_FOREACH(iface->ipaddr, ip)
+		{
+			if(ip->ipaddr == ipaddr)
+			{
+				is_local = TRUE;
+				break;
+			}
+		}
+
+		if(is_local)
+		{
+			break;
+		}
+	}
+	
+	LeaveCriticalSection(&interface_cache_cs);
+	
+	return is_local;
 }
 
 ipx_interface_t *load_dosbox_interfaces(void)

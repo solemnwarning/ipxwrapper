@@ -1,5 +1,5 @@
 /* ipxwrapper - Winsock functions
- * Copyright (C) 2008-2025 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2008-2026 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -1520,6 +1520,10 @@ static DWORD ipx_send_packet(
 		{
 			return WSAENETDOWN;
 		}
+		else if(dest_net == dosbox_local_netnum && dest_node == dosbox_local_nodenum)
+		{
+			deliver_packet(type, src_net, src_node, src_socket, dest_net, dest_node, dest_socket, data, data_size);
+		}
 		else{
 			size_t packet_size = sizeof(novell_ipx_packet) + data_size;
 			
@@ -1552,6 +1556,11 @@ static DWORD ipx_send_packet(
 			}
 			
 			free(packet);
+
+			if(error == ERROR_SUCCESS && dest_node == BCAST_NODE)
+			{
+				deliver_packet(type, src_net, src_node, src_socket, dest_net, dest_node, dest_socket, data, data_size);
+			}
 			
 			return error;
 		}
@@ -1656,6 +1665,8 @@ static DWORD ipx_send_packet(
 		
 		if(send_ok)
 		{
+			deliver_packet(type, src_net, src_node, src_socket, dest_net, dest_node, dest_socket, data, data_size);
+
 			__atomic_add_fetch(&send_packets, 1, __ATOMIC_RELAXED);
 			__atomic_add_fetch(&send_bytes, data_size, __ATOMIC_RELAXED);
 		}
