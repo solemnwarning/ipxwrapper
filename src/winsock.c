@@ -1523,6 +1523,7 @@ static DWORD ipx_send_packet(
 		else if(dest_net == dosbox_local_netnum && dest_node == dosbox_local_nodenum)
 		{
 			deliver_packet(type, src_net, src_node, src_socket, dest_net, dest_node, dest_socket, data, data_size);
+			return ERROR_SUCCESS;
 		}
 		else{
 			size_t packet_size = sizeof(novell_ipx_packet) + data_size;
