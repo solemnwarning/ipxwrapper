@@ -1129,7 +1129,14 @@ int WSAAPI recv(SOCKET fd, char *buf, int len, int flags)
 				return -1;
 			}
 			
-			if(recv_len > 0)
+			if(recv_len == 0 && (sock->flags & IPX_ABORTED) != 0)
+			{
+				unlock_sockets();
+
+				WSASetLastError(WSAECONNRESET); // TODO: Check error code
+				return -1;
+			}
+			else if(recv_len > 0)
 			{
 				spx_recv_advance(sock, recv_len);
 			}
@@ -2127,7 +2134,10 @@ static int _connect_spx(ipx_socket *sock, struct sockaddr_ipx *ipxaddr)
 			else{
 				unlock_sockets();
 				
-				WSASetLastError(WSAENETDOWN); // TODO: Confirm correct error code for SPX timeout
+				/* Windows 98 fails with WSAECONNREFUSED if the connection
+				 * times out, Windows XP returns WSAENETUNREACH.
+				*/
+				WSASetLastError(WSAECONNREFUSED);
 				return -1;
 			}
 		}
@@ -2461,6 +2471,12 @@ SOCKET PASCAL accept(SOCKET s, struct sockaddr *addr, int *addrlen)
 			nsock->spx_recv_inflight = 0;
 			
 			nsock->spx_send_seq = 0;
+
+			mclock_point_t now = mclock_now();
+
+			nsock->spx_retransmit_time = mclock_never();
+			nsock->spx_verify_time = mclock_add_ms(now, 3000); // TODO: adjust
+			nsock->spx_abort_time   = mclock_add_ms(now, 30000); // TODO: adjust
 			
 			struct sockaddr_in slave_remote_addr;
 			int slave_remote_addrlen = sizeof(slave_remote_addr);

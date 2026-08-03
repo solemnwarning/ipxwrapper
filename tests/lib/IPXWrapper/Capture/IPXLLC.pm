@@ -1,5 +1,5 @@
 # IPXWrapper test suite
-# Copyright (C) 2017-2023 Daniel Collins <solemnwarning@solemnwarning.net>
+# Copyright (C) 2017-2026 Daniel Collins <solemnwarning@solemnwarning.net>
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License version 2 as published by
@@ -22,6 +22,7 @@ package IPXWrapper::Capture::IPXLLC;
 use Net::Pcap;
 use NetPacket::Ethernet;
 use NetPacket::IPX;
+use NetPacket::SPX;
 
 sub new
 {
@@ -72,6 +73,20 @@ sub read_available
 			
 			# Skip if the frame length is wrong.
 			return if(($ether->{type} - 33) != length($packet{data}));
+			
+			if(defined($ipx->{type}) && $ipx->{type} == 5)
+			{
+				my $spx = NetPacket::SPX->decode($ipx->{data});
+				
+				$packet{connection_control}  = $spx->{connection_control};
+				$packet{datastream_type}     = $spx->{datastream_type};
+				$packet{src_connection_id}   = $spx->{src_connection_id};
+				$packet{dst_connection_id}   = $spx->{dst_connection_id};
+				$packet{seq_number}          = $spx->{seq_number};
+				$packet{ack_number}          = $spx->{ack_number};
+				$packet{allocation_number}   = $spx->{allocation_number};
+				$packet{data}                = $spx->{data};
+			}
 			
 			push(@packets, \%packet);
 		}

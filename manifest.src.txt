@@ -87,6 +87,8 @@ tests/25-fionread.t
 tests/30-dosbox-ipx.t
 tests/30-eth-ipx.t
 tests/30-ip-ipx.t
+tests/40-dosbox-spx.t
+tests/40-eth-spx.t
 tests/40-ip-spx.t
 tests/50-dplay.t
 tests/addr.c
@@ -96,6 +98,7 @@ tests/config.pm
 tests/ethernet.c
 tests/fionread.c
 tests/ptype.pm
+tests/spx.pm
 
 tests/lib/IPXWrapper/Capture/IPX.pm
 tests/lib/IPXWrapper/Capture/IPXLLC.pm
@@ -109,9 +112,11 @@ tests/lib/IPXWrapper/Tool/DPTool.pm
 tests/lib/IPXWrapper/Tool/Generic.pm
 tests/lib/IPXWrapper/Tool/IPXISR.pm
 tests/lib/IPXWrapper/Tool/IPXRecv.pm
+tests/lib/IPXWrapper/Tool/WSTool.pm
 tests/lib/IPXWrapper/Util.pm
 tests/lib/NetPacket/IPX.pm
 tests/lib/NetPacket/IPXWrapper.pm
+tests/lib/NetPacket/SPX.pm
 
 tests/tap/basic.c
 tests/tap/basic.h
@@ -127,6 +132,7 @@ tools/socket.c
 tools/spx-client.c
 tools/spx-server.c
 tools/tools.h
+tools/wstool.c
 
 winpcap/include/pcap-bpf.h
 winpcap/include/Packet32.h
