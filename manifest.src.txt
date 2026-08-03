@@ -109,6 +109,7 @@ tests/lib/IPXWrapper/Tool/DPTool.pm
 tests/lib/IPXWrapper/Tool/Generic.pm
 tests/lib/IPXWrapper/Tool/IPXISR.pm
 tests/lib/IPXWrapper/Tool/IPXRecv.pm
+tests/lib/IPXWrapper/Tool/WSTool.pm
 tests/lib/IPXWrapper/Util.pm
 tests/lib/NetPacket/IPX.pm
 tests/lib/NetPacket/IPXWrapper.pm
@@ -127,6 +128,7 @@ tools/socket.c
 tools/spx-client.c
 tools/spx-server.c
 tools/tools.h
+tools/wstool.c
 
 winpcap/include/pcap-bpf.h
 winpcap/include/Packet32.h

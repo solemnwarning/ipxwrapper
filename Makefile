@@ -49,7 +49,7 @@ TESTS := tests/addr.exe tests/addrcache.exe tests/ethernet.exe tests/ratelimit.e
 # Tools to compile before running the test suite.
 TOOLS := tools/socket.exe tools/list-interfaces.exe tools/bind.exe tools/ipx-send.exe \
 	tools/ipx-recv.exe tools/spx-server.exe tools/spx-client.exe  tools/ipx-isr.exe \
-	tools/dptool.exe
+	tools/dptool.exe tools/wstool.exe
 
 # DLLs to copy to the tools/ directory before running the test suite.
 TOOL_DLLS := tools/ipxwrapper.dll tools/wsock32.dll tools/mswsock.dll tools/dpwsockx.dll
