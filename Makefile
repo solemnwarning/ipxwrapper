@@ -31,7 +31,7 @@ endif
 
 INCLUDE := -I./include/ -I./winpcap/include/ -D_WIN32_WINNT=0x0500 -D_WIN32_IE=0x0500 -DHAVE_REMOTE
 
-CFLAGS := -std=c99   -mno-ms-bitfields -Wall -DINI_HANDLER_LINENO=1 $(DBG_OPT) $(INCLUDE)
+CFLAGS := -std=c99   -mno-ms-bitfields -Wall -DINI_HANDLER_LINENO=1 $(DBG_OPT) $(INCLUDE) $(CFLAGS)
 
 DEPDIR := .d
 $(shell mkdir -p $(DEPDIR)/src/ $(DEPDIR)/tools/ $(DEPDIR)/tests/tap/)
