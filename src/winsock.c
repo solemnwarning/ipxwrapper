@@ -2721,7 +2721,7 @@ int PASCAL WSAAsyncSelect(SOCKET s, HWND hWnd, unsigned int wMsg, long lEvent)
 	return r_WSAAsyncSelect(s, hWnd, wMsg, lEvent);
 }
 
-int WSAAPI select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, const PTIMEVAL timeout)
+int WSAAPI select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, const TIMEVAL* timeout)
 {
 	const struct timeval TIMEOUT_IMMEDIATE = { 0, 0 };
 	const struct timeval *use_timeout = timeout;
