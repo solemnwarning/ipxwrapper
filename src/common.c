@@ -381,7 +381,13 @@ void __stdcall *find_sym(unsigned int dllnum, const char *symbol) {
 
 void __stdcall log_call(unsigned int entry, const char *symbol, unsigned int target)
 {
-	log_printf(LOG_CALL, "%s:%s -> %s", dll_names[entry], symbol, dll_names[target]);
+	if(target == 0xFFFFFFFFU)
+	{
+		log_printf(LOG_CALL, "%s:%s <- RETURN", dll_names[entry], symbol);
+	}
+	else{
+		log_printf(LOG_CALL, "%s:%s -> %s", dll_names[entry], symbol, dll_names[target]);
+	}
 }
 
 wchar_t *get_module_path(HMODULE module)
