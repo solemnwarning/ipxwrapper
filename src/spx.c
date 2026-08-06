@@ -338,9 +338,12 @@ void spx_process_packet(
 	const void *data,
 	size_t data_size)
 {
+	
 	if(data_size < sizeof(struct spx_packet_header))
 	{
-		log_printf(LOG_DEBUG, "Discarding SPX packet with truncated header");
+		IPX_STRING_ADDR(ipx_src_addr, src_net, src_node, src_socket);
+		log_printf(LOG_DEBUG, "Discarding SPX packet from %s with truncated header from", ipx_src_addr);
+		
 		return;
 	}
 
@@ -351,25 +354,33 @@ void spx_process_packet(
 	
 	if(spx_header->src_connection_id == 0 || spx_header->src_connection_id == 0xFFFF)
 	{
-		log_printf(LOG_DEBUG, "Discarding SPX packet with invalid source connection ID (0x%04X)", (unsigned)(ntohs(spx_header->src_connection_id)));
+		IPX_STRING_ADDR(ipx_src_addr, src_net, src_node, src_socket);
+		log_printf(LOG_DEBUG, "Discarding SPX packet from %s with invalid source connection ID (0x%04X)", ipx_src_addr, (unsigned)(ntohs(spx_header->src_connection_id)));
+		
 		return;
 	}
 	
 	if((spx_header->connection_control & SPX_CONNCTRL_SPX2) != 0)
 	{
-		log_printf(LOG_DEBUG, "Discarding SPX packet with SPX2 connection control bit set");
+		IPX_STRING_ADDR(ipx_src_addr, src_net, src_node, src_socket);
+		log_printf(LOG_DEBUG, "Discarding SPX packet from %s with SPX2 connection control bit set", ipx_src_addr);
+		
 		return;
 	}
 	
 	if((spx_header->connection_control & SPX_CONNCTRL_NEG) != 0)
 	{
-		log_printf(LOG_DEBUG, "Discarding SPX packet with NEG connection control bit set");
+		IPX_STRING_ADDR(ipx_src_addr, src_net, src_node, src_socket);
+		log_printf(LOG_DEBUG, "Discarding SPX packet from %s with NEG connection control bit set", ipx_src_addr);
+		
 		return;
 	}
 	
 	if((spx_header->connection_control & SPX_CONNCTRL_XHD) != 0)
 	{
-		log_printf(LOG_DEBUG, "Discarding SPX packet with XHD connection control bit set");
+		IPX_STRING_ADDR(ipx_src_addr, src_net, src_node, src_socket);
+		log_printf(LOG_DEBUG, "Discarding SPX packet from %s with XHD connection control bit set", ipx_src_addr);
+		
 		return;
 	}
 	
@@ -379,13 +390,17 @@ void spx_process_packet(
 		
 		if((spx_header->connection_control & SPX_CONNCTRL_SYS) == 0)
 		{
-			log_printf(LOG_DEBUG, "Discarding SPX connection request without SYS connection control bit set");
+			IPX_STRING_ADDR(ipx_src_addr, src_net, src_node, src_socket);
+			log_printf(LOG_DEBUG, "Discarding SPX connection request from %s without SYS connection control bit set", ipx_src_addr);
+			
 			return;
 		}
 		
 		if((spx_header->connection_control & SPX_CONNCTRL_ACK) == 0)
 		{
-			log_printf(LOG_DEBUG, "Discarding SPX connection request without ACK connection control bit set");
+			IPX_STRING_ADDR(ipx_src_addr, src_net, src_node, src_socket);
+			log_printf(LOG_DEBUG, "Discarding SPX connection request from %s without ACK connection control bit set", ipx_src_addr);
+			
 			return;
 		}
 		
@@ -394,16 +409,21 @@ void spx_process_packet(
 	else{
 		/* Packet for existing connection. */
 		
+		SPX_STRING_ADDR(spx_src_addr, src_net, src_node, src_socket, spx_header->src_connection_id);
+		SPX_STRING_ADDR(spx_dst_addr, dest_net, dest_node, dest_socket, spx_header->dst_connection_id);
+		
 		lock_sockets();
 		
 		ipx_socket *sock = spx_find_socket_by_local(dest_net, dest_node, dest_socket, spx_header->dst_connection_id);
 		if(sock == NULL)
 		{
-			log_printf(LOG_DEBUG, "Discarding SPX packet addressed to unknown socket");
+			log_printf(LOG_DEBUG, "Discarding SPX packet from %s addressed to unknown socket (%s)", spx_src_addr, spx_dst_addr);
 			
 			unlock_sockets();
 			return;
 		}
+		
+		log_printf(LOG_DEBUG, "Processing SPX packet from %s for %s (socket %u)\n", spx_src_addr, spx_dst_addr, (unsigned)(sock->fd));
 		
 		mclock_point_t now = mclock_now();
 		
@@ -538,10 +558,18 @@ static void spx_process_connection_request_packet(
 	ipx_socket *listener = spx_find_socket_by_local(dest_net, dest_node, dest_socket, 0xFFFF);
 	if(listener == NULL || !(listener->flags & IPX_LISTENING))
 	{
-		log_printf(LOG_DEBUG, "SPX connection request doesn't match any listener in this process, ignoring");
+		IPX_STRING_ADDR(ipx_dst_addr, dest_net, dest_node, dest_socket);
+		log_printf(LOG_DEBUG, "SPX connection request for %s doesn't match any listener in this process, ignoring", ipx_dst_addr);
 		
 		unlock_sockets();
 		return;
+	}
+	
+	{
+		SPX_STRING_ADDR(spx_src_addr, src_net, src_node, src_socket, spx_header->src_connection_id);
+		IPX_STRING_ADDR(ipx_dst_addr, dest_net, dest_node, dest_socket);
+		
+		log_printf(LOG_DEBUG, "Processing SPX connection request from %s for %s", spx_src_addr, ipx_dst_addr);
 	}
 	
 	assert(listener->spx_current_backlog <= listener->spx_max_backlog);
@@ -558,6 +586,8 @@ static void spx_process_connection_request_packet(
 			/* This is a retransmitted connection request for a connection which has not yet been
 			 * accepted by the application, ignore it.
 			*/
+			
+			log_printf(LOG_DEBUG, "Connection request is a retransmission, ignoring");
 			
 			unlock_sockets();
 			return;
@@ -679,7 +709,7 @@ static void spx_send_pump(ipx_socket *socket)
 	{
 		struct spx_packet_header *header = (struct spx_packet_header*)(socket->spx_send_queue->front->data);
 		
-		log_printf(LOG_DEBUG, "Transmitting SPX data packet sequence number %u", (unsigned)(ntohs(header->seq_number)));
+		log_printf(LOG_DEBUG, "Transmitting SPX data packet sequence number %u from socket %u", (unsigned)(ntohs(header->seq_number)), (unsigned)(socket->fd));
 		
 		assert(ntohs(header->seq_number) == socket->spx_send_seq);
 		

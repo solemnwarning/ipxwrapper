@@ -252,11 +252,6 @@ void deliver_packet(
 	
 	if(type == IPX_TYPE_SPX)
 	{
-		IPX_STRING_ADDR(src_addr, src_net, src_node, src_socket);
-		IPX_STRING_ADDR(dest_addr, dest_net, dest_node, dest_socket);
-		
-		log_printf(LOG_DEBUG, "Processing SPX packet from %s for %s", src_addr, dest_addr);
-		
 		spx_process_packet(src_net, src_node, src_socket, dest_net, dest_node, dest_socket, data, data_size);
 		return;
 	}

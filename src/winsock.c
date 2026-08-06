@@ -2520,7 +2520,12 @@ SOCKET PASCAL accept(SOCKET s, struct sockaddr *addr, int *addrlen)
 				return -1;
 			}
 			
-			log_printf(LOG_INFO, "Accepted SPX connection (fd = %d)", nsock->fd);
+			SPX_STRING_ADDR(spx_src_addr, addr32_in(nsock->remote_addr.sa_netnum), addr48_in(nsock->remote_addr.sa_nodenum), nsock->remote_addr.sa_socket, nsock->remote_conn);
+			log_printf(LOG_INFO, "Accepted SPX connection from %s on listening socket %u, new socket is %u, connection ID is %hu",
+				spx_src_addr,
+				(unsigned)(sock->fd),
+				(unsigned)(nsock->fd),
+				ntohs(nsock->local_conn));
 			
 			nsock->flags = IPX_IS_SPX | IPX_BOUND | IPX_CONNECTED | (sock->flags & IPX_IS_SPXII);
 			

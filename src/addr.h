@@ -52,6 +52,35 @@ bool addr48_from_string(addr48_t *dest, const char *src);
 
 void ipx_to_string(char *buf, addr32_t net, addr48_t node, uint16_t sock);
 
+/**
+ * @brief Minimum length of buffer to receive a formatted SPX connection address.
+*/
+#define SPX_SADDR_SIZE 42
+
+/**
+ * @brief Declare a local char[] variable containing a formatted SPX connection address.
+ *
+ * @param var   Name of char[] variable to define.
+ * @param net   IPX network number (network byte order).
+ * @param node  IPX node number (network byte order).
+ * @param sock  IPX socket number (network byte order).
+ * @param conn  SPX connection ID (network byte order).
+*/
+#define SPX_STRING_ADDR(var, net, node, sock, conn) \
+	char var[SPX_SADDR_SIZE]; \
+	spx_to_string(var, net, node, sock, conn);
+
+/**
+ * @brief Format an IPX address and SPX connection ID as a string.
+ *
+ * @param buf   Buffer to receive string (must be at least SPX_SADDR_SIZE bytes).
+ * @param net   IPX network number (network byte order).
+ * @param node  IPX node number (network byte order).
+ * @param sock  IPX socket number (network byte order).
+ * @param conn  SPX connection ID (network byte order).
+*/
+void spx_to_string(char *buf, addr32_t net, addr48_t node, uint16_t sock, uint16_t conn);
+
 addr48_t gen_random_mac();
 
 #ifdef __cplusplus
