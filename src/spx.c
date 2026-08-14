@@ -423,7 +423,7 @@ void spx_process_packet(
 			return;
 		}
 		
-		log_printf(LOG_DEBUG, "Processing SPX packet from %s for %s (socket %u)\n", spx_src_addr, spx_dst_addr, (unsigned)(sock->fd));
+		log_printf(LOG_DEBUG, "Processing SPX packet from %s for %s (socket %u)", spx_src_addr, spx_dst_addr, (unsigned)(sock->fd));
 		
 		mclock_point_t now = mclock_now();
 		
@@ -715,8 +715,9 @@ static void spx_send_pump(ipx_socket *socket)
 		
 		/* Patch the ack number in the prepared header to be up-to-date with the current stream status. */
 		header->ack_number = htons(socket->spx_recv_seq);
+		header->allocation_number = htons(socket->spx_recv_seq);
 		
-		ipx_send_packet(
+		DWORD result = ipx_send_packet(
 			IPX_TYPE_SPX,
 			
 			addr32_in(socket->addr.sa_netnum),
@@ -730,7 +731,12 @@ static void spx_send_pump(ipx_socket *socket)
 			header,
 			socket->spx_send_queue->front->data_size);
 		
-		socket->spx_retransmit_time = mclock_add_ms(mclock_now(), 1000); // TODO: Escalating interval
+		socket->spx_retransmit_time = mclock_add_ms(mclock_now(), 3000); // TODO: Escalating interval
+		
+		if(result == ERROR_SUCCESS)
+		{
+			socket->spx_verify_time = mclock_add_ms(mclock_now(), SPX_VERIFY_TIMEOUT);
+		}
 	}
 }
 
@@ -741,6 +747,15 @@ DWORD spx_queue_message(ipx_socket *socket, const void *data, size_t size)
 	fragments.num_complete_messages = 0;
 	
 	uint16_t seq = socket->spx_send_seq;
+	bool queue_was_empty = true;
+	
+	if(socket->spx_send_queue->back != NULL)
+	{
+		const struct spx_packet_header *header = (const struct spx_packet_header*)(socket->spx_send_queue->back->data);
+		seq = ntohs(header->seq_number) + 1;
+		
+		queue_was_empty = false;
+	}
 	
 	for(size_t pos = 0; pos < size;)
 	{
@@ -752,7 +767,6 @@ DWORD spx_queue_message(ipx_socket *socket, const void *data, size_t size)
 		header.src_connection_id = socket->local_conn;
 		header.dst_connection_id = socket->remote_conn;
 		header.seq_number = ntohs(seq);
-		header.allocation_number = 0;
 		
 		++seq;
 		
@@ -776,7 +790,11 @@ DWORD spx_queue_message(ipx_socket *socket, const void *data, size_t size)
 	}
 	
 	spx_queue_merge(socket->spx_send_queue, &fragments);
-	spx_send_pump(socket);
+	
+	if(queue_was_empty)
+	{
+		spx_send_pump(socket);
+	}
 	
 	return ERROR_SUCCESS;
 }
