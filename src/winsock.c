@@ -2027,9 +2027,18 @@ static int _connect_spx(ipx_socket *sock, struct sockaddr_ipx *ipxaddr)
 		memset(bind_addr.sa_nodenum, 0, 6);
 		bind_addr.sa_socket = 0;
 		
-		if(bind(sock->fd, (struct sockaddr*)&bind_addr, sizeof(bind_addr)) == -1)
+		SOCKET fd = sock->fd;
+		unlock_sockets();
+		
+		if(bind(fd, (struct sockaddr*)&bind_addr, sizeof(bind_addr)) == -1)
 		{
-			unlock_sockets();
+			return -1;
+		}
+		
+		if(!(reclaim_socket(sock, fd)))
+		{
+			/* Socket was closed before bind() operation completed. */
+			WSASetLastError(WSAENOTSOCK);
 			return -1;
 		}
 	}

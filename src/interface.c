@@ -525,7 +525,11 @@ void ipx_interfaces_cleanup(void)
 /* Flush and repopulate the interface cache. */
 void ipx_interfaces_reload(void)
 {
+	EnterCriticalSection(&interface_cache_cs);
+	
 	renew_interface_cache(true);
+	
+	LeaveCriticalSection(&interface_cache_cs);
 }
 
 /* Check the age of the IPX interface cache and reload it if necessary.
