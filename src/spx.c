@@ -73,6 +73,8 @@ static void spx_send_pump(ipx_socket *socket);
 
 static void spx_recv_pump(ipx_socket *socket);
 
+static void spx_rtt_insert(int spx_rtt_history[SPX_RTT_BACKLOG_COUNT], int value);
+
 static BOOL spx_connect_finish(ipx_socket *sock);
 
 /**
@@ -444,6 +446,20 @@ void spx_process_packet(
 			{
 				sock->flags |= IPX_CONNECTED;
 				
+				for(int i = 0; i < SPX_RTT_BACKLOG_COUNT; ++i)
+				{
+					sock->spx_rtt_history[i] = 0;
+				}
+				
+				if(sock->spx_retransmit_count == 0)
+				{
+					spx_rtt_insert(sock->spx_rtt_history, mclock_delta(sock->spx_transmit_time, now));
+				}
+				else{
+					assert(sock->spx_retransmit_count > 0);
+					spx_rtt_insert(sock->spx_rtt_history, (-1 * sock->spx_retransmit_count));
+				}
+				
 				/* Set the IPX_CONNECT_OK bit which indicates the next WSAAsyncSelect
 				 * call with FD_CONNECT set should send a message indicating the
 				 * connection succeeded and then clear this bit.
@@ -511,7 +527,23 @@ void spx_process_packet(
 			uint16_t ack = ntohs(spx_header->ack_number);
 			if((ack - 1) == sock->spx_send_seq && sock->spx_send_queue->front != NULL)
 			{
-				log_printf(LOG_DEBUG, "Received ack for SPX data packet sequence %u", (unsigned)(ack - 1));
+				if(sock->spx_retransmit_count == 0)
+				{
+					uint32_t rtt = mclock_delta(sock->spx_transmit_time, now);
+					spx_rtt_insert(sock->spx_rtt_history, rtt);
+					
+					log_printf(LOG_DEBUG,
+						"Received ack for SPX data packet sequence %u after %ums",
+						(unsigned)(ack - 1), (unsigned)(rtt));
+				}
+				else{
+					assert(sock->spx_retransmit_count > 0);
+					spx_rtt_insert(sock->spx_rtt_history, (-1 * sock->spx_retransmit_count));
+					
+					log_printf(LOG_DEBUG,
+						"Received ack for SPX data packet sequence %u after %d retransmissions",
+						(unsigned)(ack - 1), sock->spx_retransmit_count);
+				}
 				
 				struct spx_packet_header *header = (struct spx_packet_header*)(sock->spx_send_queue->front->data);
 				
@@ -520,6 +552,10 @@ void spx_process_packet(
 				spx_queue_pop(sock->spx_send_queue);
 				
 				sock->spx_send_seq += 1;
+				
+				sock->spx_transmit_time = mclock_now();
+				sock->spx_retransmit_count = 0;
+				
 				spx_send_pump(sock);
 			}
 		}
@@ -731,7 +767,8 @@ static void spx_send_pump(ipx_socket *socket)
 			header,
 			socket->spx_send_queue->front->data_size);
 		
-		socket->spx_retransmit_time = mclock_add_ms(mclock_now(), 3000); // TODO: Escalating interval
+		uint32_t retransmit_delay = spx_compute_retransmit_time(socket->spx_rtt_history, socket->spx_retransmit_count);
+		socket->spx_retransmit_time = mclock_add_ms(mclock_now(), retransmit_delay);
 		
 		if(result == ERROR_SUCCESS)
 		{
@@ -793,6 +830,9 @@ DWORD spx_queue_message(ipx_socket *socket, const void *data, size_t size)
 	
 	if(queue_was_empty)
 	{
+		socket->spx_transmit_time = mclock_now();
+		socket->spx_retransmit_count = 0;
+		
 		spx_send_pump(socket);
 	}
 	
@@ -871,6 +911,12 @@ static void spx_recv_pump(ipx_socket *socket)
 	}
 }
 
+static void spx_rtt_insert(int spx_rtt_history[SPX_RTT_BACKLOG_COUNT], int value)
+{
+	memmove((spx_rtt_history + 1), spx_rtt_history, (sizeof(*spx_rtt_history) * (SPX_RTT_BACKLOG_COUNT - 1)));
+	spx_rtt_history[0] = value;
+}
+
 void spx_recv_advance(ipx_socket *socket, size_t received_bytes)
 {
 	assert(received_bytes <= socket->spx_recv_inflight);
@@ -926,7 +972,10 @@ void spx_retransmit_lost(void)
 					DWORD err = spx_send_informed_disconnect(sock);
 					if(err == ERROR_SUCCESS)
 					{
-						sock->spx_retransmit_time = mclock_add_ms(now, 1000); // TODO: Adjust time
+						sock->spx_retransmit_count += 1;
+						
+						uint32_t retransmit_delay = spx_compute_retransmit_time(sock->spx_rtt_history, sock->spx_retransmit_count);
+						sock->spx_retransmit_time = mclock_add_ms(now, retransmit_delay);
 					}
 				}
 			}
@@ -957,9 +1006,10 @@ void spx_retransmit_lost(void)
 				if((sock->flags & IPX_CONNECTING))
 				{
 					spx_send_connection_request(sock);
-					sock->spx_retransmit_time = mclock_add_ms(now, 1000); // TODO: Escalating interval
+					sock->spx_retransmit_time = mclock_add_ms(now, main_config.spx_retransmit_delay > 0 ? main_config.spx_retransmit_delay : SPX_CONNECTION_RETRANSMIT_TIME);
 				}
 				else{
+					sock->spx_retransmit_count += 1;
 					spx_send_pump(sock);
 				}
 			}

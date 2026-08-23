@@ -64,6 +64,8 @@
 #define IPX_ABORTED (int)(1<<17) /**< SPX socket closed by timeout */
 #define IPX_NONBLOCK (int)(1<<18) /**< Socket is in non-blocking mode. */
 
+#define SPX_RTT_BACKLOG_COUNT 8 /**< Number of most recent packet RTTs to record. */
+
 typedef struct ipx_socket ipx_socket;
 typedef struct ipx_packet ipx_packet;
 
@@ -160,6 +162,21 @@ struct ipx_socket {
 	
 	mclock_point_t spx_verify_time; /**< Time when watchdog request will next be transmitted. */
 	mclock_point_t spx_abort_time;  /**< Time when connection will be aborted due to a (assumed) dead peer. */
+	
+	/**
+	 * @brief Tracking of RTT from acknowledged packets on this SPX connection.
+	 *
+	 * This array tracks the RTT of recently transmitted SPX packets. Each entry is one of the
+	 * following values:
+	 *
+	 * Zero     - No data (early in connection lifetime).
+	 * Positive - Round trip time in milliseconds of a packet.
+	 * Negative - Retransmission count of a packet.
+	*/
+	int spx_rtt_history[SPX_RTT_BACKLOG_COUNT];
+	
+	mclock_point_t spx_transmit_time; /**< Time of first transmission of current in-flight SPX packet. */
+	int spx_retransmit_count; /**< Number of retransmissions of current in-flight SPX packet. */
 	
 	UT_hash_handle hh;
 

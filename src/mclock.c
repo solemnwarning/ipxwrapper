@@ -15,9 +15,12 @@
  * Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
+#include <winsock2.h>
 #include <windows.h>
 
+#include "ipxwrapper.h"
 #include "mclock.h"
+#include "spx.h"
 
 #define MCLOCK_NEVER_TIMESTAMP 0
 
@@ -75,4 +78,88 @@ uint32_t mclock_ms_until(mclock_point_t point, mclock_point_t now)
 	else{
 		return point._time_point - now._time_point;
 	}
+}
+
+uint32_t mclock_delta(mclock_point_t a, mclock_point_t b)
+{
+	if(b._time_point >= a._time_point && (b._time_point - a._time_point) > 0xC0000000 /* 75% of the clock range */)
+	{
+		/* 'b' is so far ahead of 'a' that the latter probably is probably a rolled over
+		 * timestamp, so calculate the delta based on that assumption.
+		*/
+		
+		return (0xFFFFFFFFU - b._time_point) + a._time_point;
+	}
+	else{
+		return b._time_point - a._time_point;
+	}
+}
+
+uint32_t spx_compute_retransmit_time(const int rtt_history[SPX_RTT_BACKLOG_COUNT], int retransmit_count)
+{
+	if(main_config.spx_retransmit_delay > 0)
+	{
+		return main_config.spx_retransmit_delay;
+	}
+	
+	uint32_t accum_rtt = 0;
+	int count_rtt = 0;
+	
+	uint32_t accum_retransmit = 0;
+	int count_retransmit = 0;
+	
+	for(int i = 0; i < SPX_RTT_BACKLOG_COUNT; ++i)
+	{
+		if(rtt_history[i] > 0)
+		{
+			accum_rtt += rtt_history[i] + (rtt_history[i] / 2);
+			count_rtt += 1;
+		}
+		else if(rtt_history[i] < 0)
+		{
+			accum_retransmit += rtt_history[i] * -1;
+			count_retransmit += 1;
+		}
+	}
+	
+	/* Rolling adjusted RTT used for base retransmission delay. */
+	uint32_t avg_rtt = count_rtt > 0
+		? accum_rtt / count_rtt
+		: SPX_RETRANSMIT_DEFAULT_TIME;
+	
+	/* Average number of retransmissions of recent packets. */
+	uint32_t avg_retransmit = count_retransmit > 0
+		? accum_retransmit / count_retransmit
+		: 0;
+	
+	uint32_t effective_retransmits = max(avg_retransmit, retransmit_count);
+	
+	uint32_t retransmit_time = avg_rtt;
+	
+	if(retransmit_time < SPX_RETRANSMIT_MIN_TIME)
+	{
+		retransmit_time = SPX_RETRANSMIT_MIN_TIME;
+	}
+	
+	/* Double the retransmission time for the current/anticipated retransmit count from the current
+	 * rolling retransmission interval.
+	*/
+	for(uint32_t i = 0; i < effective_retransmits && retransmit_time < SPX_RETRANSMIT_MAX_TIME; ++i)
+	{
+		if(retransmit_time < (UINT32_MAX / 2))
+		{
+			retransmit_time *= 2;
+		}
+		else{
+			retransmit_time = SPX_RETRANSMIT_MAX_TIME;
+			break;
+		}
+	}
+	
+	if(retransmit_time > SPX_RETRANSMIT_MAX_TIME)
+	{
+		retransmit_time = SPX_RETRANSMIT_MAX_TIME;
+	}
+	
+	return retransmit_time;
 }

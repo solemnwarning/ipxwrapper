@@ -48,6 +48,7 @@ describe "IPXWrapper using Ethernet encapsulation" => sub
 		reg_delete_key($remote_ip_a, "HKCU\\Software\\IPXWrapper");
 		reg_set_dword( $remote_ip_a, "HKCU\\Software\\IPXWrapper", "use_pcap", 1);
 		reg_set_dword( $remote_ip_a, "HKCU\\Software\\IPXWrapper", "frame_type", 1);
+		reg_set_dword( $remote_ip_a, "HKCU\\Software\\IPXWrapper", "spx_retransmit_delay", 3000);
 		reg_set_addr(  $remote_ip_a, "HKCU\\Software\\IPXWrapper\\$remote_mac_a", "net", "00:00:00:01");
 		reg_set_addr(  $remote_ip_a, "HKCU\\Software\\IPXWrapper\\$remote_mac_b", "net", "00:00:00:00");
 		
@@ -66,6 +67,7 @@ describe "IPXWrapper using Novell Ethernet encapsulation" => sub
 		reg_delete_key($remote_ip_a, "HKCU\\Software\\IPXWrapper");
 		reg_set_dword( $remote_ip_a, "HKCU\\Software\\IPXWrapper", "use_pcap", 1);
 		reg_set_dword( $remote_ip_a, "HKCU\\Software\\IPXWrapper", "frame_type", 2);
+		reg_set_dword( $remote_ip_a, "HKCU\\Software\\IPXWrapper", "spx_retransmit_delay", 3000);
 		reg_set_addr(  $remote_ip_a, "HKCU\\Software\\IPXWrapper\\$remote_mac_a", "net", "00:00:00:01");
 		reg_set_addr(  $remote_ip_a, "HKCU\\Software\\IPXWrapper\\$remote_mac_b", "net", "00:00:00:00");
 		
@@ -84,6 +86,7 @@ describe "IPXWrapper using LLC (802.2) Ethernet encapsulation" => sub
 		reg_delete_key($remote_ip_a, "HKCU\\Software\\IPXWrapper");
 		reg_set_dword( $remote_ip_a, "HKCU\\Software\\IPXWrapper", "use_pcap", 1);
 		reg_set_dword( $remote_ip_a, "HKCU\\Software\\IPXWrapper", "frame_type", 3);
+		reg_set_dword( $remote_ip_a, "HKCU\\Software\\IPXWrapper", "spx_retransmit_delay", 3000);
 		reg_set_addr(  $remote_ip_a, "HKCU\\Software\\IPXWrapper\\$remote_mac_a", "net", "00:00:00:01");
 		reg_set_addr(  $remote_ip_a, "HKCU\\Software\\IPXWrapper\\$remote_mac_b", "net", "00:00:00:00");
 		

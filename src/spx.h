@@ -20,6 +20,8 @@
 
 #include <stdint.h>
 
+#include "ipxwrapper.h"
+
 static const uint8_t IPX_TYPE_SPX = 0x05;
 
 static const uint8_t SPX_CONNCTRL_XHD  = 0x01;  /**< Reserved by SPX II for extended header */
@@ -36,6 +38,54 @@ static const uint8_t SPX_END_OF_CONNECTION_ACK = 0xFF;
 
 static const uint32_t SPX_VERIFY_TIMEOUT = 3000;  /**< Number of milliseconds of sending no packets before SPX will send a watchdog request packet. */
 static const uint32_t SPX_ABORT_TIMEOUT  = 30000; /**< Number of milliseconds of receiving no packets before SPX will drop a connection. */
+
+/* SPX RTT measurement and retransmit time algorithm.
+ *
+ * The SPX specification defines a very simple way to calculate round-trip time:
+ *
+ * > SPX does not attempt to track round trip time closely. It calculates round trip time RTT by
+ * > using the "time to net" value returned from the nearest router. This value is doubled and then
+ * > 3/4 of a second fudge factor is added. Each time a retry is necessary, the current RTT is
+ * > increased by 50% and bounded by MAX_ROUND_TRIP_TIMEOUT. RTT is tracked and modified on a per
+ * > session basis.
+ *
+ * IPXWrapper doesn't support IPX routing... and I doubt many people are going to be setting up IPX
+ * WANs with routers, so this method wouldn't make much sense, so we use a different method loosely
+ * inspired by how TCP works:
+ *
+ * - For the past SPX_RTT_BACKLOG_COUNT packets transmitted which required an acknowledgement from
+ *   the reciving side, if we get the ack without having to retransmit the packet, we record the
+ *   round-trip time in milliseconds, if we had to retransmit even once, we record the number of
+ *   retransmissions.
+ *
+ * - When sending a packet, we calculate the retransmission time as follows:
+ *
+ *   1) Let t equal the average (mean) RTT of all recent packets which were acknowledged without
+ *      any retransmissions, multiplied by 1.5 to allow for small deviations in latency. If there
+ *      are no such recorded packets, r is SPX_RETRANSMIT_DEFAULT_TIME.
+ *
+ *   2) Let r equal the average (mean) number of retransmissions of all recent packets which were
+ *      acknowledged after one or more retransmissions, zero if there are no such packets.
+ *
+ *   3) Let c equal the retransmission count of the current packet (zero on first transmission).
+ *
+ *   4) Let d equal the largest of c or r.
+ *
+ *   5) Let u equal t multiplied by the d'th power of 2 (i.e. double it for every anticipated
+ *      retransmission from the initial t.
+ *
+ *   6) Clamp u between SPX_RETRANSMIT_MIN_TIME and SPX_RETRANSMIT_TIME_MAX to avoid unnecessary
+ *      retransmissions on low-latency links or stratospheric retransmissions when the connection
+ *      has died like TCP (typically) has, since SPX dictates a 30 second timeout on inactivity.
+ *
+ *   7) u is the interval after which to send a retransmission.
+*/
+
+static const uint32_t SPX_RETRANSMIT_MIN_TIME     = 80;    /**< Minimum computed SPX retransmit time (milliseconds). */
+static const uint32_t SPX_RETRANSMIT_MAX_TIME     = 8000;  /**< Maximum computed SPX retransmit time (milliseconds). */
+static const uint32_t SPX_RETRANSMIT_DEFAULT_TIME = 1000;  /**< Default SPX retransmit time (milliseconds). */
+
+static const uint32_t SPX_CONNECTION_RETRANSMIT_TIME = 1000;  /**< Time before retransmitting an SPX connection request (milliseconds). */
 
 struct spx_packet_header
 {
@@ -125,6 +175,17 @@ DWORD spx_queue_message(ipx_socket *socket, const void *data, size_t size);
 void spx_recv_advance(ipx_socket *socket, size_t received_bytes);
 
 void spx_retransmit_lost(void);
+
+/**
+ * @brief Calculate retransmission time for an SPX packet (in milliseconds).
+ *
+ * @param rtt_history       The spx_rtt_history from the connection's ipx_socket.
+ * @param retransmit_count  The retransmission number of THIS packet (zero for initial packet).
+ *
+ * See the "SPX RTT measurement and retransmit time algorithm" comment earlier in this file for a
+ * full description for our packet retransmission timing algorithm.
+*/
+uint32_t spx_compute_retransmit_time(const int rtt_history[SPX_RTT_BACKLOG_COUNT], int retransmit_count);
 
 /**
  * @brief Allocate and initialise an empty spx_queue structure.

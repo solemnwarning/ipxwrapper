@@ -80,6 +80,7 @@ tests/05-addr.t
 tests/05-ratelimit.t
 tests/07-addrcache.t
 tests/07-ethernet.t
+tests/07-spx.t
 tests/10-socket.t
 tests/15-interfaces.t
 tests/20-bind.t
@@ -98,6 +99,7 @@ tests/config.pm
 tests/ethernet.c
 tests/fionread.c
 tests/ptype.pm
+tests/spx.c
 tests/spx.pm
 
 tests/lib/IPXWrapper/Capture/IPX.pm

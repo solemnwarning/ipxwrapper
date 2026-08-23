@@ -1,5 +1,5 @@
 /* ipxwrapper - Configuration header
- * Copyright (C) 2011-2025 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2011-2026 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -45,6 +45,8 @@ main_config_t get_main_config(bool ignore_ini)
 	
 	config.rate_limit_packets = 0;
 	config.rate_limit_bytes = 0;
+	
+	config.spx_retransmit_delay = 0;
 	
 	if(!ignore_ini)
 	{
@@ -105,6 +107,8 @@ main_config_t get_main_config(bool ignore_ini)
 	
 	config.rate_limit_packets = reg_get_dword(reg, "rate_limit_packets", config.rate_limit_packets);
 	config.rate_limit_bytes = reg_get_dword(reg, "rate_limit_bytes", config.rate_limit_bytes);
+	
+	config.spx_retransmit_delay = reg_get_dword(reg, "spx_retransmit_delay", config.spx_retransmit_delay);
 	
 	/* Check for valid frame_type */
 	

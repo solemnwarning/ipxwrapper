@@ -57,4 +57,12 @@ mclock_point_t mclock_add_ms(mclock_point_t point, int milliseconds);
 */
 uint32_t mclock_ms_until(mclock_point_t point, mclock_point_t now);
 
+/**
+ * @brief Calculate how many milliseconds has passed between two time points.
+ *
+ * @param a  The earlier time point.
+ * @param b  The later time point.
+*/
+uint32_t mclock_delta(mclock_point_t a, mclock_point_t b);
+
 #endif /* !IPXWRAPPER_MCLOCK_H */
