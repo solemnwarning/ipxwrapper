@@ -45,6 +45,46 @@ static unsigned char hex_to_nibble(char c)
 	}
 }
 
+static void populate_fdset(fd_set *set, fd_set **set_p, char *s)
+{
+	if(strcmp(s, "NULL") != 0)
+	{
+		FD_ZERO(set);
+		*set_p = set;
+		
+		if(strcmp(s, "-") != 0)
+		{
+			char *t = strtok(s, ",");
+			while(t != NULL)
+			{
+				FD_SET(strtoul(t, NULL, 10), set);
+				t = strtok(NULL, ",");
+			}
+		}
+	}
+}
+
+static void print_fdset(const fd_set *set)
+{
+	printf(" ");
+	
+	if(set == NULL || set->fd_count == 0)
+	{
+		printf("-");
+		return;
+	}
+	
+	for(u_int i = 0; i < set->fd_count; ++i)
+	{
+		if(i > 0)
+		{
+			printf(",");
+		}
+		
+		printf("%u", (unsigned)(set->fd_array[i]));
+	}
+}
+
 int main(int argc, char **argv)
 {
 	setbuf(stdout, NULL);
@@ -339,6 +379,56 @@ int main(int argc, char **argv)
 			}
 			
 			free(arg);
+		}
+		else if(strcmp(cmd, "select") == 0)
+		{
+			char *rfds_s = strtok(NULL, " \n");
+			char *wfds_s = strtok(NULL, " \n");
+			char *efds_s = strtok(NULL, " \n");
+			char *timeout_s = strtok(NULL, "\n");
+			
+			if(timeout_s == NULL)
+			{
+				printf("usage: select <readfds> <writefds> <exceptfds> <timeout>\n");
+				continue;
+			}
+			
+			fd_set rfds, *rfds_p = NULL;
+			fd_set wfds, *wfds_p = NULL;
+			fd_set efds, *efds_p = NULL;
+			
+			populate_fdset(&rfds, &rfds_p, rfds_s);
+			populate_fdset(&wfds, &wfds_p, wfds_s);
+			populate_fdset(&efds, &efds_p, efds_s);
+			
+			struct timeval timeout, *timeout_p = NULL;
+			
+			if(strcmp(timeout_s, "NULL") != 0)
+			{
+				unsigned timeout_ms = strtoul(timeout_s, NULL, 10);
+				
+				timeout.tv_sec = timeout_ms / 1000;
+				timeout.tv_usec = (timeout_ms % 1000) * 1000;
+				
+				timeout_p = &timeout;
+			}
+			
+			int r = select(-1, rfds_p, wfds_p, efds_p, timeout_p);
+			if(r == -1)
+			{
+				printf("select = -1 %u\n", (unsigned int)(WSAGetLastError()));
+			}
+			else if(r == 0)
+			{
+				printf("select = timeout\n");
+			}
+			else{
+				printf("select =");
+				print_fdset(rfds_p);
+				print_fdset(wfds_p);
+				print_fdset(efds_p);
+				printf("\n");
+			}
 		}
 		else if(strcmp(cmd, "exit") == 0)
 		{

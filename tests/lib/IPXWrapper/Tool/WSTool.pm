@@ -411,4 +411,88 @@ sub ioctlsocket
 	}
 }
 
+sub select
+{
+	my ($self, $read_fds, $write_fds, $except_fds, $timeout_ms) = @_;
+	
+	$self->select_start($read_fds, $write_fds, $except_fds, $timeout_ms);
+	return $self->select_finish();
+}
+
+sub select_start
+{
+	my ($self, $read_fds, $write_fds, $except_fds, $timeout_ms) = @_;
+	
+	confess("Finish pending ".$self->{pending}." operation first") if(defined $self->{pending});
+	
+	my $encode_fdset = sub
+	{
+		my ($fds) = @_;
+		
+		if(defined $fds)
+		{
+			if((scalar @$fds) > 0)
+			{
+				return join(",", @$fds);
+			}
+			else{
+				return "-";
+			}
+		}
+		else{
+			return "NULL";
+		}
+	};
+	
+	$self->_write_line("select ".$encode_fdset->($read_fds)." ".$encode_fdset->($write_fds)." ".$encode_fdset->($except_fds)." ".($timeout_ms // "NULL"));
+
+	$self->{pending} = "select";
+}
+
+sub select_finish
+{
+	my ($self) = @_;
+	
+	confess("No pending select operation") unless(($self->{pending} // "") eq "select");
+	
+	my $response = $self->_read_line();
+	
+	$self->{pending} = undef;
+	
+	my $SET_RE = qr/-|\d+(?:,\d+)*/;
+	
+	if($response =~ m/^select = -1 (\d+)$/)
+	{
+		croak("select failed with error code $1");
+	}
+	elsif($response =~ m/^select = timeout$/)
+	{
+		return [], [], [];
+	}
+	elsif($response =~ m/^select = ($SET_RE) ($SET_RE) ($SET_RE)$/)
+	{
+		my $read_fds   = $1;
+		my $write_fds  = $2;
+		my $except_fds = $3;
+		
+		my $parse_fds = sub
+		{
+			my ($fds) = @_;
+			
+			if($fds eq "-")
+			{
+				return [];
+			}
+			else{
+				return [ split(m/,/, $fds) ];
+			}
+		};
+		
+		return $parse_fds->($read_fds), $parse_fds->($write_fds), $parse_fds->($except_fds);
+	}
+	else{
+		confess("Unexpected output from wstool.exe: '${response}'");
+	}
+}
+
 1;

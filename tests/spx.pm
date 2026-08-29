@@ -257,13 +257,259 @@ shared_examples_for "spx protocol tests" => sub
 			}
 		};
 		
-		they "retransmit connection requests until the server answers";
+		they "retransmit connection requests until the server answers" => sub
+		{
+			my $server_net    = "00:00:00:01";
+			my $server_node   = $local_mac_a;
+			my $server_socket = 1234;
+			
+			my $capture = $spx_capture_class->new($local_dev_a);
+			
+			my $client = IPXWrapper::Tool::WSTool->new($remote_ip_a);
+			
+			my $client_sock = $client->socket(AF_IPX, SOCK_STREAM, NSPROTO_SPX);
+			
+			$client->connect_start($client_sock, $server_net, $server_node, $server_socket);
+			
+			sleep(10);
+
+			my $conn_request = {
+				dst_network  => $server_net,
+				dst_node     => $server_node,
+				dst_socket   => $server_socket,
+				
+				connection_control  => SPX_CONNCTRL_SYS | SPX_CONNCTRL_ACK,
+				datastream_type     => 0,
+				dst_connection_id   => 0xFFFF,
+				seq_number          => 0,
+				ack_number          => 0,
+			};
+			
+			my @conn_request_x4 = map { $conn_request } (1..4);
+
+			my @packets = $capture->read_available();
+
+			cmp_hashes_partial(\@packets, \@conn_request_x4, [ $conn_request ]) or return;
+			
+			isnt($packets[0]->{src_connection_id}, 0);
+			isnt($packets[0]->{src_connection_id}, 0xFFFF);
+			
+			my $server_conn_id = $random_id->();
+			
+			$spx_send_func->($local_dev_a,
+				tc   => 0,
+				type => 5,
+				
+				dest_network => $packets[0]->{src_network},
+				dest_node    => $packets[0]->{src_node},
+				dest_socket  => $packets[0]->{src_socket},
+				
+				src_network  => $server_net,
+				src_node     => $server_node,
+				src_socket   => $server_socket,
+				
+				connection_control  => SPX_CONNCTRL_SYS,
+				datastream_type     => 0,
+				src_connection_id   => $server_conn_id,
+				dst_connection_id   => $packets[0]->{src_connection_id},
+				seq_number          => 0,
+				ack_number          => 0,
+				allocation_number   => 0,
+				
+				data => "",
+			);
+			
+			sleep(10);
+			
+			my $watchdog_request = {
+				src_network => $packets[0]->{src_network},
+				src_node    => $packets[0]->{src_node},
+				src_socket  => $packets[0]->{src_socket},
+				
+				dst_network  => "00:00:00:01",
+				dst_node     => $local_mac_a,
+				dst_socket   => 1234,
+				
+				connection_control  => SPX_CONNCTRL_SYS | SPX_CONNCTRL_ACK,
+				datastream_type     => 0,
+				src_connection_id   => $packets[0]->{src_connection_id},
+				dst_connection_id   => $server_conn_id,
+				seq_number          => 0,
+				ack_number          => 0,
+			};
+			
+			@packets = grep { !mac_eq($_->{src_mac}, $local_mac_a) } $capture->read_available();
+			cmp_hashes_partial(\@packets, [ $watchdog_request, $watchdog_request, $watchdog_request ], [ $conn_request ]) or return;
+			
+			$client->connect_finish();
+		};
 		
-		they "time out when the server doesn't respond to the connection request";
+		they "time out when the server doesn't respond to the connection request" => sub
+		{
+			my $server_net    = "00:00:00:01";
+			my $server_node   = $local_mac_a;
+			my $server_socket = 1234;
+			
+			my $capture = $spx_capture_class->new($local_dev_a);
+			
+			my $client = IPXWrapper::Tool::WSTool->new($remote_ip_a);
+			
+			my $client_sock = $client->socket(AF_IPX, SOCK_STREAM, NSPROTO_SPX);
+			
+			$client->connect_start($client_sock, $server_net, $server_node, $server_socket);
+			
+			sleep(40);
+
+			my $conn_request = {
+				dst_network  => $server_net,
+				dst_node     => $server_node,
+				dst_socket   => $server_socket,
+				
+				connection_control  => SPX_CONNCTRL_SYS | SPX_CONNCTRL_ACK,
+				datastream_type     => 0,
+				dst_connection_id   => 0xFFFF,
+				seq_number          => 0,
+				ack_number          => 0,
+			};
+			
+			my @conn_request_x10 = map { $conn_request } (1..10);
+
+			my @packets = $capture->read_available();
+
+			cmp_hashes_partial(\@packets, \@conn_request_x10) or return;
+			
+			isnt($packets[0]->{src_connection_id}, 0);
+			isnt($packets[0]->{src_connection_id}, 0xFFFF);
+			
+			throws_ok { $client->connect_finish(); } qr/connect failed with error code 10061/;
+		};
 		
-		they "transmit watchdog packets during inactivity";
+		they "transmit watchdog packets during inactivity" => sub
+		{
+			my $capture = $spx_capture_class->new($local_dev_a);
+			
+			my $client = IPXWrapper::Tool::WSTool->new($remote_ip_a);
+			
+			my ($client_sock, $client_conn_id, $server_conn_id) = $connect_client->($client, $capture, "00:00:00:01", $local_mac_a, 1234);
+			my $client_addr = $client->getsockname($client_sock);
+			
+			sleep(1);
+			
+			for(my $i = 0; $i < 15; ++$i)
+			{
+				sleep(3);
+				
+				my $watchdog_request = {
+					src_network => $client_addr->{ipx_netnum},
+					src_node    => $client_addr->{ipx_nodenum},
+					src_socket  => $client_addr->{ipx_socket},
+					
+					dst_network  => "00:00:00:01",
+					dst_node     => $local_mac_a,
+					dst_socket   => 1234,
+					
+					connection_control  => SPX_CONNCTRL_SYS | SPX_CONNCTRL_ACK,
+					datastream_type     => 0,
+					src_connection_id   => $client_conn_id,
+					dst_connection_id   => $server_conn_id,
+					seq_number          => 0,
+					ack_number          => 0,
+				};
+				
+				my @packets = grep { !mac_eq($_->{src_mac}, $local_mac_a) } $capture->read_available();
+				
+				cmp_hashes_partial(\@packets, [ $watchdog_request ]) or return;
+				
+				$spx_send_func->($local_dev_a,
+					tc   => 0,
+					type => 5,
+					
+					src_network  => "00:00:00:01",
+					src_node     => $local_mac_a,
+					src_socket   => 1234,
+					
+					dest_network => $client_addr->{ipx_netnum},
+					dest_node    => $client_addr->{ipx_nodenum},
+					dest_socket  => $client_addr->{ipx_socket},
+					
+					connection_control  => SPX_CONNCTRL_SYS,
+					datastream_type     => 0,
+					src_connection_id   => $server_conn_id,
+					dst_connection_id   => $client_conn_id,
+					seq_number          => 0,
+					ack_number          => 0,
+					allocation_number   => 0,
+					
+					data => "",
+				);
+			}
+			
+			# Make sure the connection is still functional
+			$send_to_app->(
+				$client_addr->{ipx_netnum}, $client_addr->{ipx_nodenum}, $client_addr->{ipx_socket}, $client_conn_id,
+				"00:00:00:01", $local_mac_a, 1234, $server_conn_id,
+				0,
+				0,
+				"still alive?",
+				$capture,
+				$client,
+				$client_sock);
+		};
 		
-		they "time out when the server doesn't respond to watchdog packets";
+		they "time out when the server doesn't respond to watchdog packets" => sub
+		{
+			my $capture = $spx_capture_class->new($local_dev_a);
+			
+			my $client = IPXWrapper::Tool::WSTool->new($remote_ip_a);
+			
+			my ($client_sock, $client_conn_id, $server_conn_id) = $connect_client->($client, $capture, "00:00:00:01", $local_mac_a, 1234);
+			my $client_addr = $client->getsockname($client_sock);
+			
+			sleep(1);
+			
+			for(my $i = 0; $i < 9; ++$i)
+			{
+				sleep(3);
+				
+				my $watchdog_request = {
+					src_network => $client_addr->{ipx_netnum},
+					src_node    => $client_addr->{ipx_nodenum},
+					src_socket  => $client_addr->{ipx_socket},
+					
+					dst_network  => "00:00:00:01",
+					dst_node     => $local_mac_a,
+					dst_socket   => 1234,
+					
+					connection_control  => SPX_CONNCTRL_SYS | SPX_CONNCTRL_ACK,
+					datastream_type     => 0,
+					src_connection_id   => $client_conn_id,
+					dst_connection_id   => $server_conn_id,
+					seq_number          => 0,
+					ack_number          => 0,
+				};
+				
+				my @packets = grep { !mac_eq($_->{src_mac}, $local_mac_a) } $capture->read_available();
+				
+				cmp_hashes_partial(\@packets, [ $watchdog_request ]) or return;
+				
+				# Verify socket isn't signalled yet.
+				my ($read_ready, undef, undef) = $client->select([ $client_sock ], undef, undef, 0);
+				cmp_set($read_ready, []);
+			}
+			
+			sleep(3);
+			
+			# Connection should've timed out now - check it stopped sending watchdog requests.
+			
+			cmp_hashes_partial([ $capture->read_available() ], []) or return;
+			
+			# Socket should be flagged as readable now.
+			my ($read_ready, undef, undef) = $client->select([ $client_sock ], undef, undef, 0);
+			cmp_set($read_ready, [ $client_sock ]);
+			
+			# Verify recv() returns an error.
+			throws_ok { $client->recv($client_sock, 64); } qr/recv failed with error code 10054/;
+		};
 		
 		they "responds to graceful disconnects from the server";
 		
