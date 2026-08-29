@@ -1,0 +1,6 @@
+{
+	"makefile.configureOnOpen": false,
+	"perl.perlInc": [
+		"tests/lib/"
+	]
+}
