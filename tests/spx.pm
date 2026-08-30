@@ -515,7 +515,65 @@ shared_examples_for "spx protocol tests" => sub
 		
 		they "propagate graceful disconnects from the application";
 		
-		they "respond to watchdog packets from the server";
+		they "respond to watchdog packets from the server" => sub
+		{
+			my $capture = $spx_capture_class->new($local_dev_a);
+			
+			my $client = IPXWrapper::Tool::WSTool->new($remote_ip_a);
+			
+			my ($client_sock, $client_conn_id, $server_conn_id) = $connect_client->($client, $capture, "00:00:00:01", $local_mac_a, 1234);
+			my $client_addr = $client->getsockname($client_sock);
+			
+			for(my $i = 0; $i < 10; ++$i)
+			{
+				$spx_send_func->($local_dev_a,
+					tc   => 0,
+					type => 5,
+					
+					src_network  => "00:00:00:01",
+					src_node     => $local_mac_a,
+					src_socket   => 1234,
+					
+					dest_network => $client_addr->{ipx_netnum},
+					dest_node    => $client_addr->{ipx_nodenum},
+					dest_socket  => $client_addr->{ipx_socket},
+					
+					connection_control  => SPX_CONNCTRL_SYS | SPX_CONNCTRL_ACK,
+					datastream_type     => 0,
+					src_connection_id   => $server_conn_id,
+					dst_connection_id   => $client_conn_id,
+					seq_number          => 0,
+					ack_number          => 0,
+					allocation_number   => 0,
+					
+					data => "",
+				);
+				
+				sleep(1);
+				
+				my $watchdog_response = {
+					src_network => $client_addr->{ipx_netnum},
+					src_node    => $client_addr->{ipx_nodenum},
+					src_socket  => $client_addr->{ipx_socket},
+					
+					dst_network  => "00:00:00:01",
+					dst_node     => $local_mac_a,
+					dst_socket   => 1234,
+					
+					connection_control  => SPX_CONNCTRL_SYS,
+					datastream_type     => 0,
+					src_connection_id   => $client_conn_id,
+					dst_connection_id   => $server_conn_id,
+					seq_number          => 0,
+					ack_number          => 0,
+					allocation_number   => 0,
+				};
+				
+				my @packets = grep { !mac_eq($_->{src_mac}, $local_mac_a) } $capture->read_available();
+				
+				cmp_hashes_partial(\@packets, [ $watchdog_response ]) or return;
+			}
+		};
 		
 		they "can queue multiple outgoing messages";
 	};
@@ -661,15 +719,315 @@ shared_examples_for "spx protocol tests" => sub
 		
 		they "queue multiple distinct connection requests";
 		
-		they "transmit watchdog packets during inactivity";
+		they "transmit watchdog packets during inactivity" => sub
+		{
+			my $capture = $spx_capture_class->new($local_dev_a);
+			
+			my $server = IPXWrapper::Tool::WSTool->new($remote_ip_a);
+			my ($listener, $listener_net, $listener_node, $listener_socket) = $setup_listener->($server, "00:00:00:00", $remote_mac_a, "0");
+			
+			# Enable non-blocking I/O on listener socket.
+			$server->ioctlsocket($listener, FIONBIO, "00000001");
+			
+			# Send SPX connection request.
+			
+			my $client_socket = $random_id->();
+			my $client_conn_id = $random_id->();
+			
+			$send_conn_request->($listener_net, $listener_node, $listener_socket, "00:00:00:01", $local_mac_a, $client_socket, $client_conn_id);
+			
+			# Process the connection request.
+			
+			sleep(1);
+			
+			$server->accept_start($listener);
+			my $server_client = $server->accept_finish();
+			
+			# Check for connection acknowledgement.
+			
+			sleep(1);
+			
+			my @packets = grep { !mac_eq($_->{src_mac}, $local_mac_a) } $capture->read_available();
+			
+			cmp_hashes_partial(\@packets, [
+				{
+					dst_network  => "00:00:00:01",
+					dst_node     => $local_mac_a,
+					dst_socket   => $client_socket,
+					
+					src_network => $listener_net,
+					src_node    => $listener_node,
+					src_socket  => $listener_socket,
+					
+					connection_control  => SPX_CONNCTRL_SYS,
+					datastream_type     => 0,
+					dst_connection_id   => $client_conn_id,
+					seq_number          => 0,
+					ack_number          => 0,
+				},
+			]) or return;
+			
+			my ($server_conn_id) = $packets[0]->{src_connection_id};
+			
+			for(my $i = 0; $i < 15; ++$i)
+			{
+				sleep(3);
+				
+				my $watchdog_request = {
+					src_network => $listener_net,
+					src_node    => $listener_node,
+					src_socket  => $listener_socket,
+					
+					dst_network  => "00:00:00:01",
+					dst_node     => $local_mac_a,
+					dst_socket   => $client_socket,
+					
+					connection_control  => SPX_CONNCTRL_SYS | SPX_CONNCTRL_ACK,
+					datastream_type     => 0,
+					src_connection_id   => $server_conn_id,
+					dst_connection_id   => $client_conn_id,
+					seq_number          => 0,
+					ack_number          => 0,
+				};
+				
+				my @packets = grep { !mac_eq($_->{src_mac}, $local_mac_a) } $capture->read_available();
+				
+				cmp_hashes_partial(\@packets, [ $watchdog_request ]) or return;
+				
+				$spx_send_func->($local_dev_a,
+					tc   => 0,
+					type => 5,
+					
+					src_network  => "00:00:00:01",
+					src_node     => $local_mac_a,
+					src_socket   => 1234,
+					
+					dest_network => $listener_net,
+					dest_node    => $listener_node,
+					dest_socket  => $listener_socket,
+					
+					connection_control  => SPX_CONNCTRL_SYS,
+					datastream_type     => 0,
+					src_connection_id   => $client_conn_id,
+					dst_connection_id   => $server_conn_id,
+					seq_number          => 0,
+					ack_number          => 0,
+					allocation_number   => 0,
+					
+					data => "",
+				);
+			}
+			
+			# Make sure the connection is still functional
+			$send_to_app->(
+					$listener_net, $listener_node, $listener_socket, $server_conn_id,
+					"00:00:00:01", $local_mac_a, $client_socket, $client_conn_id,
+					0,
+					0,
+					"numerous beef control",
+					$capture,
+					$server,
+					$server_client->{socket});
+		};
 		
-		they "time out when the server doesn't respond to watchdog packets";
+		they "time out when the client doesn't respond to watchdog packets" => sub
+		{
+			my $capture = $spx_capture_class->new($local_dev_a);
+			
+			my $server = IPXWrapper::Tool::WSTool->new($remote_ip_a);
+			my ($listener, $listener_net, $listener_node, $listener_socket) = $setup_listener->($server, "00:00:00:00", $remote_mac_a, "0");
+			
+			# Enable non-blocking I/O on listener socket.
+			$server->ioctlsocket($listener, FIONBIO, "00000001");
+			
+			# Send SPX connection request.
+			
+			my $client_socket = $random_id->();
+			my $client_conn_id = $random_id->();
+			
+			$send_conn_request->($listener_net, $listener_node, $listener_socket, "00:00:00:01", $local_mac_a, $client_socket, $client_conn_id);
+			
+			# Process the connection request.
+			
+			sleep(1);
+			
+			$server->accept_start($listener);
+			my $server_client = $server->accept_finish();
+			
+			# Check for connection acknowledgement.
+			
+			sleep(1);
+			
+			my @packets = grep { !mac_eq($_->{src_mac}, $local_mac_a) } $capture->read_available();
+			
+			cmp_hashes_partial(\@packets, [
+				{
+					dst_network  => "00:00:00:01",
+					dst_node     => $local_mac_a,
+					dst_socket   => $client_socket,
+					
+					src_network => $listener_net,
+					src_node    => $listener_node,
+					src_socket  => $listener_socket,
+					
+					connection_control  => SPX_CONNCTRL_SYS,
+					datastream_type     => 0,
+					dst_connection_id   => $client_conn_id,
+					seq_number          => 0,
+					ack_number          => 0,
+				},
+			]) or return;
+			
+			my ($server_conn_id) = $packets[0]->{src_connection_id};
+			
+			for(my $i = 0; $i < 9; ++$i)
+			{
+				sleep(3);
+				
+				my $watchdog_request = {
+					src_network => $listener_net,
+					src_node    => $listener_node,
+					src_socket  => $listener_socket,
+					
+					dst_network  => "00:00:00:01",
+					dst_node     => $local_mac_a,
+					dst_socket   => $client_socket,
+					
+					connection_control  => SPX_CONNCTRL_SYS | SPX_CONNCTRL_ACK,
+					datastream_type     => 0,
+					src_connection_id   => $server_conn_id,
+					dst_connection_id   => $client_conn_id,
+					seq_number          => 0,
+					ack_number          => 0,
+				};
+				
+				my @packets = grep { !mac_eq($_->{src_mac}, $local_mac_a) } $capture->read_available();
+				
+				cmp_hashes_partial(\@packets, [ $watchdog_request ]) or return;
+				
+				# Verify socket isn't signalled yet.
+				my ($read_ready, undef, undef) = $server->select([ $server_client->{socket} ], undef, undef, 0);
+				cmp_set($read_ready, []);
+			}
+			
+			sleep(3);
+			
+			# Connection should've timed out now - check it stopped sending watchdog requests.
+			
+			cmp_hashes_partial([ $capture->read_available() ], []) or return;
+			
+			# Socket should be flagged as readable now.
+			my ($read_ready, undef, undef) = $server->select([ $server_client->{socket} ], undef, undef, 0);
+			cmp_set($read_ready, [ $server_client->{socket} ]);
+			
+			# Verify recv() returns an error.
+			throws_ok { $server->recv($server_client->{socket}, 64); } qr/recv failed with error code 10054/;
+		};
 		
 		they "responds to graceful disconnects from the client";
 		
 		they "propagate graceful disconnects from the application";
 		
-		they "respond to watchdog packets from the client";
+		they "respond to watchdog packets from the client" => sub
+		{
+			my $capture = $spx_capture_class->new($local_dev_a);
+			
+			my $server = IPXWrapper::Tool::WSTool->new($remote_ip_a);
+			my ($listener, $listener_net, $listener_node, $listener_socket) = $setup_listener->($server, "00:00:00:00", $remote_mac_a, "0");
+			
+			# Enable non-blocking I/O on listener socket.
+			$server->ioctlsocket($listener, FIONBIO, "00000001");
+			
+			# Send SPX connection request.
+			
+			my $client_socket = $random_id->();
+			my $client_conn_id = $random_id->();
+			
+			$send_conn_request->($listener_net, $listener_node, $listener_socket, "00:00:00:01", $local_mac_a, $client_socket, $client_conn_id);
+			
+			# Process the connection request.
+			
+			sleep(1);
+			
+			$server->accept_start($listener);
+			my $server_client = $server->accept_finish();
+			
+			# Check for connection acknowledgement.
+			
+			sleep(1);
+			
+			my @packets = grep { !mac_eq($_->{src_mac}, $local_mac_a) } $capture->read_available();
+			
+			cmp_hashes_partial(\@packets, [
+				{
+					dst_network  => "00:00:00:01",
+					dst_node     => $local_mac_a,
+					dst_socket   => $client_socket,
+					
+					src_network => $listener_net,
+					src_node    => $listener_node,
+					src_socket  => $listener_socket,
+					
+					connection_control  => SPX_CONNCTRL_SYS,
+					datastream_type     => 0,
+					dst_connection_id   => $client_conn_id,
+					seq_number          => 0,
+					ack_number          => 0,
+				},
+			]) or return;
+			
+			my ($server_conn_id) = $packets[0]->{src_connection_id};
+			
+			for(my $i = 0; $i < 10; ++$i)
+			{
+				$spx_send_func->($local_dev_a,
+					tc   => 0,
+					type => 5,
+					
+					src_network  => "00:00:00:01",
+					src_node     => $local_mac_a,
+					src_socket   => $client_socket,
+					
+					dest_network => $listener_net,
+					dest_node    => $listener_node,
+					dest_socket  => $listener_socket,
+					
+					connection_control  => SPX_CONNCTRL_SYS | SPX_CONNCTRL_ACK,
+					datastream_type     => 0,
+					src_connection_id   => $client_conn_id,
+					dst_connection_id   => $server_conn_id,
+					seq_number          => 0,
+					ack_number          => 0,
+					allocation_number   => 0,
+					
+					data => "",
+				);
+				
+				sleep(1);
+				
+				my $watchdog_response = {
+					src_network => $listener_net,
+					src_node    => $listener_node,
+					src_socket  => $listener_socket,
+					
+					dst_network  => "00:00:00:01",
+					dst_node     => $local_mac_a,
+					dst_socket   => $client_socket,
+					
+					connection_control  => SPX_CONNCTRL_SYS,
+					datastream_type     => 0,
+					src_connection_id   => $server_conn_id,
+					dst_connection_id   => $client_conn_id,
+					seq_number          => 0,
+					ack_number          => 0,
+					allocation_number   => 0,
+				};
+				
+				my @packets = grep { !mac_eq($_->{src_mac}, $local_mac_a) } $capture->read_available();
+				
+				cmp_hashes_partial(\@packets, [ $watchdog_response ]) or return;
+			}
+		};
 		
 		they "can queue multiple outgoing messages";
 	};
