@@ -22,12 +22,10 @@
 #include "mclock.h"
 #include "spx.h"
 
-#define MCLOCK_NEVER_TIMESTAMP 0
-
 mclock_point_t mclock_now(void)
 {
 	mclock_point_t t = { GetTickCount() };
-	if(t._time_point == MCLOCK_NEVER_TIMESTAMP)
+	if(t._time_point == _MCLOCK_NEVER_TIMESTAMP)
 	{
 		t._time_point += 1;
 	}
@@ -37,7 +35,7 @@ mclock_point_t mclock_now(void)
 
 mclock_point_t mclock_never(void)
 {
-	mclock_point_t t = { MCLOCK_NEVER_TIMESTAMP };
+	mclock_point_t t = { _MCLOCK_NEVER_TIMESTAMP };
 	return t;
 }
 
@@ -45,7 +43,7 @@ mclock_point_t mclock_add_ms(mclock_point_t point, int milliseconds)
 {
 	point._time_point += milliseconds;
 	
-	if(point._time_point == MCLOCK_NEVER_TIMESTAMP)
+	if(point._time_point == _MCLOCK_NEVER_TIMESTAMP)
 	{
 		point._time_point += 1;
 	}
@@ -55,7 +53,7 @@ mclock_point_t mclock_add_ms(mclock_point_t point, int milliseconds)
 
 uint32_t mclock_ms_until(mclock_point_t point, mclock_point_t now)
 {
-	if(point._time_point == MCLOCK_NEVER_TIMESTAMP)
+	if(point._time_point == _MCLOCK_NEVER_TIMESTAMP)
 	{
 		return 0xFFFFFFFFU;
 	}
@@ -92,6 +90,37 @@ uint32_t mclock_delta(mclock_point_t a, mclock_point_t b)
 	}
 	else{
 		return b._time_point - a._time_point;
+	}
+}
+
+mclock_point_t mclock_min(mclock_point_t a, mclock_point_t b)
+{
+	if(a._time_point == _MCLOCK_NEVER_TIMESTAMP)
+	{
+		return b;
+	}
+	else if(b._time_point == _MCLOCK_NEVER_TIMESTAMP)
+	{
+		return a;
+	}
+	else if(b._time_point >= a._time_point && (b._time_point - a._time_point) > 0xC0000000 /* 75% of the clock range */)
+	{
+		/* 'b' is so far ahead of 'a' that the latter probably is probably a rolled over
+		 * timestamp, so assume the greater timestamp is sooner.
+		*/
+		
+		return b;
+	}
+	else if(a._time_point >= b._time_point && (a._time_point - b._time_point) > 0xC0000000 /* 75% of the clock range */)
+	{
+		/* 'a' is so far ahead of 'b' that the latter probably is probably a rolled over
+		 * timestamp, so assume the greater timestamp is sooner.
+		*/
+	
+		return a;
+	}
+	else{
+		return a._time_point < b._time_point ? a : b;
 	}
 }
 

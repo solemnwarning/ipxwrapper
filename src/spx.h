@@ -174,7 +174,10 @@ DWORD spx_queue_message(ipx_socket *socket, const void *data, size_t size);
 */
 void spx_recv_advance(ipx_socket *socket, size_t received_bytes);
 
-void spx_retransmit_lost(void);
+/**
+ * @brief Retransmit lost SPX packets and handle expired timeouts.
+*/
+mclock_point_t spx_retransmit_lost(void);
 
 /**
  * @brief Calculate retransmission time for an SPX packet (in milliseconds).
@@ -186,6 +189,13 @@ void spx_retransmit_lost(void);
  * full description for our packet retransmission timing algorithm.
 */
 uint32_t spx_compute_retransmit_time(const int rtt_history[SPX_RTT_BACKLOG_COUNT], int retransmit_count);
+
+/**
+ * @brief Notify the router thread of a new SPX retransmission timeout.
+ *
+ * @param time  The time point by which spx_retransmit_lost() should be called.
+*/
+void spx_notify_retransmit(mclock_point_t time);
 
 /**
  * @brief Allocate and initialise an empty spx_queue structure.

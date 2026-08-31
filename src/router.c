@@ -237,6 +237,11 @@ void router_cleanup(void)
 	}
 }
 
+void router_wake(void)
+{
+	SetEvent(router_event);
+}
+
 void deliver_packet(
 	uint8_t type,
 	addr32_t src_net,
@@ -803,6 +808,8 @@ static DWORD router_main(void *arg)
 		}
 	}
 	
+	mclock_point_t next_spx_retransmit = mclock_now();
+	
 	while(1)
 	{
 		DWORD wait_ms = 1000;
@@ -839,6 +846,12 @@ static DWORD router_main(void *arg)
 					wait_ms = min(wait_ms, 1000);
 				}
 			}
+		}
+		
+		uint32_t next_spx_retransmit_in = mclock_ms_until(next_spx_retransmit, mclock_now());
+		if(next_spx_retransmit_in < wait_ms)
+		{
+			wait_ms = next_spx_retransmit_in;
 		}
 		
 		WaitForMultipleObjects(n_events, wait_events, FALSE, wait_ms);
@@ -962,7 +975,7 @@ static DWORD router_main(void *arg)
 			}
 		}
 
-		spx_retransmit_lost();
+		next_spx_retransmit = spx_retransmit_lost();
 	}
 	
 	if(ipx_encap_type == ENCAP_TYPE_PCAP)

@@ -571,6 +571,8 @@ int WSAAPI closesocket(SOCKET sockfd)
 		
 		sock->spx_abort_time  = mclock_add_ms(now, SPX_ABORT_TIMEOUT);
 		sock->spx_verify_time = mclock_never();
+		
+		spx_notify_retransmit(mclock_min(sock->spx_retransmit_time, sock->spx_abort_time));
 	}
 	else if((sock->flags & IPX_CLOSED) == 0)
 	{
@@ -2101,6 +2103,8 @@ static int _connect_spx(ipx_socket *sock, struct sockaddr_ipx *ipxaddr)
 	sock->spx_retransmit_time = mclock_add_ms(now, main_config.spx_retransmit_delay > 0 ? main_config.spx_retransmit_delay : SPX_CONNECTION_RETRANSMIT_TIME);
 	sock->spx_abort_time      = mclock_add_ms(now, SPX_ABORT_TIMEOUT);
 	
+	spx_notify_retransmit(mclock_min(sock->spx_retransmit_time, sock->spx_abort_time));
+	
 	if((sock->flags & IPX_NONBLOCK) != 0)
 	{
 		unlock_sockets();
@@ -2485,6 +2489,8 @@ SOCKET PASCAL accept(SOCKET s, struct sockaddr *addr, int *addrlen)
 			nsock->spx_retransmit_time = mclock_never();
 			nsock->spx_verify_time = mclock_add_ms(now, SPX_VERIFY_TIMEOUT);
 			nsock->spx_abort_time   = mclock_add_ms(now, SPX_ABORT_TIMEOUT);
+			
+			spx_notify_retransmit(mclock_min(nsock->spx_verify_time, nsock->spx_abort_time));
 			
 			for(int i = 0; i < SPX_RTT_BACKLOG_COUNT; ++i)
 			{

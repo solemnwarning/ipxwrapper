@@ -31,6 +31,13 @@ typedef struct mclock_point
 	uint32_t _time_point;
 } mclock_point_t;
 
+#define _MCLOCK_NEVER_TIMESTAMP 0
+
+/**
+ * @brief Static initialiser for a time point that will always be in the future.
+*/
+#define MCLOCK_NEVER_STATIC { _MCLOCK_NEVER_TIMESTAMP }
+
 /**
  * @brief Get the current time from the monotonic clock.
 */
@@ -64,5 +71,14 @@ uint32_t mclock_ms_until(mclock_point_t point, mclock_point_t now);
  * @param b  The later time point.
 */
 uint32_t mclock_delta(mclock_point_t a, mclock_point_t b);
+
+/**
+ * @brief Find the earliest of two (close) time points.
+ *
+ * NOTE: The monotonic clock is based on the Win32 GetTickCount() function, which rolls over every
+ * 49.7 days, to correctly handle timeouts spanning the roll-over point, we assume any two points
+ * which are close to zero and UINT_MAX are separated by the roll-over point rather than ~49 days.
+*/
+mclock_point_t mclock_min(mclock_point_t a, mclock_point_t b);
 
 #endif /* !IPXWRAPPER_MCLOCK_H */

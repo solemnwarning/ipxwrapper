@@ -35,6 +35,9 @@
 */
 static const size_t SPX_FRAGMENT_MAX_DATA_SIZE = 1454;
 
+static mclock_point_t spx_next_retransmit_time = MCLOCK_NEVER_STATIC;
+static bool spx_in_retransmit = false;
+
 struct spx_queue_element
 {
 	void *data;
@@ -237,6 +240,7 @@ DWORD spx_send_ack(ipx_socket *socket)
 	if(result == ERROR_SUCCESS)
 	{
 		socket->spx_verify_time = mclock_add_ms(mclock_now(), SPX_VERIFY_TIMEOUT);
+		spx_notify_retransmit(socket->spx_verify_time);
 	}
 	
 	return result;
@@ -268,6 +272,7 @@ DWORD spx_send_watchdog_request(ipx_socket *socket)
 	if(result == ERROR_SUCCESS)
 	{
 		socket->spx_verify_time = mclock_add_ms(mclock_now(), SPX_VERIFY_TIMEOUT);
+		spx_notify_retransmit(socket->spx_verify_time);
 	}
 	
 	return result;
@@ -325,6 +330,7 @@ DWORD spx_send_informed_disconnect_ack(ipx_socket *socket)
 	if(result == ERROR_SUCCESS)
 	{
 		socket->spx_verify_time = mclock_add_ms(mclock_now(), SPX_VERIFY_TIMEOUT);
+		spx_notify_retransmit(socket->spx_verify_time);
 	}
 	
 	return result;
@@ -441,6 +447,7 @@ void spx_process_packet(
 			sock->flags &= ~IPX_CONNECTING;
 			
 			sock->spx_verify_time = mclock_add_ms(now, SPX_VERIFY_TIMEOUT);
+			spx_notify_retransmit(sock->spx_verify_time);
 			
 			if(spx_connect_finish(sock))
 			{
@@ -492,6 +499,8 @@ void spx_process_packet(
 				sock->spx_retransmit_time = mclock_never();
 				sock->spx_abort_time      = mclock_add_ms(now, SPX_ABORT_TIMEOUT);
 				sock->spx_verify_time     = mclock_never();
+				
+				spx_notify_retransmit(sock->spx_abort_time);
 			}
 
 			if((spx_header->connection_control & SPX_CONNCTRL_ACK) != 0 && (sock->flags & IPX_CLOSED) != 0)
@@ -514,6 +523,7 @@ void spx_process_packet(
 		else if((sock->flags & IPX_CONNECTED) != 0)
 		{
 			sock->spx_abort_time = mclock_add_ms(now, SPX_ABORT_TIMEOUT);
+			spx_notify_retransmit(sock->spx_abort_time);
 
 			if((spx_header->connection_control & SPX_CONNCTRL_SYS) == 0)
 			{
@@ -773,6 +783,7 @@ static void spx_send_pump(ipx_socket *socket)
 		if(result == ERROR_SUCCESS)
 		{
 			socket->spx_verify_time = mclock_add_ms(mclock_now(), SPX_VERIFY_TIMEOUT);
+			spx_notify_retransmit(mclock_min(socket->spx_retransmit_time, socket->spx_verify_time));
 		}
 	}
 }
@@ -940,11 +951,22 @@ void spx_recv_advance(ipx_socket *socket, size_t received_bytes)
 	spx_recv_pump(socket);
 }
 
-void spx_retransmit_lost(void)
+mclock_point_t spx_retransmit_lost(void)
 {
 	lock_sockets();
-
+	
 	mclock_point_t now = mclock_now();
+	
+	if(mclock_ms_until(spx_next_retransmit_time, now) > 0)
+	{
+		mclock_point_t result = spx_next_retransmit_time;
+		
+		unlock_sockets();
+		return result;
+	}
+	
+	spx_in_retransmit = true;
+	spx_next_retransmit_time = mclock_never();
 
 	ipx_socket *sock, *tmp;
 	DL_FOREACH_SAFE(all_sockets, sock, tmp)
@@ -964,20 +986,29 @@ void spx_retransmit_lost(void)
 						DL_DELETE(all_sockets, sock);
 						free(sock);
 					}
+					
+					continue;
 				}
-				else if((sock->flags & IPX_CLOSING) != 0 && mclock_ms_until(sock->spx_retransmit_time, now) == 0)
+				else if((sock->flags & IPX_CLOSING) != 0)
 				{
-					/* Retransmit informed disconnect message to peer of closed connection. */
-
-					DWORD err = spx_send_informed_disconnect(sock);
-					if(err == ERROR_SUCCESS)
+					if(mclock_ms_until(sock->spx_retransmit_time, now) == 0)
 					{
-						sock->spx_retransmit_count += 1;
+						/* Retransmit informed disconnect message to peer of closed connection. */
 						
-						uint32_t retransmit_delay = spx_compute_retransmit_time(sock->spx_rtt_history, sock->spx_retransmit_count);
-						sock->spx_retransmit_time = mclock_add_ms(now, retransmit_delay);
+						DWORD err = spx_send_informed_disconnect(sock);
+						if(err == ERROR_SUCCESS)
+						{
+							sock->spx_retransmit_count += 1;
+							
+							uint32_t retransmit_delay = spx_compute_retransmit_time(sock->spx_rtt_history, sock->spx_retransmit_count);
+							sock->spx_retransmit_time = mclock_add_ms(now, retransmit_delay);
+						}
 					}
+					
+					spx_next_retransmit_time = mclock_min(spx_next_retransmit_time, sock->spx_retransmit_time);
 				}
+				
+				spx_next_retransmit_time = mclock_min(spx_next_retransmit_time, sock->spx_abort_time);
 			}
 			else if((sock->flags & (IPX_CONNECTED | IPX_CONNECTING)) != 0 && mclock_ms_until(sock->spx_abort_time, now) == 0)
 			{
@@ -1000,27 +1031,47 @@ void spx_retransmit_lost(void)
 					sock->spx_master_fd = SOCKET_ERROR;
 				}
 			}
-			else if(((sock->flags & IPX_CONNECTING) || sock->spx_send_queue->front != NULL)
-				&& mclock_ms_until(sock->spx_retransmit_time, now) == 0)
+			else if((sock->flags & IPX_CONNECTING) != 0 || ((sock->flags & IPX_CONNECTED) != 0 && sock->spx_send_queue->front != NULL))
 			{
-				if((sock->flags & IPX_CONNECTING))
+				if(mclock_ms_until(sock->spx_retransmit_time, now) == 0)
 				{
-					spx_send_connection_request(sock);
-					sock->spx_retransmit_time = mclock_add_ms(now, main_config.spx_retransmit_delay > 0 ? main_config.spx_retransmit_delay : SPX_CONNECTION_RETRANSMIT_TIME);
+					if((sock->flags & IPX_CONNECTING))
+					{
+						spx_send_connection_request(sock);
+						sock->spx_retransmit_time = mclock_add_ms(now, main_config.spx_retransmit_delay > 0 ? main_config.spx_retransmit_delay : SPX_CONNECTION_RETRANSMIT_TIME);
+					}
+					else{
+						sock->spx_retransmit_count += 1;
+						spx_send_pump(sock);
+					}
 				}
-				else{
-					sock->spx_retransmit_count += 1;
-					spx_send_pump(sock);
-				}
+				
+				spx_next_retransmit_time = mclock_min(spx_next_retransmit_time, sock->spx_retransmit_time);
 			}
-			else if((sock->flags & IPX_CONNECTED) && mclock_ms_until(sock->spx_verify_time, now) == 0)
+			
+			if((sock->flags & (IPX_CONNECTED | IPX_CONNECTING)) != 0)
 			{
-				spx_send_watchdog_request(sock);
+				spx_next_retransmit_time = mclock_min(spx_next_retransmit_time, sock->spx_abort_time);
+			}
+			
+			if((sock->flags & IPX_CONNECTED) != 0)
+			{
+				if(mclock_ms_until(sock->spx_verify_time, now) == 0)
+				{
+					spx_send_watchdog_request(sock);
+				}
+
+				spx_next_retransmit_time = mclock_min(spx_next_retransmit_time, sock->spx_verify_time);
 			}
 		}
 	}
-
+	
+	mclock_point_t result = spx_next_retransmit_time;
+	spx_in_retransmit = false;
+	
 	unlock_sockets();
+	
+	return result;
 }
 
 static BOOL spx_connect_finish(ipx_socket *sock)
@@ -1097,6 +1148,23 @@ static BOOL spx_connect_finish(ipx_socket *sock)
 	closesocket(listener_fd);
 	
 	return TRUE;
+}
+
+void spx_notify_retransmit(mclock_point_t time)
+{
+	if(mclock_min(spx_next_retransmit_time, time)._time_point == spx_next_retransmit_time._time_point)
+	{
+		/* There was already a check scheduled at or before the new time, nothing to do. */
+		return;
+	}
+	
+	spx_next_retransmit_time = time;
+
+	if(!spx_in_retransmit)
+	{
+		__sync_synchronize();
+		router_wake();
+	}
 }
 
 struct spx_queue *spx_queue_alloc(void)
