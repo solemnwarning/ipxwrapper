@@ -89,7 +89,9 @@ tests/30-dosbox-ipx.t
 tests/30-eth-ipx.t
 tests/30-ip-ipx.t
 tests/40-dosbox-spx.t
-tests/40-eth-spx.t
+tests/40-eth-ii-spx.t
+tests/40-eth-llc-spx.t
+tests/40-eth-novell-spx.t
 tests/40-ip-spx.t
 tests/50-dplay.t
 tests/addr.c

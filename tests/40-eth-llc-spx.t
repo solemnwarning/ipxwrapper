@@ -23,9 +23,7 @@ use Test::Exception;
 use FindBin;
 use lib "$FindBin::Bin/lib/";
 
-use IPXWrapper::Capture::IPX;
 use IPXWrapper::Capture::IPXLLC;
-use IPXWrapper::Capture::IPXNovell;
 use IPXWrapper::Util;
 
 require "$FindBin::Bin/config.pm";
@@ -40,44 +38,6 @@ require "$FindBin::Bin/spx.pm";
 
 our $spx_send_func;
 our $spx_capture_class;
-
-describe "IPXWrapper using Ethernet encapsulation" => sub
-{
-	before all => sub
-	{
-		reg_delete_key($remote_ip_a, "HKCU\\Software\\IPXWrapper");
-		reg_set_dword( $remote_ip_a, "HKCU\\Software\\IPXWrapper", "use_pcap", 1);
-		reg_set_dword( $remote_ip_a, "HKCU\\Software\\IPXWrapper", "frame_type", 1);
-		reg_set_dword( $remote_ip_a, "HKCU\\Software\\IPXWrapper", "spx_retransmit_delay", 3000);
-		reg_set_addr(  $remote_ip_a, "HKCU\\Software\\IPXWrapper\\$remote_mac_a", "net", "00:00:00:01");
-		reg_set_addr(  $remote_ip_a, "HKCU\\Software\\IPXWrapper\\$remote_mac_b", "net", "00:00:00:00");
-		
-		$spx_capture_class = "IPXWrapper::Capture::IPX";
-		$spx_send_func     = \&send_spx_packet_ethernet;
-	};
-	
-	it_should_behave_like "spx protocol tests";
-	it_should_behave_like "spx self tests";
-};
-
-describe "IPXWrapper using Novell Ethernet encapsulation" => sub
-{
-	before all => sub
-	{
-		reg_delete_key($remote_ip_a, "HKCU\\Software\\IPXWrapper");
-		reg_set_dword( $remote_ip_a, "HKCU\\Software\\IPXWrapper", "use_pcap", 1);
-		reg_set_dword( $remote_ip_a, "HKCU\\Software\\IPXWrapper", "frame_type", 2);
-		reg_set_dword( $remote_ip_a, "HKCU\\Software\\IPXWrapper", "spx_retransmit_delay", 3000);
-		reg_set_addr(  $remote_ip_a, "HKCU\\Software\\IPXWrapper\\$remote_mac_a", "net", "00:00:00:01");
-		reg_set_addr(  $remote_ip_a, "HKCU\\Software\\IPXWrapper\\$remote_mac_b", "net", "00:00:00:00");
-		
-		$spx_capture_class = "IPXWrapper::Capture::IPXNovell";
-		$spx_send_func     = \&send_spx_packet_novell;
-	};
-	
-	it_should_behave_like "spx protocol tests";
-	it_should_behave_like "spx self tests";
-};
 
 describe "IPXWrapper using LLC (802.2) Ethernet encapsulation" => sub
 {
