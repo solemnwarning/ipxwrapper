@@ -150,12 +150,12 @@ uint16_t spx_allocate_connection_id(void)
 
 static ipx_socket *spx_find_socket_by_local(addr32_t local_net, addr48_t local_node, uint16_t local_socket, uint16_t local_connection_id)
 {
-	ipx_socket *sock, *tmp;
-	HASH_ITER(hh, socket_by_fd, sock, tmp)
+	ipx_socket *sock;
+	DL_FOREACH(all_sockets, sock)
 	{
 		if((sock->flags & IPX_IS_SPX)
-			&& (sock->flags & IPX_BOUND)
-			&& (sock->flags & (IPX_LISTENING | IPX_CONNECTING | IPX_CONNECTED | IPX_CLOSED | IPX_CLOSING))
+			// && (sock->flags & IPX_BOUND)
+			&& (sock->flags & (IPX_LISTENING | IPX_CONNECTING | IPX_CONNECTED | IPX_CLOSED | IPX_CLOSING)) != 0
 			
 			&& local_net == addr32_in(sock->addr.sa_netnum)
 			&& local_node == addr48_in(sock->addr.sa_nodenum)
@@ -286,22 +286,36 @@ DWORD spx_send_informed_disconnect(ipx_socket *socket)
 	spx_header.datastream_type = SPX_END_OF_CONNECTION;
 	spx_header.src_connection_id = socket->local_conn;
 	spx_header.dst_connection_id = socket->remote_conn;
-	spx_header.seq_number = htons(socket->spx_send_seq);
-	spx_header.ack_number = htons(socket->spx_recv_seq);
-	spx_header.allocation_number = htons(socket->spx_recv_seq);
-
-	DWORD result = ipx_send_packet(
-		IPX_TYPE_SPX,
-		addr32_in(socket->addr.sa_netnum),
-		addr48_in(socket->addr.sa_nodenum),
-		socket->addr.sa_socket,
-		addr32_in(socket->remote_addr.sa_netnum),
-		addr48_in(socket->remote_addr.sa_nodenum),
-		socket->remote_addr.sa_socket,
-		&spx_header,
-		sizeof(spx_header));
 	
-	return result;
+	uint16_t seq = socket->spx_send_seq;
+	bool queue_was_empty = true;
+	
+	assert(socket->spx_send_queue != NULL);
+	
+	if(socket->spx_send_queue->back != NULL)
+	{
+		const struct spx_packet_header *header = (const struct spx_packet_header*)(socket->spx_send_queue->back->data);
+		seq = ntohs(header->seq_number) + 1;
+		
+		queue_was_empty = false;
+	}
+	
+	spx_header.seq_number = htons(seq);
+	
+	if(!spx_queue_push_hdr(socket->spx_send_queue, &spx_header, NULL, 0, true))
+	{
+		return ERROR_OUTOFMEMORY;
+	}
+	
+	if(queue_was_empty)
+	{
+		socket->spx_transmit_time = mclock_now();
+		socket->spx_retransmit_count = 0;
+		
+		spx_send_pump(socket);
+	}
+	
+	return ERROR_SUCCESS;
 }
 
 DWORD spx_send_informed_disconnect_ack(ipx_socket *socket)
@@ -484,27 +498,40 @@ void spx_process_packet(
 		
 		if(spx_header->datastream_type == SPX_END_OF_CONNECTION)
 		{
+			uint16_t seq = ntohs(spx_header->seq_number);
+			
 			if((sock->flags & (IPX_CLOSING | IPX_CLOSED)) == 0)
 			{
-				log_printf(LOG_DEBUG, "Received informed disconnect message");
+				if(seq == sock->spx_recv_seq)
+				{
+					log_printf(LOG_DEBUG, "Received informed disconnect message");
 
-				assert(sock->spx_master_fd != SOCKET_ERROR);
+					assert(sock->spx_master_fd != SOCKET_ERROR);
 
-				closesocket(sock->spx_master_fd);
-				sock->spx_master_fd = SOCKET_ERROR;
+					closesocket(sock->spx_master_fd);
+					sock->spx_master_fd = SOCKET_ERROR;
 
-				sock->flags |= IPX_CLOSED;
-				sock->flags &= ~IPX_CONNECTED;
+					sock->flags |= IPX_CLOSED;
+					sock->flags &= ~IPX_CONNECTED;
 
-				sock->spx_retransmit_time = mclock_never();
-				sock->spx_abort_time      = mclock_add_ms(now, SPX_ABORT_TIMEOUT);
-				sock->spx_verify_time     = mclock_never();
-				
-				spx_notify_retransmit(sock->spx_abort_time);
+					sock->spx_retransmit_time = mclock_never();
+					sock->spx_abort_time      = mclock_add_ms(now, SPX_ABORT_TIMEOUT);
+					sock->spx_verify_time     = mclock_never();
+					
+					sock->spx_recv_seq += 1;
+					
+					spx_send_informed_disconnect_ack(sock);
+					spx_notify_retransmit(sock->spx_abort_time);
+				}
+				else{
+					log_printf(LOG_DEBUG, "Ignoring informed disconnect message with wrong sequence number");
+				}
 			}
-
-			if((spx_header->connection_control & SPX_CONNCTRL_ACK) != 0 && (sock->flags & IPX_CLOSED) != 0)
+			else if((spx_header->connection_control & SPX_CONNCTRL_ACK) != 0
+				&& (sock->flags & IPX_CLOSED) != 0
+				&& seq == (sock->spx_recv_seq - 1))
 			{
+				log_printf(LOG_DEBUG, "Received retransmitted informed disconnect message");
 				spx_send_informed_disconnect_ack(sock);
 			}
 		}
@@ -515,6 +542,12 @@ void spx_process_packet(
 				log_printf(LOG_DEBUG, "Received informed disconnect acknowledgement");
 
 				assert(sock->fd == SOCKET_ERROR);
+				
+				if(sock->spx_send_queue != NULL)
+				{
+					spx_queue_free(sock->spx_send_queue);
+					sock->spx_send_queue = NULL;
+				}
 
 				DL_DELETE(all_sockets, sock);
 				free(sock);
@@ -739,7 +772,7 @@ static void spx_process_data_packet(
 			spx_recv_pump(sock);
 		}
 	}
-	else if((seq - 1) == sock->spx_recv_seq)
+	else if(seq == (sock->spx_recv_seq - 1))
 	{
 		log_printf(LOG_DEBUG, "Received retransmitted SPX data packet sequence %u", (unsigned)(seq));
 		spx_send_ack(sock);
@@ -973,42 +1006,25 @@ mclock_point_t spx_retransmit_lost(void)
 	{
 		if((sock->flags & IPX_IS_SPX) != 0)
 		{
-			if((sock->flags & (IPX_CLOSING | IPX_CLOSED)) != 0)
+			if((sock->flags & (IPX_CLOSING | IPX_CLOSED)) != 0 && mclock_ms_until(sock->spx_abort_time, now) == 0)
 			{
-				if(mclock_ms_until(sock->spx_abort_time, now) == 0)
+				if(sock->fd == SOCKET_ERROR)
 				{
-					if(sock->fd == SOCKET_ERROR)
+					/* Socket has been closed and inner structures freed by closesocket(), all
+					 * we have left to do is remove it from the all_sockets list and free it.
+					*/
+					
+					if(sock->spx_send_queue != NULL)
 					{
-						/* Socket has been closed and inner structures freed by closesocket(), all
-						 * we have left to do is remove it from the all_sockets list and free it.
-						*/
-
-						DL_DELETE(all_sockets, sock);
-						free(sock);
+						spx_queue_free(sock->spx_send_queue);
+						sock->spx_send_queue = NULL;
 					}
 					
-					continue;
-				}
-				else if((sock->flags & IPX_CLOSING) != 0)
-				{
-					if(mclock_ms_until(sock->spx_retransmit_time, now) == 0)
-					{
-						/* Retransmit informed disconnect message to peer of closed connection. */
-						
-						DWORD err = spx_send_informed_disconnect(sock);
-						if(err == ERROR_SUCCESS)
-						{
-							sock->spx_retransmit_count += 1;
-							
-							uint32_t retransmit_delay = spx_compute_retransmit_time(sock->spx_rtt_history, sock->spx_retransmit_count);
-							sock->spx_retransmit_time = mclock_add_ms(now, retransmit_delay);
-						}
-					}
-					
-					spx_next_retransmit_time = mclock_min(spx_next_retransmit_time, sock->spx_retransmit_time);
+					DL_DELETE(all_sockets, sock);
+					free(sock);
 				}
 				
-				spx_next_retransmit_time = mclock_min(spx_next_retransmit_time, sock->spx_abort_time);
+				continue;
 			}
 			else if((sock->flags & (IPX_CONNECTED | IPX_CONNECTING)) != 0 && mclock_ms_until(sock->spx_abort_time, now) == 0)
 			{
@@ -1031,7 +1047,7 @@ mclock_point_t spx_retransmit_lost(void)
 					sock->spx_master_fd = SOCKET_ERROR;
 				}
 			}
-			else if((sock->flags & IPX_CONNECTING) != 0 || ((sock->flags & IPX_CONNECTED) != 0 && sock->spx_send_queue->front != NULL))
+			else if((sock->flags & IPX_CONNECTING) != 0 || (sock->spx_send_queue != NULL && sock->spx_send_queue->front != NULL))
 			{
 				if(mclock_ms_until(sock->spx_retransmit_time, now) == 0)
 				{
@@ -1049,7 +1065,7 @@ mclock_point_t spx_retransmit_lost(void)
 				spx_next_retransmit_time = mclock_min(spx_next_retransmit_time, sock->spx_retransmit_time);
 			}
 			
-			if((sock->flags & (IPX_CONNECTED | IPX_CONNECTING)) != 0)
+			if((sock->flags & (IPX_CONNECTED | IPX_CONNECTING | IPX_CLOSED | IPX_CLOSING)) != 0)
 			{
 				spx_next_retransmit_time = mclock_min(spx_next_retransmit_time, sock->spx_abort_time);
 			}

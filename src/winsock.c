@@ -517,12 +517,6 @@ int WSAAPI closesocket(SOCKET sockfd)
 		sock->spx_connection_queue = NULL;
 	}
 	
-	if(sock->spx_send_queue != NULL)
-	{
-		spx_queue_free(sock->spx_send_queue);
-		sock->spx_send_queue = NULL;
-	}
-	
 	if(sock->spx_recv_queue != NULL)
 	{
 		spx_queue_free(sock->spx_recv_queue);
@@ -555,26 +549,21 @@ int WSAAPI closesocket(SOCKET sockfd)
 	{
 		assert(sock->spx_master_fd != SOCKET_ERROR);
 		
-		closesocket(sock->spx_master_fd);
+		r_closesocket(sock->spx_master_fd);
 		sock->spx_master_fd = SOCKET_ERROR;
 		
 		spx_send_informed_disconnect(sock);
 		sock->flags |= IPX_CLOSING;
-
-		mclock_point_t now = mclock_now();
-		
-		sock->spx_transmit_time = now;
-		sock->spx_retransmit_count = 0;
-
-		uint32_t retransmit_delay = spx_compute_retransmit_time(sock->spx_rtt_history, sock->spx_retransmit_count);
-		sock->spx_retransmit_time = mclock_add_ms(now, retransmit_delay);
-		
-		sock->spx_abort_time  = mclock_add_ms(now, SPX_ABORT_TIMEOUT);
-		sock->spx_verify_time = mclock_never();
-		
-		spx_notify_retransmit(mclock_min(sock->spx_retransmit_time, sock->spx_abort_time));
 	}
-	else if((sock->flags & IPX_CLOSED) == 0)
+	else{
+		if(sock->spx_send_queue != NULL)
+		{
+			spx_queue_free(sock->spx_send_queue);
+			sock->spx_send_queue = NULL;
+		}
+	}
+	
+	if((sock->flags & (IPX_CLOSED | IPX_CLOSING)) == 0)
 	{
 		DL_DELETE(all_sockets, sock);
 		free(sock);
