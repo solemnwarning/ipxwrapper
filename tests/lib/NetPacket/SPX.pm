@@ -16,6 +16,9 @@ our @EXPORT_OK = qw(
 	SPX_CONNCTRL_ATN
 	SPX_CONNCTRL_ACK
 	SPX_CONNCTRL_SYS
+	
+	SPX_END_OF_CONNECTION
+	SPX_END_OF_CONNECTION_ACK
 );
 
 our %EXPORT_TAGS = (
@@ -28,6 +31,9 @@ our %EXPORT_TAGS = (
 		SPX_CONNCTRL_ATN
 		SPX_CONNCTRL_ACK
 		SPX_CONNCTRL_SYS
+		
+		SPX_END_OF_CONNECTION
+		SPX_END_OF_CONNECTION_ACK
 	) ],
 );
 
@@ -40,6 +46,9 @@ use constant {
 	SPX_CONNCTRL_ATN  => 0x20,  # Reserved for attention indication (Not supported by SPX)
 	SPX_CONNCTRL_ACK  => 0x40,  # Set to request the receiving partner acknowledge that this packet has been received. Acknowledgement requests and responses are handled by SPX.
 	SPX_CONNCTRL_SYS  => 0x80,  # Set to indicate a packet is a system packet. System packets are internal SPX packets, are not delivered to the application, and do not consume sequence numbers.
+	
+	SPX_END_OF_CONNECTION     => 0xFE,
+	SPX_END_OF_CONNECTION_ACK => 0xFF,
 };
 
 sub new
