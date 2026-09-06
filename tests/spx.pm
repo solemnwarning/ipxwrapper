@@ -1103,9 +1103,175 @@ shared_examples_for "spx protocol tests" => sub
 					[]) or return;
 		};
 		
-		they "retransmit lost data packets"; # TODO
-	
-		they "ignore duplicate data packets"; # TODO
+		they "retransmit lost data packets" => sub
+		{
+			my $capture = $spx_capture_class->new($local_dev_a);
+			
+			my $client = IPXWrapper::Tool::WSTool->new($remote_ip_a);
+			
+			my ($client_sock, $client_conn_id, $server_conn_id) = $connect_client->($client, $capture, "00:00:00:01", $local_mac_a, 1234);
+			my $client_addr = $client->getsockname($client_sock);
+			
+			# Send a message from the application.
+			
+			$client->send($client_sock, "imported children");
+			
+			sleep(1);
+			
+			# Verify it continues to retransmit the message...
+			
+			for(my $i = 0; $i < 3; ++$i)
+			{
+				sleep(3) if($i > 0);
+				
+				cmp_hashes_partial(
+					[ grep { !mac_eq($_->{src_mac}, $local_mac_a) } $capture->read_available() ],
+					[
+						{
+							src_network => $client_addr->{ipx_netnum},
+							src_node    => $client_addr->{ipx_nodenum},
+							src_socket  => $client_addr->{ipx_socket},
+							
+							dst_network  => "00:00:00:01",
+							dst_node     => $local_mac_a,
+							dst_socket   => 1234,
+							
+							connection_control  => SPX_CONNCTRL_ACK | SPX_CONNCTRL_EOM,
+							datastream_type     => 0,
+							src_connection_id   => $client_conn_id,
+							dst_connection_id   => $server_conn_id,
+							seq_number          => 0,
+							ack_number          => 0,
+							allocation_number   => 0,
+							data                => "imported children",
+						},
+					]) or return;
+			}
+			
+			# ...until we acknowledge it...
+			
+			$spx_send_func->($local_dev_a,
+				tc   => 0,
+				type => 5,
+				
+				src_network  => "00:00:00:01",
+				src_node     => $local_mac_a,
+				src_socket   => 1234,
+				
+				dest_network => $client_addr->{ipx_netnum},
+				dest_node    => $client_addr->{ipx_nodenum},
+				dest_socket  => $client_addr->{ipx_socket},
+				
+				connection_control  => SPX_CONNCTRL_SYS,
+				datastream_type     => 0,
+				src_connection_id   => $server_conn_id,
+				dst_connection_id   => $client_conn_id,
+				seq_number          => 0,
+				ack_number          => 1,
+				allocation_number   => 1,
+				
+				data => "",
+			);
+			
+			sleep(3);
+			
+			# Verify no further retransmissions are transmitted (watchdogs are fine).
+			
+			my $watchdog_request = {
+				src_network => $client_addr->{ipx_netnum},
+				src_node    => $client_addr->{ipx_nodenum},
+				src_socket  => $client_addr->{ipx_socket},
+				
+				dst_network  => "00:00:00:01",
+				dst_node     => $local_mac_a,
+				dst_socket   => 1234,
+				
+				connection_control  => SPX_CONNCTRL_SYS | SPX_CONNCTRL_ACK,
+				datastream_type     => 0,
+				src_connection_id   => $client_conn_id,
+				dst_connection_id   => $server_conn_id,
+				seq_number          => 1,
+				ack_number          => 0,
+			};
+			
+			cmp_hashes_partial(
+					[ grep { !mac_eq($_->{src_mac}, $local_mac_a) } $capture->read_available() ],
+					[],
+					[ $watchdog_request ]) or return;
+		};
+		
+		they "re-acknowledge retransmitted data packets" => sub
+		{
+			my $capture = $spx_capture_class->new($local_dev_a);
+			
+			my $client = IPXWrapper::Tool::WSTool->new($remote_ip_a);
+			
+			my ($client_sock, $client_conn_id, $server_conn_id) = $connect_client->($client, $capture, "00:00:00:01", $local_mac_a, 1234);
+			my $client_addr = $client->getsockname($client_sock);
+			
+			# Send the same data packet to the application 3 times.
+			
+			for(my $i = 0; $i < 3; ++$i)
+			{
+				$spx_send_func->($local_dev_a,
+					tc   => 0,
+					type => 5,
+					
+					src_network  => "00:00:00:01",
+					src_node     => $local_mac_a,
+					src_socket   => 1234,
+					
+					dest_network => $client_addr->{ipx_netnum},
+					dest_node    => $client_addr->{ipx_nodenum},
+					dest_socket  => $client_addr->{ipx_socket},
+					
+					connection_control  => SPX_CONNCTRL_ACK | SPX_CONNCTRL_EOM,
+					datastream_type     => 0,
+					src_connection_id   => $server_conn_id,
+					dst_connection_id   => $client_conn_id,
+					seq_number          => 0,
+					ack_number          => 0,
+					allocation_number   => 0,
+					
+					data => "grumpy bait",
+				);
+				
+				sleep(1);
+			}
+			
+			# Verify we got 3 identical acks.
+			
+			my $expected_ack = {
+				src_network => $client_addr->{ipx_netnum},
+				src_node    => $client_addr->{ipx_nodenum},
+				src_socket  => $client_addr->{ipx_socket},
+				
+				dst_network  => "00:00:00:01",
+				dst_node     => $local_mac_a,
+				dst_socket   => 1234,
+				
+				connection_control  => SPX_CONNCTRL_SYS,
+				datastream_type     => 0,
+				src_connection_id   => $client_conn_id,
+				dst_connection_id   => $server_conn_id,
+				seq_number          => 0,
+				ack_number          => 1,
+				allocation_number   => 1,
+				
+				data => "",
+			};
+			
+			cmp_hashes_partial(
+				[ grep { !mac_eq($_->{src_mac}, $local_mac_a) } $capture->read_available() ],
+				[ $expected_ack, $expected_ack, $expected_ack ]) or return;
+			
+			# Verify the application didn't get duplicated messages.
+			
+			$client->ioctlsocket($client_sock, FIONBIO, "00000001"); # Enable non-blocking I/O
+			
+			is($client->recv($client_sock, 64), "grumpy bait");
+			throws_ok { $client->recv($client_sock, 64); } qr/recv failed with error code 10035/;
+		};
 		
 		they "ignore unexpected data packets"; # TODO
 		
@@ -2257,9 +2423,257 @@ shared_examples_for "spx protocol tests" => sub
 					[]) or return;
 		};
 		
-		they "retransmit lost data packets"; # TODO
+		they "retransmit lost data packets" => sub
+		{
+			my $capture = $spx_capture_class->new($local_dev_a);
+			
+			my $server = IPXWrapper::Tool::WSTool->new($remote_ip_a);
+			my ($listener, $listener_net, $listener_node, $listener_socket) = $setup_listener->($server, "00:00:00:00", $remote_mac_a, "0");
+			
+			# Enable non-blocking I/O on listener socket.
+			$server->ioctlsocket($listener, FIONBIO, "00000001");
+			
+			# Send SPX connection request.
+			
+			my $client_socket = $random_id->();
+			my $client_conn_id = $random_id->();
+			
+			$send_conn_request->($listener_net, $listener_node, $listener_socket, "00:00:00:01", $local_mac_a, $client_socket, $client_conn_id);
+			
+			# Process the connection request.
+			
+			sleep(1);
+			
+			$server->accept_start($listener);
+			my $server_client = $server->accept_finish();
+			
+			# Check for connection acknowledgement.
+			
+			sleep(1);
+			
+			my @packets = grep { !mac_eq($_->{src_mac}, $local_mac_a) } $capture->read_available();
+			
+			cmp_hashes_partial(\@packets, [
+				{
+					dst_network  => "00:00:00:01",
+					dst_node     => $local_mac_a,
+					dst_socket   => $client_socket,
+					
+					src_network => $listener_net,
+					src_node    => $listener_node,
+					src_socket  => $listener_socket,
+					
+					connection_control  => SPX_CONNCTRL_SYS,
+					datastream_type     => 0,
+					dst_connection_id   => $client_conn_id,
+					seq_number          => 0,
+					ack_number          => 0,
+				},
+			]) or return;
+			
+			my ($server_conn_id) = $packets[0]->{src_connection_id};
+			
+			# Send a message from the application.
+			
+			$server->send($server_client->{socket}, "chubby doctor");
+			
+			sleep(1);
+			
+			# Verify it continues to retransmit the message...
+			
+			for(my $i = 0; $i < 3; ++$i)
+			{
+				sleep(3) if($i > 0);
+				
+				cmp_hashes_partial(
+					[ grep { !mac_eq($_->{src_mac}, $local_mac_a) } $capture->read_available() ],
+					[
+						{
+							src_network => $listener_net,
+							src_node    => $listener_node,
+							src_socket  => $listener_socket,
+							
+							dst_network  => "00:00:00:01",
+							dst_node     => $local_mac_a,
+							dst_socket   => $client_socket,
+							
+							connection_control  => SPX_CONNCTRL_ACK | SPX_CONNCTRL_EOM,
+							datastream_type     => 0,
+							src_connection_id   => $server_conn_id,
+							dst_connection_id   => $client_conn_id,
+							seq_number          => 0,
+							ack_number          => 0,
+							allocation_number   => 0,
+							data                => "chubby doctor",
+						},
+					]) or return;
+			}
+			
+			# ...until we acknowledge it...
+			
+			$spx_send_func->($local_dev_a,
+				tc   => 0,
+				type => 5,
+				
+				src_network  => "00:00:00:01",
+				src_node     => $local_mac_a,
+				src_socket   => $client_socket,
+				
+				dest_network => $listener_net,
+				dest_node    => $listener_node,
+				dest_socket  => $listener_socket,
+				
+				connection_control  => SPX_CONNCTRL_SYS,
+				datastream_type     => 0,
+				src_connection_id   => $client_conn_id,
+				dst_connection_id   => $server_conn_id,
+				seq_number          => 0,
+				ack_number          => 1,
+				allocation_number   => 1,
+				
+				data => "",
+			);
+			
+			sleep(3);
+			
+			# Verify no further retransmissions are transmitted (watchdogs are fine).
+			
+			my $watchdog_request = {
+				src_network => $listener_net,
+				src_node    => $listener_node,
+				src_socket  => $listener_socket,
+				
+				dst_network  => "00:00:00:01",
+				dst_node     => $local_mac_a,
+				dst_socket   => $client_socket,
+				
+				connection_control  => SPX_CONNCTRL_SYS | SPX_CONNCTRL_ACK,
+				datastream_type     => 0,
+				src_connection_id   => $server_conn_id,
+				dst_connection_id   => $client_conn_id,
+				seq_number          => 1,
+				ack_number          => 0,
+			};
+			
+			cmp_hashes_partial(
+					[ grep { !mac_eq($_->{src_mac}, $local_mac_a) } $capture->read_available() ],
+					[],
+					[ $watchdog_request ]) or return;
+		};
 		
-		they "ignore duplicate data packets"; # TODO
+		they "re-acknowledge retransmitted data packets" => sub
+		{
+			my $capture = $spx_capture_class->new($local_dev_a);
+			
+			my $server = IPXWrapper::Tool::WSTool->new($remote_ip_a);
+			my ($listener, $listener_net, $listener_node, $listener_socket) = $setup_listener->($server, "00:00:00:00", $remote_mac_a, "0");
+			
+			# Enable non-blocking I/O on listener socket.
+			$server->ioctlsocket($listener, FIONBIO, "00000001");
+			
+			# Send SPX connection request.
+			
+			my $client_socket = $random_id->();
+			my $client_conn_id = $random_id->();
+			
+			$send_conn_request->($listener_net, $listener_node, $listener_socket, "00:00:00:01", $local_mac_a, $client_socket, $client_conn_id);
+			
+			# Process the connection request.
+			
+			sleep(1);
+			
+			$server->accept_start($listener);
+			my $server_client = $server->accept_finish();
+			
+			# Check for connection acknowledgement.
+			
+			sleep(1);
+			
+			my @packets = grep { !mac_eq($_->{src_mac}, $local_mac_a) } $capture->read_available();
+			
+			cmp_hashes_partial(\@packets, [
+				{
+					dst_network  => "00:00:00:01",
+					dst_node     => $local_mac_a,
+					dst_socket   => $client_socket,
+					
+					src_network => $listener_net,
+					src_node    => $listener_node,
+					src_socket  => $listener_socket,
+					
+					connection_control  => SPX_CONNCTRL_SYS,
+					datastream_type     => 0,
+					dst_connection_id   => $client_conn_id,
+					seq_number          => 0,
+					ack_number          => 0,
+				},
+			]) or return;
+			
+			my ($server_conn_id) = $packets[0]->{src_connection_id};
+			
+			# Send the same data packet to the application 3 times.
+			
+			for(my $i = 0; $i < 3; ++$i)
+			{
+				$spx_send_func->($local_dev_a,
+					tc   => 0,
+					type => 5,
+					
+					src_network  => "00:00:00:01",
+					src_node     => $local_mac_a,
+					src_socket   => $client_socket,
+					
+					dest_network => $listener_net,
+					dest_node    => $listener_node,
+					dest_socket  => $listener_socket,
+					
+					connection_control  => SPX_CONNCTRL_ACK | SPX_CONNCTRL_EOM,
+					datastream_type     => 0,
+					src_connection_id   => $client_conn_id,
+					dst_connection_id   => $server_conn_id,
+					seq_number          => 0,
+					ack_number          => 0,
+					allocation_number   => 0,
+					
+					data => "abusive writer",
+				);
+				
+				sleep(1);
+			}
+			
+			# Verify we got 3 identical acks.
+			
+			my $expected_ack = {
+				src_network => $listener_net,
+				src_node    => $listener_node,
+				src_socket  => $listener_socket,
+				
+				dst_network  => "00:00:00:01",
+				dst_node     => $local_mac_a,
+				dst_socket   => $client_socket,
+				
+				connection_control  => SPX_CONNCTRL_SYS,
+				datastream_type     => 0,
+				src_connection_id   => $server_conn_id,
+				dst_connection_id   => $client_conn_id,
+				seq_number          => 0,
+				ack_number          => 1,
+				allocation_number   => 1,
+				
+				data => "",
+			};
+			
+			cmp_hashes_partial(
+				[ grep { !mac_eq($_->{src_mac}, $local_mac_a) } $capture->read_available() ],
+				[ $expected_ack, $expected_ack, $expected_ack ]) or return;
+			
+			# Verify the application didn't get duplicated messages.
+			
+			$server->ioctlsocket($server_client->{socket}, FIONBIO, "00000001"); # Enable non-blocking I/O
+			
+			is($server->recv($server_client->{socket}, 64), "abusive writer");
+			throws_ok { $server->recv($server_client->{socket}, 64); } qr/recv failed with error code 10035/;
+		};
 		
 		they "ignore unexpected data packets"; # TODO
 		
