@@ -97,7 +97,7 @@ int main(int argc, char **argv)
 
 	printf("ready\n");
 	
-	char line[1024];
+	char line[8192];
 	while(fgets(line, sizeof(line), stdin))
 	{
 		char *cmd = strtok(line, " \n");

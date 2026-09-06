@@ -34,6 +34,8 @@ our $spx_capture_class;
 
 shared_examples_for "spx protocol tests" => sub
 {
+	my $SPX_FRAGMENT_MAX_DATA_SIZE = 1364;
+	
 	my $random_id = sub
 	{
 		return 1 + int(rand(65534));
@@ -1275,9 +1277,243 @@ shared_examples_for "spx protocol tests" => sub
 		
 		they "ignore unexpected data packets"; # TODO
 		
-		they "fragment large outgoing messages"; # TODO
+		they "fragment large outgoing messages" => sub
+		{
+			my $capture = $spx_capture_class->new($local_dev_a);
+			
+			my $client = IPXWrapper::Tool::WSTool->new($remote_ip_a);
+			
+			my ($client_sock, $client_conn_id, $server_conn_id) = $connect_client->($client, $capture, "00:00:00:01", $local_mac_a, 1234);
+			my $client_addr = $client->getsockname($client_sock);
+			
+			# Send a random 2KiB message from the application.
+			
+			my @dict = ("A".."Z", "0".."9");
+			my $message = join("", map { $dict[int(rand(scalar @dict))] } (1...2048));
+			
+			$client->send($client_sock, $message);
+			
+			# Verify the first fragment...
+			
+			sleep(1);
+			
+			cmp_hashes_partial(
+				[ grep { !mac_eq($_->{src_mac}, $local_mac_a) } $capture->read_available() ],
+				[
+					{
+						src_network => $client_addr->{ipx_netnum},
+						src_node    => $client_addr->{ipx_nodenum},
+						src_socket  => $client_addr->{ipx_socket},
+						
+						dst_network  => "00:00:00:01",
+						dst_node     => $local_mac_a,
+						dst_socket   => 1234,
+						
+						connection_control  => SPX_CONNCTRL_ACK,
+						datastream_type     => 0,
+						src_connection_id   => $client_conn_id,
+						dst_connection_id   => $server_conn_id,
+						seq_number          => 0,
+						ack_number          => 0,
+						allocation_number   => 0,
+						data                => substr($message, 0, $SPX_FRAGMENT_MAX_DATA_SIZE),
+					},
+				]) or return;
+			
+			$spx_send_func->($local_dev_a,
+				tc   => 0,
+				type => 5,
+				
+				src_network  => "00:00:00:01",
+				src_node     => $local_mac_a,
+				src_socket   => 1234,
+				
+				dest_network => $client_addr->{ipx_netnum},
+				dest_node    => $client_addr->{ipx_nodenum},
+				dest_socket  => $client_addr->{ipx_socket},
+				
+				connection_control  => SPX_CONNCTRL_SYS,
+				datastream_type     => 0,
+				src_connection_id   => $server_conn_id,
+				dst_connection_id   => $client_conn_id,
+				seq_number          => 0,
+				ack_number          => 1,
+				allocation_number   => 1,
+				
+				data => "",
+			);
+			
+			sleep(1);
+			
+			# ...and the second fragment
+			
+			cmp_hashes_partial(
+				[ grep { !mac_eq($_->{src_mac}, $local_mac_a) } $capture->read_available() ],
+				[
+					{
+						src_network => $client_addr->{ipx_netnum},
+						src_node    => $client_addr->{ipx_nodenum},
+						src_socket  => $client_addr->{ipx_socket},
+						
+						dst_network  => "00:00:00:01",
+						dst_node     => $local_mac_a,
+						dst_socket   => 1234,
+						
+						connection_control  => SPX_CONNCTRL_ACK | SPX_CONNCTRL_EOM,
+						datastream_type     => 0,
+						src_connection_id   => $client_conn_id,
+						dst_connection_id   => $server_conn_id,
+						seq_number          => 1,
+						ack_number          => 0,
+						allocation_number   => 0,
+						data                => substr($message, $SPX_FRAGMENT_MAX_DATA_SIZE, (2048 - $SPX_FRAGMENT_MAX_DATA_SIZE)),
+					},
+				]) or return;
+			
+			$spx_send_func->($local_dev_a,
+				tc   => 0,
+				type => 5,
+				
+				src_network  => "00:00:00:01",
+				src_node     => $local_mac_a,
+				src_socket   => 1234,
+				
+				dest_network => $client_addr->{ipx_netnum},
+				dest_node    => $client_addr->{ipx_nodenum},
+				dest_socket  => $client_addr->{ipx_socket},
+				
+				connection_control  => SPX_CONNCTRL_SYS,
+				datastream_type     => 0,
+				src_connection_id   => $server_conn_id,
+				dst_connection_id   => $client_conn_id,
+				seq_number          => 0,
+				ack_number          => 2,
+				allocation_number   => 2,
+				
+				data => "",
+			);
+		};
 		
-		they "receive fragmented messages"; # TODO
+		they "reassemble fragmented messages" => sub
+		{
+			my $capture = $spx_capture_class->new($local_dev_a);
+			
+			my $client = IPXWrapper::Tool::WSTool->new($remote_ip_a);
+			
+			my ($client_sock, $client_conn_id, $server_conn_id) = $connect_client->($client, $capture, "00:00:00:01", $local_mac_a, 1234);
+			my $client_addr = $client->getsockname($client_sock);
+			
+			# Send a random 2KiB message to the application...
+			
+			my @dict = ("A".."Z", "0".."9");
+			my $message = join("", map { $dict[int(rand(scalar @dict))] } (1...2048));
+			
+			# ...first fragment...
+			
+			$spx_send_func->($local_dev_a,
+				tc   => 0,
+				type => 5,
+				
+				src_network  => "00:00:00:01",
+				src_node     => $local_mac_a,
+				src_socket   => 1234,
+				
+				dest_network => $client_addr->{ipx_netnum},
+				dest_node    => $client_addr->{ipx_nodenum},
+				dest_socket  => $client_addr->{ipx_socket},
+				
+				connection_control  => SPX_CONNCTRL_ACK,
+				datastream_type     => 0,
+				src_connection_id   => $server_conn_id,
+				dst_connection_id   => $client_conn_id,
+				seq_number          => 0,
+				ack_number          => 0,
+				allocation_number   => 0,
+				
+				data => substr($message, 0, $SPX_FRAGMENT_MAX_DATA_SIZE),
+			);
+			
+			sleep(1);
+			
+			cmp_hashes_partial(
+				[ grep { !mac_eq($_->{src_mac}, $local_mac_a) } $capture->read_available() ],
+				[
+					{
+						src_network => $client_addr->{ipx_netnum},
+						src_node    => $client_addr->{ipx_nodenum},
+						src_socket  => $client_addr->{ipx_socket},
+						
+						dst_network  => "00:00:00:01",
+						dst_node     => $local_mac_a,
+						dst_socket   => 1234,
+						
+						connection_control  => SPX_CONNCTRL_SYS,
+						datastream_type     => 0,
+						src_connection_id   => $client_conn_id,
+						dst_connection_id   => $server_conn_id,
+						seq_number          => 0,
+						ack_number          => 1,
+						allocation_number   => 1,
+						
+						data => "",
+					},
+				]);
+			
+			# ...second fragment...
+			
+			$spx_send_func->($local_dev_a,
+				tc   => 0,
+				type => 5,
+				
+				src_network  => "00:00:00:01",
+				src_node     => $local_mac_a,
+				src_socket   => 1234,
+				
+				dest_network => $client_addr->{ipx_netnum},
+				dest_node    => $client_addr->{ipx_nodenum},
+				dest_socket  => $client_addr->{ipx_socket},
+				
+				connection_control  => SPX_CONNCTRL_ACK | SPX_CONNCTRL_EOM,
+				datastream_type     => 0,
+				src_connection_id   => $server_conn_id,
+				dst_connection_id   => $client_conn_id,
+				seq_number          => 1,
+				ack_number          => 0,
+				allocation_number   => 0,
+				
+				data => substr($message, $SPX_FRAGMENT_MAX_DATA_SIZE, (2048 - $SPX_FRAGMENT_MAX_DATA_SIZE)),
+			);
+			
+			sleep(1);
+			
+			cmp_hashes_partial(
+				[ grep { !mac_eq($_->{src_mac}, $local_mac_a) } $capture->read_available() ],
+				[
+					{
+						src_network => $client_addr->{ipx_netnum},
+						src_node    => $client_addr->{ipx_nodenum},
+						src_socket  => $client_addr->{ipx_socket},
+						
+						dst_network  => "00:00:00:01",
+						dst_node     => $local_mac_a,
+						dst_socket   => 1234,
+						
+						connection_control  => SPX_CONNCTRL_SYS,
+						datastream_type     => 0,
+						src_connection_id   => $client_conn_id,
+						dst_connection_id   => $server_conn_id,
+						seq_number          => 0,
+						ack_number          => 2,
+						allocation_number   => 2,
+						
+						data => "",
+					},
+				]);
+			
+			# Verify the application received the full message.
+			
+			is($client->recv($client_sock, 4096), $message);
+		};
 	};
 	
 	describe "SPX servers" => sub
@@ -2677,9 +2913,325 @@ shared_examples_for "spx protocol tests" => sub
 		
 		they "ignore unexpected data packets"; # TODO
 		
-		they "fragment large outgoing messages"; # TODO
+		they "fragment large outgoing messages" => sub
+		{
+			my $capture = $spx_capture_class->new($local_dev_a);
+			
+			my $server = IPXWrapper::Tool::WSTool->new($remote_ip_a);
+			my ($listener, $listener_net, $listener_node, $listener_socket) = $setup_listener->($server, "00:00:00:00", $remote_mac_a, "0");
+			
+			# Enable non-blocking I/O on listener socket.
+			$server->ioctlsocket($listener, FIONBIO, "00000001");
+			
+			# Send SPX connection request.
+			
+			my $client_socket = $random_id->();
+			my $client_conn_id = $random_id->();
+			
+			$send_conn_request->($listener_net, $listener_node, $listener_socket, "00:00:00:01", $local_mac_a, $client_socket, $client_conn_id);
+			
+			# Process the connection request.
+			
+			sleep(1);
+			
+			$server->accept_start($listener);
+			my $server_client = $server->accept_finish();
+			
+			# Check for connection acknowledgement.
+			
+			sleep(1);
+			
+			my @packets = grep { !mac_eq($_->{src_mac}, $local_mac_a) } $capture->read_available();
+			
+			cmp_hashes_partial(\@packets, [
+				{
+					dst_network  => "00:00:00:01",
+					dst_node     => $local_mac_a,
+					dst_socket   => $client_socket,
+					
+					src_network => $listener_net,
+					src_node    => $listener_node,
+					src_socket  => $listener_socket,
+					
+					connection_control  => SPX_CONNCTRL_SYS,
+					datastream_type     => 0,
+					dst_connection_id   => $client_conn_id,
+					seq_number          => 0,
+					ack_number          => 0,
+				},
+			]) or return;
+			
+			my ($server_conn_id) = $packets[0]->{src_connection_id};
+			
+			# Send a random 2KiB message from the application.
+			
+			my @dict = ("A".."Z", "0".."9");
+			my $message = join("", map { $dict[int(rand(scalar @dict))] } (1...2048));
+			
+			$server->send($server_client->{socket}, $message);
+			
+			# Verify the first fragment...
+			
+			sleep(1);
+			
+			cmp_hashes_partial(
+				[ grep { !mac_eq($_->{src_mac}, $local_mac_a) } $capture->read_available() ],
+				[
+					{
+						src_network => $listener_net,
+						src_node    => $listener_node,
+						src_socket  => $listener_socket,
+						
+						dst_network  => "00:00:00:01",
+						dst_node     => $local_mac_a,
+						dst_socket   => $client_socket,
+						
+						connection_control  => SPX_CONNCTRL_ACK,
+						datastream_type     => 0,
+						src_connection_id   => $server_conn_id,
+						dst_connection_id   => $client_conn_id,
+						seq_number          => 0,
+						ack_number          => 0,
+						allocation_number   => 0,
+						data                => substr($message, 0, $SPX_FRAGMENT_MAX_DATA_SIZE),
+					},
+				]) or return;
+			
+			$spx_send_func->($local_dev_a,
+				tc   => 0,
+				type => 5,
+				
+				src_network  => "00:00:00:01",
+				src_node     => $local_mac_a,
+				src_socket   => $client_socket,
+				
+				dest_network => $listener_net,
+				dest_node    => $listener_node,
+				dest_socket  => $listener_socket,
+				
+				connection_control  => SPX_CONNCTRL_SYS,
+				datastream_type     => 0,
+				src_connection_id   => $client_conn_id,
+				dst_connection_id   => $server_conn_id,
+				seq_number          => 0,
+				ack_number          => 1,
+				allocation_number   => 1,
+				
+				data => "",
+			);
+			
+			sleep(1);
+			
+			# ...and the second fragment
+			
+			cmp_hashes_partial(
+				[ grep { !mac_eq($_->{src_mac}, $local_mac_a) } $capture->read_available() ],
+				[
+					{
+						src_network => $listener_net,
+						src_node    => $listener_node,
+						src_socket  => $listener_socket,
+						
+						dst_network  => "00:00:00:01",
+						dst_node     => $local_mac_a,
+						dst_socket   => $client_socket,
+						
+						connection_control  => SPX_CONNCTRL_ACK | SPX_CONNCTRL_EOM,
+						datastream_type     => 0,
+						src_connection_id   => $server_conn_id,
+						dst_connection_id   => $client_conn_id,
+						seq_number          => 1,
+						ack_number          => 0,
+						allocation_number   => 0,
+						data                => substr($message, $SPX_FRAGMENT_MAX_DATA_SIZE, (2048 - $SPX_FRAGMENT_MAX_DATA_SIZE)),
+					},
+				]) or return;
+			
+			$spx_send_func->($local_dev_a,
+				tc   => 0,
+				type => 5,
+				
+				src_network  => "00:00:00:01",
+				src_node     => $local_mac_a,
+				src_socket   => $client_socket,
+				
+				dest_network => $listener_net,
+				dest_node    => $listener_node,
+				dest_socket  => $listener_socket,
+				
+				connection_control  => SPX_CONNCTRL_SYS,
+				datastream_type     => 0,
+				src_connection_id   => $client_conn_id,
+				dst_connection_id   => $server_conn_id,
+				seq_number          => 0,
+				ack_number          => 2,
+				allocation_number   => 2,
+				
+				data => "",
+			);
+		};
 		
-		they "receive fragmented messages"; # TODO
+		they "reassemble fragmented messages" => sub
+		{
+			my $capture = $spx_capture_class->new($local_dev_a);
+			
+			my $server = IPXWrapper::Tool::WSTool->new($remote_ip_a);
+			my ($listener, $listener_net, $listener_node, $listener_socket) = $setup_listener->($server, "00:00:00:00", $remote_mac_a, "0");
+			
+			# Enable non-blocking I/O on listener socket.
+			$server->ioctlsocket($listener, FIONBIO, "00000001");
+			
+			# Send SPX connection request.
+			
+			my $client_socket = $random_id->();
+			my $client_conn_id = $random_id->();
+			
+			$send_conn_request->($listener_net, $listener_node, $listener_socket, "00:00:00:01", $local_mac_a, $client_socket, $client_conn_id);
+			
+			# Process the connection request.
+			
+			sleep(1);
+			
+			$server->accept_start($listener);
+			my $server_client = $server->accept_finish();
+			
+			# Check for connection acknowledgement.
+			
+			sleep(1);
+			
+			my @packets = grep { !mac_eq($_->{src_mac}, $local_mac_a) } $capture->read_available();
+			
+			cmp_hashes_partial(\@packets, [
+				{
+					dst_network  => "00:00:00:01",
+					dst_node     => $local_mac_a,
+					dst_socket   => $client_socket,
+					
+					src_network => $listener_net,
+					src_node    => $listener_node,
+					src_socket  => $listener_socket,
+					
+					connection_control  => SPX_CONNCTRL_SYS,
+					datastream_type     => 0,
+					dst_connection_id   => $client_conn_id,
+					seq_number          => 0,
+					ack_number          => 0,
+				},
+			]) or return;
+			
+			my ($server_conn_id) = $packets[0]->{src_connection_id};
+			
+			# Send a random 2KiB message to the application...
+			
+			my @dict = ("A".."Z", "0".."9");
+			my $message = join("", map { $dict[int(rand(scalar @dict))] } (1...2048));
+			
+			# ...first fragment...
+			
+			$spx_send_func->($local_dev_a,
+				tc   => 0,
+				type => 5,
+				
+				src_network  => "00:00:00:01",
+				src_node     => $local_mac_a,
+				src_socket   => $client_socket,
+				
+				dest_network => $listener_net,
+				dest_node    => $listener_node,
+				dest_socket  => $listener_socket,
+				
+				connection_control  => SPX_CONNCTRL_ACK,
+				datastream_type     => 0,
+				src_connection_id   => $client_conn_id,
+				dst_connection_id   => $server_conn_id,
+				seq_number          => 0,
+				ack_number          => 0,
+				allocation_number   => 0,
+				
+				data => substr($message, 0, $SPX_FRAGMENT_MAX_DATA_SIZE),
+			);
+			
+			sleep(1);
+			
+			cmp_hashes_partial(
+				[ grep { !mac_eq($_->{src_mac}, $local_mac_a) } $capture->read_available() ],
+				[
+					{
+						src_network => $listener_net,
+						src_node    => $listener_node,
+						src_socket  => $listener_socket,
+						
+						dst_network  => "00:00:00:01",
+						dst_node     => $local_mac_a,
+						dst_socket   => $client_socket,
+						
+						connection_control  => SPX_CONNCTRL_SYS,
+						datastream_type     => 0,
+						src_connection_id   => $server_conn_id,
+						dst_connection_id   => $client_conn_id,
+						seq_number          => 0,
+						ack_number          => 1,
+						allocation_number   => 1,
+						
+						data => "",
+					},
+				]);
+			
+			# ...second fragment...
+			
+			$spx_send_func->($local_dev_a,
+				tc   => 0,
+				type => 5,
+				
+				src_network  => "00:00:00:01",
+				src_node     => $local_mac_a,
+				src_socket   => $client_socket,
+				
+				dest_network => $listener_net,
+				dest_node    => $listener_node,
+				dest_socket  => $listener_socket,
+				
+				connection_control  => SPX_CONNCTRL_ACK | SPX_CONNCTRL_EOM,
+				datastream_type     => 0,
+				src_connection_id   => $client_conn_id,
+				dst_connection_id   => $server_conn_id,
+				seq_number          => 1,
+				ack_number          => 0,
+				allocation_number   => 0,
+				
+				data => substr($message, $SPX_FRAGMENT_MAX_DATA_SIZE, (2048 - $SPX_FRAGMENT_MAX_DATA_SIZE)),
+			);
+			
+			sleep(1);
+			
+			cmp_hashes_partial(
+				[ grep { !mac_eq($_->{src_mac}, $local_mac_a) } $capture->read_available() ],
+				[
+					{
+						src_network => $listener_net,
+						src_node    => $listener_node,
+						src_socket  => $listener_socket,
+						
+						dst_network  => "00:00:00:01",
+						dst_node     => $local_mac_a,
+						dst_socket   => $client_socket,
+						
+						connection_control  => SPX_CONNCTRL_SYS,
+						datastream_type     => 0,
+						src_connection_id   => $server_conn_id,
+						dst_connection_id   => $client_conn_id,
+						seq_number          => 0,
+						ack_number          => 2,
+						allocation_number   => 2,
+						
+						data => "",
+					},
+				]);
+			
+			# Verify the application received the full message.
+			
+			is($server->recv($server_client->{socket}, 4096), $message);
+		};
 	};
 };
 

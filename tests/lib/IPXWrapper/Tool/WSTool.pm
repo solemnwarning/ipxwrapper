@@ -99,7 +99,13 @@ sub _write_line
 {
 	my ($self, $line) = @_;
 	
-	note("[".$self->{pid}."] < $line");
+	my $note_line = $line;
+	if(length($note_line) > 60)
+	{
+		$note_line = substr($note_line, 0, 60)."...";
+	}
+	
+	note("[".$self->{pid}."] < $note_line");
 	
 	print { $self->{in} } "$line\n";
 }
@@ -114,7 +120,14 @@ sub _read_line
 	if(defined $line)
 	{
 		$line =~ s/\r?\n$//;
-		note("[".$self->{pid}."] > $line");
+		
+		my $note_line = $line;
+		if(length($note_line) > 60)
+		{
+			$note_line = substr($note_line, 0, 60)."...";
+		}
+		
+		note("[".$self->{pid}."] > $note_line");
 		
 		if($line =~ m/^!/)
 		{

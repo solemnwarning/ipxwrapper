@@ -32,8 +32,13 @@
  * Windows is quite happy to send larger datagrams than that in my experience and a Windows XP
  * system I tested on sent out 1,496 byte packets when fragmenting larger SPX messages
  * (1454 byte payload) by default.
+ *
+ * I've chosen 1364 as an upper bound on fragment size in IPXWrapper to avoid potential
+ * fragmentation of fragments in a worst-case scenario of RFC1234-encapsulated IPX, with the
+ * largest allowed IPv4 header and the smallest MTU I could find a description of in modern-day
+ * Internet connectivity ("Dual-Stack Lite over PPPoE").
 */
-static const size_t SPX_FRAGMENT_MAX_DATA_SIZE = 1454;
+static const size_t SPX_FRAGMENT_MAX_DATA_SIZE = 1364;
 
 static mclock_point_t spx_next_retransmit_time = MCLOCK_NEVER_STATIC;
 static bool spx_in_retransmit = false;
