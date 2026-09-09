@@ -176,8 +176,8 @@ static ipx_socket *spx_find_socket_by_local(addr32_t local_net, addr48_t local_n
 
 static ipx_socket *spx_find_socket_by_remote(addr32_t remote_net, addr48_t remote_node, uint16_t remote_socket, uint16_t remote_connection_id)
 {
-	ipx_socket *sock, *tmp;
-	HASH_ITER(hh, socket_by_fd, sock, tmp)
+	ipx_socket *sock;
+	DL_FOREACH(all_sockets, sock)
 	{
 		if((sock->flags & IPX_IS_SPX)
 			&& (sock->flags & IPX_BOUND)
@@ -465,6 +465,22 @@ void spx_process_packet(
 			sock->remote_conn = spx_header->src_connection_id;
 			sock->flags &= ~IPX_CONNECTING;
 			
+			sock->spx_recv_queue = spx_queue_alloc();
+			sock->spx_send_queue = spx_queue_alloc();
+			
+			if(sock->spx_recv_queue == NULL || sock->spx_send_queue == NULL)
+			{
+				log_printf(LOG_DEBUG, "Unable to allocate SPX packet queue, aborting connection");
+				
+				spx_queue_free(sock->spx_send_queue);
+				spx_queue_free(sock->spx_recv_queue);
+				
+				spx_connect_finish(sock);
+				sock->flags |= IPX_ABORTED;
+				
+				return;
+			}
+			
 			sock->spx_verify_time = mclock_add_ms(now, SPX_VERIFY_TIMEOUT);
 			spx_notify_retransmit(sock->spx_verify_time);
 			
@@ -497,6 +513,9 @@ void spx_process_packet(
 				sock->flags |= IPX_CONNECT_OK;
 			}
 			else{
+				spx_queue_free(sock->spx_send_queue);
+				spx_queue_free(sock->spx_recv_queue);
+				
 				sock->flags |= IPX_ABORTED;
 			}
 		}
@@ -515,9 +534,28 @@ void spx_process_packet(
 
 					closesocket(sock->spx_master_fd);
 					sock->spx_master_fd = SOCKET_ERROR;
+					
+					if((sock->flags & IPX_ACCEPT_PENDING) != 0)
+					{
+						assert(sock->spx_accept_listener->spx_current_backlog > 0);
+						sock->spx_accept_listener->spx_current_backlog -= 1;
+						
+						DL_DELETE2(sock->spx_accept_listener->spx_accept_queue_head, sock, spx_accept_queue_prev, spx_accept_queue_prev);
+						
+						sock->flags &= ~IPX_ACCEPT_PENDING;
+					}
 
 					sock->flags |= IPX_CLOSED;
+					
 					sock->flags &= ~IPX_CONNECTED;
+					
+					assert(sock->spx_send_queue != NULL);
+					spx_queue_free(sock->spx_send_queue);
+					sock->spx_send_queue = NULL;
+					
+					assert(sock->spx_recv_queue != NULL);
+					spx_queue_free(sock->spx_recv_queue);
+					sock->spx_recv_queue = NULL;
 
 					sock->spx_retransmit_time = mclock_never();
 					sock->spx_abort_time      = mclock_add_ms(now, SPX_ABORT_TIMEOUT);
@@ -558,7 +596,7 @@ void spx_process_packet(
 				free(sock);
 			}
 		}
-		else if((sock->flags & IPX_CONNECTED) != 0)
+		else if((sock->flags & (IPX_CONNECTED | IPX_CLOSING)) != 0)
 		{
 			sock->spx_abort_time = mclock_add_ms(now, SPX_ABORT_TIMEOUT);
 			spx_notify_retransmit(sock->spx_abort_time);
@@ -658,27 +696,7 @@ static void spx_process_connection_request_packet(
 	
 	assert(listener->spx_current_backlog <= listener->spx_max_backlog);
 	
-	for(size_t i = 0; i < listener->spx_current_backlog; ++i)
-	{
-		struct spx_pending_connection *pc = &(listener->spx_connection_queue[i]);
-		
-		if(pc->remote_net == src_net
-			&& pc->remote_node == src_node
-			&& pc->remote_socket == src_socket
-			&& pc->remote_connection_id == spx_header->src_connection_id)
-		{
-			/* This is a retransmitted connection request for a connection which has not yet been
-			 * accepted by the application, ignore it.
-			*/
-			
-			log_printf(LOG_DEBUG, "Connection request is a retransmission, ignoring");
-			
-			unlock_sockets();
-			return;
-		}
-	}
-	
-	if(listener->spx_current_backlog == listener->spx_max_backlog)
+	if(listener->spx_current_backlog >= listener->spx_max_backlog)
 	{
 		log_printf(LOG_DEBUG, "Received SPX connection request, but listening socket backlog is full, ignoring");
 		
@@ -686,15 +704,99 @@ static void spx_process_connection_request_packet(
 		return;
 	}
 	
-	struct spx_pending_connection *pc = &(listener->spx_connection_queue[listener->spx_current_backlog]);
+	ipx_socket *nsock = malloc(sizeof(ipx_socket));
+	if(!nsock)
+	{
+		log_printf(LOG_ERROR, "Received SPX connection request, but could not allocate memory, ignoring");
+		
+		unlock_sockets();
+		return;
+	}
+
+	nsock->recv_queue = NULL;
 	
-	pc->remote_net = src_net;
-	pc->remote_node = src_node;
-	pc->remote_socket = src_socket;
-	pc->remote_connection_id = spx_header->src_connection_id;
+	nsock->spx_recv_queue = spx_queue_alloc();
+	if(nsock->spx_recv_queue == NULL)
+	{
+		free(nsock);
+		
+		log_printf(LOG_ERROR, "Received SPX connection request, but could not allocate memory, ignoring");
+		
+		unlock_sockets();
+		return;
+	}
 	
-	pc->master_fd = socket(AF_INET, SOCK_STREAM, 0);
-	if(pc->master_fd == SOCKET_ERROR)
+	nsock->spx_send_queue = spx_queue_alloc();
+	if(nsock->spx_send_queue == NULL)
+	{
+		spx_queue_free(nsock->spx_recv_queue);
+		free(nsock);
+		
+		log_printf(LOG_ERROR, "Received SPX connection request, but could not allocate memory, ignoring");
+		
+		unlock_sockets();
+		return;
+	}
+	
+	nsock->spx_accept_queue_head = NULL;
+	nsock->spx_current_backlog = 0;
+	nsock->spx_current_backlog = 0;
+	
+	nsock->spx_recv_seq = 0;
+	nsock->spx_recv_inflight = 0;
+	
+	nsock->spx_send_seq = 0;
+
+	mclock_point_t now = mclock_now();
+
+	nsock->spx_retransmit_time = mclock_never();
+	nsock->spx_verify_time = mclock_add_ms(now, SPX_VERIFY_TIMEOUT);
+	nsock->spx_abort_time   = mclock_add_ms(now, SPX_ABORT_TIMEOUT);
+	
+	spx_notify_retransmit(mclock_min(nsock->spx_verify_time, nsock->spx_abort_time));
+	
+	for(int i = 0; i < SPX_RTT_BACKLOG_COUNT; ++i)
+	{
+		nsock->spx_rtt_history[i] = 0;
+	}
+	
+	nsock->remote_addr.sa_family = AF_IPX;
+	addr32_out(nsock->remote_addr.sa_netnum, src_net);
+	addr48_out(nsock->remote_addr.sa_nodenum, src_node);
+	nsock->remote_addr.sa_socket = src_socket;
+	
+	nsock->remote_conn = spx_header->src_connection_id;
+	nsock->local_conn = spx_allocate_connection_id();
+	
+	nsock->flags = IPX_IS_SPX | IPX_BOUND | IPX_CONNECTED | IPX_ACCEPT_PENDING | (listener->flags & IPX_IS_SPXII);
+	
+	/* Copy local address from the listening socket. */
+	
+	nsock->addr = listener->addr;
+	
+	/* Duplicate the mutex handle held by the listening
+	 * socket used to detect address collisions. There is no
+	 * way to recover from an error here.
+	*/
+	
+	if(!(DuplicateHandle(GetCurrentProcess(), listener->sock_mut,
+		GetCurrentProcess(), &(nsock->sock_mut),
+		0, FALSE, DUPLICATE_SAME_ACCESS)))
+	{
+		log_printf(LOG_ERROR, "Could not duplicate socket mutex: %s", w32_error(GetLastError()));
+		
+		spx_queue_free(nsock->spx_send_queue);
+		spx_queue_free(nsock->spx_recv_queue);
+		free(nsock);
+		
+		unlock_sockets();
+		return;
+	}
+	
+	nsock->fd = SOCKET_ERROR; /* This will be filled in by accept(). */
+	
+	nsock->spx_master_fd = socket(AF_INET, SOCK_STREAM, 0);
+	if(nsock->spx_master_fd == SOCKET_ERROR)
 	{
 		log_printf(LOG_ERROR, "Error creating TCP socket for incoming SPX connection: %s", w32_error(WSAGetLastError()));
 		
@@ -711,18 +813,20 @@ static void spx_process_connection_request_packet(
 	 * OR INADDR_LOOPBACK.
 	*/
 
-	pc->master_local_addr.sin_family = AF_INET;
-	pc->master_local_addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-	pc->master_local_addr.sin_port = htons(0);
+	struct sockaddr_in bind_addr;
+	bind_addr.sin_family = AF_INET;
+	bind_addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+	bind_addr.sin_port = htons(0);
 
-	int master_addrlen = sizeof(pc->master_local_addr);
-
-	if(r_bind(pc->master_fd, (struct sockaddr*)(&pc->master_local_addr), sizeof(pc->master_local_addr)) == SOCKET_ERROR
-		|| r_getsockname(pc->master_fd, (struct sockaddr*)(&pc->master_local_addr), &master_addrlen) == SOCKET_ERROR)
+	if(r_bind(nsock->spx_master_fd, (struct sockaddr*)(&bind_addr), sizeof(bind_addr)) == SOCKET_ERROR)
 	{
 		log_printf(LOG_ERROR, "Error setting local address for incoming SPX connection: %s", w32_error(WSAGetLastError()));
 		
-		closesocket(pc->master_fd);
+		closesocket(nsock->spx_master_fd);
+		spx_queue_free(nsock->spx_send_queue);
+		spx_queue_free(nsock->spx_recv_queue);
+		free(nsock);
+		
 		unlock_sockets();
 		return;
 	}
@@ -733,9 +837,9 @@ static void spx_process_connection_request_packet(
 	listener_addr.sin_port = listener->port;
 	
 	unsigned long argp = 1;
-	ioctlsocket(pc->master_fd, FIONBIO, &argp);
+	ioctlsocket(nsock->spx_master_fd, FIONBIO, &argp);
 	
-	int connect_result = r_connect(pc->master_fd, (struct sockaddr*)(&listener_addr), sizeof(listener_addr));
+	int connect_result = r_connect(nsock->spx_master_fd, (struct sockaddr*)(&listener_addr), sizeof(listener_addr));
 	if(connect_result == SOCKET_ERROR)
 	{
 		DWORD connect_error = WSAGetLastError();
@@ -744,15 +848,48 @@ static void spx_process_connection_request_packet(
 		{
 			log_printf(LOG_ERROR, "Error connecting loopback TCP socket for incoming SPX connection: %s", w32_error(connect_error));
 			
-			closesocket(pc->master_fd);
+			closesocket(nsock->spx_master_fd);
+			spx_queue_free(nsock->spx_send_queue);
+			spx_queue_free(nsock->spx_recv_queue);
+			free(nsock);
+			
 			unlock_sockets();
 			return;
 		}
 	}
 	
-	++(listener->spx_current_backlog);
+	nsock->spx_accept_listener = listener;
+	
+	DL_APPEND2(listener->spx_accept_queue_head, nsock, spx_accept_queue_prev, spx_accept_queue_next);
+	
+	listener->spx_current_backlog += 1;
 	
 	log_printf(LOG_DEBUG, "Queued incoming SPX connection");
+	
+	DL_APPEND(all_sockets, nsock);
+	
+	log_printf(LOG_DEBUG, "Sending acknowledgement for SPX connection request");
+	
+	struct spx_packet_header ack_header;
+
+	ack_header.connection_control = SPX_CONNCTRL_SYS;
+	ack_header.datastream_type = 0;
+	ack_header.src_connection_id = nsock->local_conn;
+	ack_header.dst_connection_id = nsock->remote_conn;
+	ack_header.seq_number = 0;
+	ack_header.ack_number = 0;
+	ack_header.allocation_number = 0;
+
+	ipx_send_packet(
+		IPX_TYPE_SPX,
+		addr32_in(nsock->addr.sa_netnum),
+		addr48_in(nsock->addr.sa_nodenum),
+		nsock->addr.sa_socket,
+		addr32_in(nsock->remote_addr.sa_netnum),
+		addr48_in(nsock->remote_addr.sa_nodenum),
+		nsock->remote_addr.sa_socket,
+		&ack_header,
+		sizeof(ack_header));
 	
 	unlock_sockets();
 }
@@ -1019,8 +1156,9 @@ mclock_point_t spx_retransmit_lost(void)
 					 * we have left to do is remove it from the all_sockets list and free it.
 					*/
 					
-					if(sock->spx_send_queue != NULL)
+					if((sock->flags & IPX_CLOSING) != 0)
 					{
+						assert(sock->spx_send_queue != NULL);
 						spx_queue_free(sock->spx_send_queue);
 						sock->spx_send_queue = NULL;
 					}
@@ -1044,15 +1182,34 @@ mclock_point_t spx_retransmit_lost(void)
 					assert((sock->flags & IPX_CONNECTED) != 0);
 					
 					sock->flags &= ~IPX_CONNECTED;
+					
+					assert(sock->spx_send_queue != NULL);
+					spx_queue_free(sock->spx_send_queue);
+					sock->spx_send_queue = NULL;
+					
+					assert(sock->spx_recv_queue != NULL);
+					spx_queue_free(sock->spx_recv_queue);
+					sock->spx_recv_queue = NULL;
+					
 					sock->flags |= IPX_ABORTED;
 					
 					assert(sock->spx_master_fd != SOCKET_ERROR);
 					
 					closesocket(sock->spx_master_fd);
 					sock->spx_master_fd = SOCKET_ERROR;
+					
+					if((sock->flags & IPX_ACCEPT_PENDING) != 0)
+					{
+						assert(sock->spx_accept_listener->spx_current_backlog > 0);
+						sock->spx_accept_listener->spx_current_backlog -= 1;
+						
+						DL_DELETE2(sock->spx_accept_listener->spx_accept_queue_head, sock, spx_accept_queue_prev, spx_accept_queue_prev);
+						
+						sock->flags &= ~IPX_ACCEPT_PENDING;
+					}
 				}
 			}
-			else if((sock->flags & IPX_CONNECTING) != 0 || (sock->spx_send_queue != NULL && sock->spx_send_queue->front != NULL))
+			else if((sock->flags & IPX_CONNECTING) != 0 || ((sock->flags & (IPX_CONNECTED | IPX_CLOSING)) != 0 && sock->spx_send_queue->front != NULL))
 			{
 				if(mclock_ms_until(sock->spx_retransmit_time, now) == 0)
 				{
@@ -1204,6 +1361,11 @@ struct spx_queue *spx_queue_alloc(void)
 
 void spx_queue_free(struct spx_queue *queue)
 {
+	if(queue == NULL)
+	{
+		return;
+	}
+	
 	while(queue->front != NULL)
 	{
 		spx_queue_pop(queue);
@@ -1316,20 +1478,4 @@ static void spx_queue_pop(struct spx_queue *queue)
 	else{
 		queue->front = next;
 	}
-}
-
-struct spx_pending_connection *spx_pending_alloc(int backlog)
-{
-	// TODO: overflow check
-	return malloc(sizeof(struct spx_pending_connection) * backlog);
-}
-
-void spx_pending_free(struct spx_pending_connection *queue, size_t count)
-{
-	for(size_t i = 0; i < count; ++i)
-	{
-		closesocket(queue[i].master_fd);
-	}
-	
-	free(queue);
 }

@@ -98,17 +98,6 @@ struct spx_packet_header
 	uint16_t allocation_number;
 }  __attribute__((__packed__));
 
-struct spx_pending_connection
-{
-	addr32_t remote_net;
-	addr48_t remote_node;
-	uint16_t remote_socket;
-	uint16_t remote_connection_id;
-	
-	SOCKET master_fd;
-	struct sockaddr_in master_local_addr;
-};
-
 /**
  * @brief Allocate an SPX connection ID.
  *
@@ -206,8 +195,5 @@ struct spx_queue *spx_queue_alloc(void);
  * @brief Free an spx_queue structure and all queued packets.
 */
 void spx_queue_free(struct spx_queue *queue);
-
-struct spx_pending_connection *spx_pending_alloc(int backlog);
-void spx_pending_free(struct spx_pending_connection *queue, size_t count);
 
 #endif /* !IPXWRAPPER_SPX_H */
