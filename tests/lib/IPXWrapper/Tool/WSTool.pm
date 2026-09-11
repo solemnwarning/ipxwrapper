@@ -295,6 +295,14 @@ sub connect_finish
 	}
 }
 
+sub accept
+{
+	my ($self, $sock) = @_;
+	
+	$self->accept_start($sock);
+	return $self->accept_finish();
+}
+
 sub accept_start
 {
 	my ($self, $sock) = @_;

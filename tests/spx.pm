@@ -1651,11 +1651,125 @@ shared_examples_for "spx protocol tests" => sub
 			}
 		};
 		
-		they "discard connection requests when a duplicate request is received (before accept)"; # TODO
+		they "retransmit connection acknowledgements when a duplicate request is received" => sub
+		{
+			my $capture = $spx_capture_class->new($local_dev_a);
+			
+			my $server = IPXWrapper::Tool::WSTool->new($remote_ip_a);
+			my ($listener, $listener_net, $listener_node, $listener_socket) = $setup_listener->($server, "00:00:00:00", $remote_mac_a, "0");
+			
+			# Enable non-blocking I/O on listener socket.
+			$server->ioctlsocket($listener, FIONBIO, "00000001");
+			
+			# Send SPX connection requests.
+			
+			my $client_socket = $random_id->();
+			my $client_conn_id = $random_id->();
+			
+			for(my $i = 0; $i < 3; ++$i)
+			{
+				$send_conn_request->($listener_net, $listener_node, $listener_socket, "00:00:00:01", $local_mac_a, $client_socket, $client_conn_id);
+				sleep(1);
+			}
+			
+			# Process the connection request.
+			
+			my $server_client = $server->accept($listener);
+			throws_ok { $server->accept($listener); } qr/accept failed with error code 10035/;
+			
+			# Check for connection acknowledgement.
+			
+			my @packets = grep { !mac_eq($_->{src_mac}, $local_mac_a) } $capture->read_available();
+			
+			my $expected_ack = {
+				dst_network  => "00:00:00:01",
+				dst_node     => $local_mac_a,
+				dst_socket   => $client_socket,
+				
+				src_network => $listener_net,
+				src_node    => $listener_node,
+				src_socket  => $listener_socket,
+				
+				connection_control  => SPX_CONNCTRL_SYS,
+				datastream_type     => 0,
+				dst_connection_id   => $client_conn_id,
+				seq_number          => 0,
+				ack_number          => 0,
+			};
+			
+			cmp_hashes_partial(\@packets, [
+				$expected_ack,
+				$expected_ack,
+				$expected_ack,
+			]) or return;
+		};
 		
-		they "retransmit connection acknowledgements when a duplicate request is received (after accept)"; # TODO
-		
-		they "queue multiple distinct connection requests"; # TODO
+		they "queue multiple distinct connection requests" => sub
+		{
+			my $capture = $spx_capture_class->new($local_dev_a);
+			
+			my $server = IPXWrapper::Tool::WSTool->new($remote_ip_a);
+			my ($listener, $listener_net, $listener_node, $listener_socket) = $setup_listener->($server, "00:00:00:00", $remote_mac_a, "0");
+			
+			# Enable non-blocking I/O on listener socket.
+			$server->ioctlsocket($listener, FIONBIO, "00000001");
+			
+			# Send SPX connection requests.
+			
+			my $client1_socket = $random_id->();
+			my $client1_conn_id = $random_id->();
+			
+			my $client2_socket = $random_id->();
+			my $client2_conn_id = $random_id->();
+			
+			$send_conn_request->($listener_net, $listener_node, $listener_socket, "00:00:00:01", $local_mac_a, $client1_socket, $client1_conn_id);
+			$send_conn_request->($listener_net, $listener_node, $listener_socket, "00:00:00:01", $local_mac_a, $client2_socket, $client2_conn_id);
+			
+			sleep(1);
+			
+			# Process the connection request.
+			
+			my $server_client1 = $server->accept($listener);
+			my $server_client2 = $server->accept($listener);
+			throws_ok { $server->accept($listener); } qr/accept failed with error code 10035/;
+			
+			# Check for connection acknowledgement.
+			
+			my @packets = grep { !mac_eq($_->{src_mac}, $local_mac_a) } $capture->read_available();
+			
+			cmp_hashes_partial(\@packets, [
+				{
+					dst_network  => "00:00:00:01",
+					dst_node     => $local_mac_a,
+					dst_socket   => $client1_socket,
+					
+					src_network => $listener_net,
+					src_node    => $listener_node,
+					src_socket  => $listener_socket,
+					
+					connection_control  => SPX_CONNCTRL_SYS,
+					datastream_type     => 0,
+					dst_connection_id   => $client1_conn_id,
+					seq_number          => 0,
+					ack_number          => 0,
+				},
+				{
+					dst_network  => "00:00:00:01",
+					dst_node     => $local_mac_a,
+					dst_socket   => $client2_socket,
+					
+					src_network => $listener_net,
+					src_node    => $listener_node,
+					src_socket  => $listener_socket,
+					
+					connection_control  => SPX_CONNCTRL_SYS,
+					datastream_type     => 0,
+					dst_connection_id   => $client2_conn_id,
+					seq_number          => 0,
+					ack_number          => 0,
+				},
+			]) or return;
+		};
 		
 		they "transmit watchdog packets during inactivity" => sub
 		{
