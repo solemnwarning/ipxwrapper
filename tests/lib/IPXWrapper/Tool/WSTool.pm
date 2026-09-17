@@ -261,6 +261,14 @@ sub listen
 	}
 }
 
+sub connect
+{
+	my ($self, $sock, $ipx_netnum, $ipx_nodenum, $ipx_socket) = @_;
+	
+	$self->connect_start($sock, $ipx_netnum, $ipx_nodenum, $ipx_socket);
+	return $self->connect_finish();
+}
+
 sub connect_start
 {
 	my ($self, $sock, $ipx_netnum, $ipx_nodenum, $ipx_socket) = @_;

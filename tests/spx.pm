@@ -3351,6 +3351,38 @@ shared_examples_for "spx protocol tests" => sub
 
 shared_examples_for "spx self tests" => sub
 {
+	it "can exchange data between SPX sockets in the same process (blocking I/O)" => sub
+	{
+		my $proc = IPXWrapper::Tool::WSTool->new($remote_ip_a);
+
+		my $listener = $proc->socket(AF_IPX, SOCK_STREAM, NSPROTO_SPX);
+
+		$proc->bind($listener, "00:00:00:00", "00:00:00:00:00:00", "0");
+		$proc->listen($listener, 10);
+
+		my $listener_addr = $proc->getsockname($listener);
+		
+		my $client = $proc->socket(AF_IPX, SOCK_STREAM, NSPROTO_SPX);
+		$proc->connect_start($client, $listener_addr->{ipx_netnum}, $listener_addr->{ipx_nodenum}, $listener_addr->{ipx_socket});
+		$proc->connect_finish();
+
+		my $client_addr = $proc->getsockname($client);
+
+		$proc->accept_start($listener);
+		my $client_peer = $proc->accept_finish();
+
+		# Check address returned by accept() matches the local address of the client socket.
+		cmp_hashes_partial([ $client_peer ], [ $client_addr ]);
+
+		$proc->send($client_peer->{socket}, "class");
+
+		is($proc->recv($client, 64), "class");
+
+		$proc->send($client, "industrious");
+
+		is($proc->recv($client_peer->{socket}, 64), "industrious");
+	};
+	
 	it "can exchange data between SPX sockets in different processes (blocking I/O)" => sub
 	{
 		my $proc_a = IPXWrapper::Tool::WSTool->new($remote_ip_a);
@@ -3383,6 +3415,49 @@ shared_examples_for "spx self tests" => sub
 		$proc_b->send($client, "industrious");
 
 		is($proc_a->recv($client_peer->{socket}, 64), "industrious");
+	};
+	
+	it "can exchange data between multiple SPX sockets in the same process (blocking I/O)" => sub
+	{
+		my $proc = IPXWrapper::Tool::WSTool->new($remote_ip_a);
+		
+		my $listener = $proc->socket(AF_IPX, SOCK_STREAM, NSPROTO_SPX);
+		
+		$proc->bind($listener, "00:00:00:00", "00:00:00:00:00:00", "0");
+		$proc->listen($listener, 10);
+		
+		my $listener_addr = $proc->getsockname($listener);
+		
+		my $setup_client = sub
+		{
+			my $client = $proc->socket(AF_IPX, SOCK_STREAM, NSPROTO_SPX);
+			$proc->connect($client, $listener_addr->{ipx_netnum}, $listener_addr->{ipx_nodenum}, $listener_addr->{ipx_socket});
+			
+			my $client_addr = $proc->getsockname($client);
+			
+			my $server_client = $proc->accept($listener);
+			cmp_hashes_partial([ $server_client ], [ $client_addr ]);
+			
+			return ($client, $server_client->{socket});
+		};
+		
+		my ($client1, $server1) = $setup_client->();
+		my ($client2, $server2) = $setup_client->();
+		my ($client3, $server3) = $setup_client->();
+		
+		$proc->send($client1, "married");
+		$proc->send($server1, "disastrous");
+		$proc->send($client2, "soak");
+		$proc->send($server2, "birth");
+		$proc->send($client3, "knife");
+		$proc->send($server3, "jagged");
+		
+		is($proc->recv($client2, 64), "birth");
+		is($proc->recv($server2, 64), "soak");
+		is($proc->recv($client3, 64), "jagged");
+		is($proc->recv($server3, 64), "knife");
+		is($proc->recv($client1, 64), "disastrous");
+		is($proc->recv($server1, 64), "married");
 	};
 	
 	it "times out when SPX connection fails (blocking I/O)" => sub
@@ -3464,6 +3539,204 @@ shared_examples_for "spx self tests" => sub
 		
 		diag("recv finished after approx ".($end_time - $start_time)." seconds");
 		ok(($end_time - $start_time) > 25);
+	};
+	
+	it "can exchange data between multiple SPX sockets in the same process (non-blocking I/O)" => sub
+	{
+		my $proc = IPXWrapper::Tool::WSTool->new($remote_ip_a);
+		
+		my $listener = $proc->socket(AF_IPX, SOCK_STREAM, NSPROTO_SPX);
+		$proc->ioctlsocket($listener, FIONBIO, "00000001"); # Enable non-blocking I/O
+		
+		$proc->bind($listener, "00:00:00:00", "00:00:00:00:00:00", "0");
+		$proc->listen($listener, 10);
+		
+		my $listener_addr = $proc->getsockname($listener);
+		
+		throws_ok { $proc->accept($listener); } qr/accept failed with error code 10035/;
+		
+		my $setup_client = sub
+		{
+			{
+				my ($read_ready, $write_ready, $except_ready) = $proc->select([ $listener ], [ $listener ], [ $listener ], 0);
+				
+				cmp_set($read_ready,   []);
+				cmp_set($write_ready,  []);
+				cmp_set($except_ready, []);
+			}
+			
+			my $client_sock = $proc->socket(AF_IPX, SOCK_STREAM, NSPROTO_SPX);
+			$proc->ioctlsocket($client_sock, FIONBIO, "00000001"); # Enable non-blocking I/O
+			
+			throws_ok { $proc->connect($client_sock, $listener_addr->{ipx_netnum}, $listener_addr->{ipx_nodenum}, $listener_addr->{ipx_socket}); }
+				qr/connect failed with error code 10035/;
+			
+			sleep(1);
+			
+			{
+				my ($read_ready, $write_ready, $except_ready) = $proc->select([ $listener, $client_sock ], [ $listener, $client_sock ], [ $listener, $client_sock ], 0);
+				
+				cmp_set($read_ready,   [ $listener ]);
+				cmp_set($write_ready,  [ $client_sock ]);
+				cmp_set($except_ready, []);
+			}
+			
+			my $client_addr = $proc->getsockname($client_sock);
+			
+			my $server_client = $proc->accept($listener);
+			cmp_hashes_partial([ $server_client ], [ $client_addr ]);
+			
+			$proc->ioctlsocket($server_client->{socket}, FIONBIO, "00000001"); # Enable non-blocking I/O
+			
+			return ($client_sock, $server_client->{socket});
+		};
+		
+		my ($client1, $server1) = $setup_client->();
+		my ($client2, $server2) = $setup_client->();
+		my ($client3, $server3) = $setup_client->();
+		
+		throws_ok { $proc->recv($client1, 64); } qr/recv failed with error code 10035/;
+		throws_ok { $proc->recv($server1, 64); } qr/recv failed with error code 10035/;
+		
+		{
+			my ($read_ready, $write_ready, $except_ready) = $proc->select(
+				[ $listener, $client1, $server1, $client2, $server2, $client3, $server3 ],
+				[ $listener, $client1, $server1, $client2, $server2, $client3, $server3 ],
+				[ $listener, $client1, $server1, $client2, $server2, $client3, $server3 ],
+				0);
+			
+			cmp_set($read_ready,   []);
+			cmp_set($write_ready,  [ $client1, $server1, $client2, $server2, $client3, $server3 ]);
+			cmp_set($except_ready, []);
+		}
+		
+		$proc->send($client1, "railway");
+		$proc->send($server1, "beginner");
+		$proc->send($client2, "nice");
+		
+		sleep(1);
+		
+		{
+			my ($read_ready, $write_ready, $except_ready) = $proc->select(
+				[ $listener, $client1, $server1, $client2, $server2, $client3, $server3 ],
+				[ $listener, $client1, $server1, $client2, $server2, $client3, $server3 ],
+				[ $listener, $client1, $server1, $client2, $server2, $client3, $server3 ],
+				0);
+			
+			cmp_set($read_ready,   [ $server1, $client1, $server2 ]);
+			cmp_set($write_ready,  [ $client1, $server1, $client2, $server2, $client3, $server3 ]);
+			cmp_set($except_ready, []);
+		}
+		
+		$proc->send($server2, "pollution");
+		$proc->send($client3, "incompetent");
+		$proc->send($server3, "nutty");
+		
+		sleep(1);
+		
+		{
+			my ($read_ready, $write_ready, $except_ready) = $proc->select(
+				[ $listener, $client1, $server1, $client2, $server2, $client3, $server3 ],
+				[ $listener, $client1, $server1, $client2, $server2, $client3, $server3 ],
+				[ $listener, $client1, $server1, $client2, $server2, $client3, $server3 ],
+				0);
+			
+			cmp_set($read_ready,   [ $server1, $client1, $server2, $client2, $server3, $client3 ]);
+			cmp_set($write_ready,  [ $client1, $server1, $client2, $server2, $client3, $server3 ]);
+			cmp_set($except_ready, []);
+		}
+		
+		is($proc->recv($client2, 64), "pollution");
+		is($proc->recv($server2, 64), "nice");
+		is($proc->recv($client3, 64), "nutty");
+		
+		throws_ok { $proc->recv($client2, 64); } qr/recv failed with error code 10035/;
+		throws_ok { $proc->recv($server2, 64); } qr/recv failed with error code 10035/;
+		
+		{
+			my ($read_ready, $write_ready, $except_ready) = $proc->select(
+				[ $listener, $client1, $server1, $client2, $server2, $client3, $server3 ],
+				[ $listener, $client1, $server1, $client2, $server2, $client3, $server3 ],
+				[ $listener, $client1, $server1, $client2, $server2, $client3, $server3 ],
+				0);
+			
+			cmp_set($read_ready,   [ $server1, $client1, $server3 ]);
+			cmp_set($write_ready,  [ $client1, $server1, $client2, $server2, $client3, $server3 ]);
+			cmp_set($except_ready, []);
+		}
+		
+		is($proc->recv($server3, 64), "incompetent");
+		is($proc->recv($client1, 64), "beginner");
+		is($proc->recv($server1, 64), "railway");
+		
+		{
+			my ($read_ready, $write_ready, $except_ready) = $proc->select(
+				[ $listener, $client1, $server1, $client2, $server2, $client3, $server3 ],
+				[ $listener, $client1, $server1, $client2, $server2, $client3, $server3 ],
+				[ $listener, $client1, $server1, $client2, $server2, $client3, $server3 ],
+				0);
+			
+			cmp_set($read_ready,   []);
+			cmp_set($write_ready,  [ $client1, $server1, $client2, $server2, $client3, $server3 ]);
+			cmp_set($except_ready, []);
+		}
+		
+		$proc->closesocket($server1);
+		$proc->closesocket($client2);
+		
+		sleep(1);
+		
+		{
+			my ($read_ready, $write_ready, $except_ready) = $proc->select(
+				[ $listener, $client1, $server2, $client3, $server3 ],
+				[ $listener, $client1, $server2, $client3, $server3 ],
+				[ $listener, $client1, $server2, $client3, $server3 ],
+				0);
+			
+			cmp_set($read_ready,   [ $client1, $server2 ]);
+			cmp_set($write_ready,  [ $client1, $server2, $client3, $server3 ]);
+			cmp_set($except_ready, []);
+		}
+		
+		is($proc->recv($client1, 64), "");
+		is($proc->recv($server2, 64), "");
+		
+		$proc->closesocket($client1);
+		$proc->closesocket($server2);
+		
+		sleep(1);
+		
+		{
+			my ($read_ready, $write_ready, $except_ready) = $proc->select(
+				[ $listener, $client3, $server3 ],
+				[ $listener, $client3, $server3 ],
+				[ $listener, $client3, $server3 ],
+				0);
+			
+			cmp_set($read_ready,   []);
+			cmp_set($write_ready,  [ $client3, $server3 ]);
+			cmp_set($except_ready, []);
+		}
+		
+		$proc->send($client3, "resonant");
+		$proc->send($server3, "stitch");
+		
+		sleep(1);
+		
+		{
+			my ($read_ready, $write_ready, $except_ready) = $proc->select(
+				[ $listener, $client3, $server3 ],
+				[ $listener, $client3, $server3 ],
+				[ $listener, $client3, $server3 ],
+				0);
+			
+			cmp_set($read_ready,   [ $client3, $server3 ]);
+			cmp_set($write_ready,  [ $client3, $server3 ]);
+			cmp_set($except_ready, []);
+		}
+		
+		is($proc->recv($server3, 64), "resonant");
+		is($proc->recv($client3, 64), "stitch");
 	};
 };
 
