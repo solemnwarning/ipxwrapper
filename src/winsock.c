@@ -1144,7 +1144,13 @@ int PASCAL WSARecvEx(SOCKET fd, char *buf, int len, int *flags)
 	{
 		if(sock->flags & IPX_IS_SPX)
 		{
-			abort(); // TODO
+			int result = recv(fd, buf, len, 0);
+			if(result != SOCKET_ERROR)
+			{
+				*flags &= ~MSG_PARTIAL;
+			}
+			
+			return result;
 		}
 		else{
 			int rval = recv_packet(sock, buf, len, 0, NULL, 0);
