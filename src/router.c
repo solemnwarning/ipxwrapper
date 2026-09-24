@@ -527,6 +527,29 @@ static void _handle_dosbox_registration_response(novell_ipx_packet *packet, size
 	SetEvent(dosbox_ready_event);
 }
 
+static void _send_dosbox_ping_ack(addr48_t reply_to)
+{
+	novell_ipx_packet ack_pkt;
+	
+	ack_pkt.checksum = 0xFFFF;
+	ack_pkt.length = htons(sizeof(ack_pkt));
+	ack_pkt.hops = 0;
+	ack_pkt.type = 0;
+	
+	memset(ack_pkt.dest_net, 0, sizeof(ack_pkt.dest_net));
+	addr48_out(ack_pkt.dest_node, reply_to);
+	ack_pkt.dest_socket = htons(IPX_SOCK_ECHO);
+	
+	memset(ack_pkt.src_net, 0, sizeof(ack_pkt.src_net));
+	addr48_out(ack_pkt.src_node, dosbox_local_nodenum);
+	ack_pkt.src_socket = htons(IPX_SOCK_ECHO);
+	
+	if(sendto(private_socket, (const void*)(&ack_pkt), sizeof(ack_pkt), 0, (struct sockaddr*)(&dosbox_server_addr), sizeof(dosbox_server_addr)) < 0)
+	{
+		log_printf(LOG_ERROR, "Error sending DOSBox ping ack: %s", w32_error(WSAGetLastError()));
+	}
+}
+
 static void _handle_dosbox_recv(novell_ipx_packet *packet, size_t packet_size)
 {
 	FPROF_RECORD_SCOPE(&(ipxwrapper_fstats[IPXWRAPPER_FSTATS__handle_dosbox_recv]));
@@ -535,6 +558,14 @@ static void _handle_dosbox_recv(novell_ipx_packet *packet, size_t packet_size)
 	{
 		/* Doesn't look valid. */
 		log_printf(LOG_ERROR, "Recieved invalid IPX packet from DOSBox server, ignoring");
+		return;
+	}
+	
+	if(packet->dest_socket == htons(IPX_SOCK_ECHO)
+		&& addr48_in(packet->dest_node) == BCAST_NODE)
+	{
+		log_printf(LOG_DEBUG, "DEBUG: dosbox ping detected, sending ack");
+		_send_dosbox_ping_ack(addr48_in(packet->src_node));
 		return;
 	}
 	
