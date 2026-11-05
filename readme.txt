@@ -35,16 +35,12 @@ or communication between Windows and DOS games (running under DOSBox).
 To enable this, select the "DOSBox UDP encapsulation" option in ipxconfig and
 enter the address/port of your DOSBox server.
 
-**NOTE**: SPX connections are not supported when using this option.
-
 Using the real IPX protocol
 ---------------------------
 
 If your software needs to send/receive real IPX frames, for example because it
 talks to an old piece of equipment that only understands IPX, install WinPcap
 and select the "Real IPX encapsulation" option in ipxconfig.
-
-**NOTE**: SPX connections are not supported when using this option.
 
 Compatibility
 -------------
