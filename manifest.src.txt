@@ -44,10 +44,14 @@ src/ipxwrapper.h
 src/ipxwrapper_prof_defs.h
 src/ipxwrapper_stubs.txt
 src/log.c
+src/mclock.c
+src/mclock.h
 src/mswsock.def
 src/mswsock_stubs.txt
 src/router.c
 src/router.h
+src/spx.c
+src/spx.h
 src/stubdll.c
 src/winsock.c
 src/wsock32.def
@@ -76,6 +80,7 @@ tests/05-addr.t
 tests/05-ratelimit.t
 tests/07-addrcache.t
 tests/07-ethernet.t
+tests/07-spx.t
 tests/10-socket.t
 tests/15-interfaces.t
 tests/20-bind.t
@@ -83,6 +88,10 @@ tests/25-fionread.t
 tests/30-dosbox-ipx.t
 tests/30-eth-ipx.t
 tests/30-ip-ipx.t
+tests/40-dosbox-spx.t
+tests/40-eth-ii-spx.t
+tests/40-eth-llc-spx.t
+tests/40-eth-novell-spx.t
 tests/40-ip-spx.t
 tests/50-dplay.t
 tests/addr.c
@@ -92,6 +101,8 @@ tests/config.pm
 tests/ethernet.c
 tests/fionread.c
 tests/ptype.pm
+tests/spx.c
+tests/spx.pm
 
 tests/lib/IPXWrapper/Capture/IPX.pm
 tests/lib/IPXWrapper/Capture/IPXLLC.pm
@@ -105,9 +116,11 @@ tests/lib/IPXWrapper/Tool/DPTool.pm
 tests/lib/IPXWrapper/Tool/Generic.pm
 tests/lib/IPXWrapper/Tool/IPXISR.pm
 tests/lib/IPXWrapper/Tool/IPXRecv.pm
+tests/lib/IPXWrapper/Tool/WSTool.pm
 tests/lib/IPXWrapper/Util.pm
 tests/lib/NetPacket/IPX.pm
 tests/lib/NetPacket/IPXWrapper.pm
+tests/lib/NetPacket/SPX.pm
 
 tests/tap/basic.c
 tests/tap/basic.h
@@ -123,6 +136,7 @@ tools/socket.c
 tools/spx-client.c
 tools/spx-server.c
 tools/tools.h
+tools/wstool.c
 
 winpcap/include/pcap-bpf.h
 winpcap/include/Packet32.h

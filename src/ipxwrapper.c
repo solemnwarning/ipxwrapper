@@ -43,7 +43,9 @@ struct ipaddr_list {
 	struct ipaddr_list *next;
 };
 
-ipx_socket *sockets = NULL;
+ipx_socket *socket_by_fd = NULL;
+ipx_socket *all_sockets = NULL;
+
 main_config_t main_config;
 
 static CRITICAL_SECTION sockets_cs;
@@ -272,7 +274,7 @@ ipx_socket *get_socket(SOCKET sockfd)
 	lock_sockets();
 	
 	ipx_socket *sock;
-	HASH_FIND_INT(sockets, &sockfd, sock);
+	HASH_FIND_INT(socket_by_fd, &sockfd, sock);
 	
 	if(!sock)
 	{

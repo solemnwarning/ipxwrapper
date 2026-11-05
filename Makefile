@@ -44,12 +44,12 @@ BIN_FILES := $(shell cat manifest.bin.txt)
 SRC_FILES := $(shell cat manifest.src.txt)
 
 # Tests to compile before running the test suite.
-TESTS := tests/addr.exe tests/addrcache.exe tests/ethernet.exe tests/ratelimit.exe tools/fionread.exe
+TESTS := tests/addr.exe tests/addrcache.exe tests/ethernet.exe tests/ratelimit.exe tests/spx.exe tools/fionread.exe
 
 # Tools to compile before running the test suite.
 TOOLS := tools/socket.exe tools/list-interfaces.exe tools/bind.exe tools/ipx-send.exe \
 	tools/ipx-recv.exe tools/spx-server.exe tools/spx-client.exe  tools/ipx-isr.exe \
-	tools/dptool.exe
+	tools/dptool.exe tools/wstool.exe
 
 # DLLs to copy to the tools/ directory before running the test suite.
 TOOL_DLLS := tools/ipxwrapper.dll tools/wsock32.dll tools/mswsock.dll tools/dpwsockx.dll
@@ -84,13 +84,13 @@ dist: all
 
 IPXWRAPPER_OBJS := src/ipxwrapper.o src/winsock.o src/ipxwrapper_stubs.o src/log.o src/common.o \
 	src/interface.o src/interface2.o src/router.o src/ipxwrapper.def src/addrcache.o src/config.o src/addr.o \
-	src/firewall.o src/ethernet.o src/funcprof.o src/coalesce.o inih/ini.o
+	src/firewall.o src/ethernet.o src/funcprof.o src/coalesce.o src/spx.o src/mclock.o inih/ini.o
 
 ipxwrapper.dll: $(IPXWRAPPER_OBJS)
 	echo 'const char *version_string = "$(VERSION)", *compile_time = "'`date`'";' | $(CC) -c -x c -o version.o -
 	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -static-libgcc -shared -o $@ $^ version.o -liphlpapi -lversion -lole32 -loleaut32
 
-src/ipxwrapper_stubs.s: src/ipxwrapper_stubs.txt
+src/ipxwrapper_stubs.s: mkstubs.pl src/ipxwrapper_stubs.txt
 	perl mkstubs.pl src/ipxwrapper_stubs.txt src/ipxwrapper_stubs.s ipxwrapper.dll
 
 #
@@ -100,7 +100,7 @@ src/ipxwrapper_stubs.s: src/ipxwrapper_stubs.txt
 wsock32.dll: src/stubdll.o src/wsock32_stubs.o src/log.o src/common.o src/config.o src/addr.o src/funcprof.o inih/ini.o src/wsock32.def
 	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -static-libgcc -shared -o $@ $^
 
-src/wsock32_stubs.s: src/wsock32_stubs.txt
+src/wsock32_stubs.s: mkstubs.pl src/wsock32_stubs.txt
 	perl mkstubs.pl src/wsock32_stubs.txt src/wsock32_stubs.s wsock32.dll
 
 #
@@ -110,7 +110,7 @@ src/wsock32_stubs.s: src/wsock32_stubs.txt
 mswsock.dll: src/stubdll.o src/mswsock_stubs.o src/log.o src/common.o src/config.o src/addr.o src/funcprof.o inih/ini.o src/mswsock.def
 	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -static-libgcc -shared -o $@ $^
 
-src/mswsock_stubs.s: src/mswsock_stubs.txt
+src/mswsock_stubs.s: mkstubs.pl src/mswsock_stubs.txt
 	perl mkstubs.pl src/mswsock_stubs.txt src/mswsock_stubs.s mswsock.dll
 
 #
@@ -120,7 +120,7 @@ src/mswsock_stubs.s: src/mswsock_stubs.txt
 dpwsockx.dll: src/directplay.o src/log.o src/dpwsockx_stubs.o src/common.o src/config.o src/addr.o src/funcprof.o inih/ini.o src/dpwsockx.def
 	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -static-libgcc -shared -o $@ $^ -lwsock32
 
-src/dpwsockx_stubs.s: src/dpwsockx_stubs.txt
+src/dpwsockx_stubs.s: mkstubs.pl src/dpwsockx_stubs.txt
 	perl mkstubs.pl src/dpwsockx_stubs.txt src/dpwsockx_stubs.s dpwsockx.dll
 
 #
@@ -133,7 +133,7 @@ IPXCONFIG_OBJS := src/ipxconfig.o icons/ipxconfig.o src/addr.o src/interface2.o 
 ipxconfig.exe: $(IPXCONFIG_OBJS)
 	$(CC) $(CCFLAGS) -Wl,--enable-stdcall-fixup -static-libgcc -mwindows -o $@ $^ -liphlpapi -lcomctl32 -lws2_32
 
-src/ipxconfig_stubs.s: src/ipxwrapper_stubs.txt
+src/ipxconfig_stubs.s: mkstubs.pl src/ipxwrapper_stubs.txt
 	perl mkstubs.pl src/ipxconfig_stubs.txt src/ipxconfig_stubs.s ipxconfig.exe
 
 #
@@ -175,6 +175,7 @@ tests/addr.exe: tests/addr.o tests/tap/basic.o src/addr.o
 tests/addrcache.exe: tests/addrcache.o tests/tap/basic.o src/addrcache.o src/addr.o
 tests/ethernet.exe: tests/ethernet.o tests/tap/basic.o src/ethernet.o src/addr.o
 tests/ratelimit.exe: tests/ratelimit.o src/addr.o src/common.o tests/tap/basic.o
+tests/spx.exe: tests/spx.o src/addr.o src/mclock.o tests/tap/basic.o
 
 tests/%.exe: tests/%.o
 	$(CC) $(CFLAGS) -o $@ $^ -lwsock32

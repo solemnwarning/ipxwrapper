@@ -36,6 +36,7 @@ extern struct sockaddr_in dosbox_server_addr;
 
 void router_init(void);
 void router_cleanup(void);
+void router_wake(void);
 
 void wait_for_ready(DWORD timeout);
 

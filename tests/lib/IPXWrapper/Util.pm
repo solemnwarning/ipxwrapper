@@ -42,18 +42,27 @@ our @EXPORT = qw(
 	send_ipx_packet_llc
 	send_ipx_packet_rfc1234
 	
+	send_spx_over_udp
+	send_spx_packet_ethernet
+	send_spx_packet_novell
+	send_spx_packet_llc
+	
 	cmp_hashes_partial
 	
 	getsockopt_interfaces
+	
+	mac_eq
 );
 
 use Test::Spec;
+use Carp qw(longmess);
 use Data::Dumper;
 use IO::Socket::INET;
 use IPC::Run;
 use Net::Libdnet::Eth;
 use NetPacket::IPX;
 use NetPacket::IPXWrapper;
+use NetPacket::SPX;
 
 sub run_remote_cmd
 {
@@ -137,6 +146,13 @@ sub send_ipx_over_udp
 		or die("Can't send data: $!");
 }
 
+sub send_spx_over_udp
+{
+	my (%options) = @_;
+	
+	send_ipx_over_udp(%options, data => NetPacket::SPX->new(%options)->encode());
+}
+
 sub _send_ethernet_frame
 {
 	my ($dev, $dest_mac, $src_mac, $type, $data) = @_;
@@ -164,6 +180,13 @@ sub send_ipx_packet_ethernet
 		$packet->encode());
 }
 
+sub send_spx_packet_ethernet
+{
+	my ($dev, %options) = @_;
+	
+	send_ipx_packet_ethernet($dev, %options, data => NetPacket::SPX->new(%options)->encode());
+}
+
 sub send_ipx_packet_novell
 {
 	my ($dev, %options) = @_;
@@ -174,6 +197,13 @@ sub send_ipx_packet_novell
 	_send_ethernet_frame($dev,
 		$packet->{dest_node}, $packet->{src_node}, length($enc_packet),
 		$enc_packet);
+}
+
+sub send_spx_packet_novell
+{
+	my ($dev, %options) = @_;
+	
+	send_ipx_packet_novell($dev, %options, data => NetPacket::SPX->new(%options)->encode());
 }
 
 sub send_ipx_packet_llc
@@ -189,6 +219,13 @@ sub send_ipx_packet_llc
 	_send_ethernet_frame($dev,
 		$packet->{dest_node}, $packet->{src_node}, length($enc_packet),
 		$enc_packet);
+}
+
+sub send_spx_packet_llc
+{
+	my ($dev, %options) = @_;
+	
+	send_ipx_packet_llc($dev, %options, data => NetPacket::SPX->new(%options)->encode());
 }
 
 sub send_ipx_packet_rfc1234
@@ -210,10 +247,16 @@ sub send_ipx_packet_rfc1234
 
 sub cmp_hashes_partial
 {
-	my ($got, $expect) = @_;
+	my ($got, $expect, $optional) = @_;
 	
 	my %missing = map { $_ => $expect->[$_] } (0 .. $#{$expect});
 	my @extra   = ();
+
+	my %optional = ();
+	if(defined $optional)
+	{
+		%optional = map { $_ => $optional->[$_] } (0 .. $#{$optional});
+	}
 	
 	HASH: foreach my $hash(@$got)
 	{
@@ -225,6 +268,15 @@ sub cmp_hashes_partial
 			delete $missing{$key};
 			next HASH;
 		}
+
+		foreach my $key(keys(%optional))
+		{
+			next if(grep { !(defined $hash->{$_}) || $hash->{$_} ne $optional{$key}->{$_} }
+				keys(%{ $optional{$key} }));
+			
+			delete $optional{$key};
+			next HASH;
+		}
 		
 		push(@extra, $hash);
 	}
@@ -234,6 +286,9 @@ sub cmp_hashes_partial
 	{
 		diag("Got: ".Dumper($got));
 		diag("Expect: ".Dumper($expect));
+		
+		my $stack = longmess("-");
+		diag("Stack trace:\n${stack}");
 	}
 	
 	return $ok;
@@ -255,6 +310,19 @@ sub getsockopt_interfaces
 	}
 	
 	return @addrs;
+}
+
+sub mac_eq
+{
+	my ($mac_a, $mac_b) = @_;
+	
+	$mac_a = lc($mac_a);
+	$mac_a =~ s/://g;
+	
+	$mac_b = lc($mac_b);
+	$mac_b =~ s/://g;
+	
+	return $mac_a eq $mac_b;
 }
 
 1;

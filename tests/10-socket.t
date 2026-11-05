@@ -58,6 +58,26 @@ shared_examples_for "socket initialisation" => sub
 			like($output, qr/^IPX_PTYPE: \Q$ptype\E$/m);
 		};
 	}
+
+	it "socket(AF_IPX, SOCK_STREAM, NSPROTO_SPX) succeeds" => sub
+	{
+		my $output = run_remote_cmd(
+			$remote_ip_a, "Z:\\tools\\socket.exe",
+			AF_IPX, SOCK_STREAM, NSPROTO_SPX,
+		);
+		
+		like($output, qr/^socket: \d+$/m);
+	};
+	
+	it "socket(AF_IPX, SOCK_STREAM, NSPROTO_SPXII) succeeds" => sub
+	{
+		my $output = run_remote_cmd(
+			$remote_ip_a, "Z:\\tools\\socket.exe",
+			AF_IPX, SOCK_STREAM, NSPROTO_SPXII,
+		);
+		
+		like($output, qr/^socket: \d+$/m);
+	};
 	
 	# No SOCK_SEQPACKET support (yet), so make sure any attempts to create
 	# such a socket fail.
@@ -93,26 +113,6 @@ describe "IPXWrapper" => sub
 		};
 		
 		it_should_behave_like "socket initialisation";
-		
-		it "socket(AF_IPX, SOCK_STREAM, NSPROTO_SPX) succeeds" => sub
-		{
-			my $output = run_remote_cmd(
-				$remote_ip_a, "Z:\\tools\\socket.exe",
-				AF_IPX, SOCK_STREAM, NSPROTO_SPX,
-			);
-			
-			like($output, qr/^socket: \d+$/m);
-		};
-		
-		it "socket(AF_IPX, SOCK_STREAM, NSPROTO_SPXII) succeeds" => sub
-		{
-			my $output = run_remote_cmd(
-				$remote_ip_a, "Z:\\tools\\socket.exe",
-				AF_IPX, SOCK_STREAM, NSPROTO_SPXII,
-			);
-			
-			like($output, qr/^socket: \d+$/m);
-		};
 	};
 	
 	describe "using Ethernet encapsulation" => sub
@@ -124,26 +124,6 @@ describe "IPXWrapper" => sub
 		};
 		
 		it_should_behave_like "socket initialisation";
-		
-		it "socket(AF_IPX, SOCK_STREAM, NSPROTO_SPX) fails" => sub
-		{
-			my $output = run_remote_cmd(
-				$remote_ip_a, "Z:\\tools\\socket.exe",
-				AF_IPX, SOCK_STREAM, NSPROTO_SPX,
-			);
-			
-			like($output, qr/^socket: -1$/m);
-		};
-		
-		it "socket(AF_IPX, SOCK_STREAM, NSPROTO_SPXII) fails" => sub
-		{
-			my $output = run_remote_cmd(
-				$remote_ip_a, "Z:\\tools\\socket.exe",
-				AF_IPX, SOCK_STREAM, NSPROTO_SPXII,
-			);
-			
-			like($output, qr/^socket: -1$/m);
-		};
 	};
 	
 	describe "using a DOSBox server" => sub
@@ -166,26 +146,6 @@ describe "IPXWrapper" => sub
 		};
 		
 		it_should_behave_like "socket initialisation";
-		
-		it "socket(AF_IPX, SOCK_STREAM, NSPROTO_SPX) fails" => sub
-		{
-			my $output = run_remote_cmd(
-				$remote_ip_a, "Z:\\tools\\socket.exe",
-				AF_IPX, SOCK_STREAM, NSPROTO_SPX,
-			);
-			
-			like($output, qr/^socket: -1$/m);
-		};
-		
-		it "socket(AF_IPX, SOCK_STREAM, NSPROTO_SPXII) fails" => sub
-		{
-			my $output = run_remote_cmd(
-				$remote_ip_a, "Z:\\tools\\socket.exe",
-				AF_IPX, SOCK_STREAM, NSPROTO_SPXII,
-			);
-			
-			like($output, qr/^socket: -1$/m);
-		};
 	};
 };
 
