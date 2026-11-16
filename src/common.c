@@ -1,5 +1,5 @@
 /* IPXWrapper - Common functions
- * Copyright (C) 2011-2025 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2011-2026 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -364,13 +364,19 @@ void load_dll(unsigned int dllnum, bool direct) {
 	}
 }
 
+static DWORD WINAPI FreeLibraryThread(LPVOID lpParameter)
+{
+	FreeLibrary((HMODULE)(lpParameter));
+	return 0;
+}
+
 void unload_dlls(void) {
 	int i;
 	
 	for(i = 0; dll_names[i]; i++) {
 		if(dll_handles[i]) {
 			DWORD flt_id;
-			HANDLE flt_thread = CreateThread(NULL, 0, &FreeLibrary, dll_handles[i], 0, &flt_id);
+			HANDLE flt_thread = CreateThread(NULL, 0, &FreeLibraryThread, dll_handles[i], 0, &flt_id);
 			if(flt_thread == NULL)
 			{
 				log_printf(LOG_ERROR, "FreeLibrary thread creation failed (%s) - %s will not be unloaded!\n", w32_error(GetLastError()), dll_names[i]);

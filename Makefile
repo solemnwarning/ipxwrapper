@@ -172,7 +172,7 @@ test-prep: $(TESTS) $(TOOLS) $(TOOL_DLLS)
 .PHONY: tools test-prep
 
 tests/addr.exe: tests/addr.o tests/tap/basic.o src/addr.o src/snprintf.o
-tests/addrcache.exe: tests/addrcache.o tests/tap/basic.o src/addrcache.o src/addr.o src/snprintf.o
+tests/addrcache.exe: tests/addrcache.o tests/tap/basic.o src/addrcache.o src/addr.o src/common.o src/snprintf.o
 tests/ethernet.exe: tests/ethernet.o tests/tap/basic.o src/ethernet.o src/addr.o src/snprintf.o
 tests/ratelimit.exe: tests/ratelimit.o src/addr.o src/common.o tests/tap/basic.o src/snprintf.o
 tests/spx.exe: tests/spx.o src/addr.o src/mclock.o tests/tap/basic.o src/snprintf.o
