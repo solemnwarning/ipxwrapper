@@ -1,5 +1,5 @@
 # IPXWrapper test suite
-# Copyright (C) 2023 Daniel Collins <solemnwarning@solemnwarning.net>
+# Copyright (C) 2023-2026 Daniel Collins <solemnwarning@solemnwarning.net>
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License version 2 as published by
@@ -36,6 +36,11 @@ our ($remote_mac_a, $remote_ip_a);
 our ($remote_mac_b, $remote_ip_b);
 our ($net_a_bcast, $net_b_bcast);
 our ($dosbox_port);
+
+require "$FindBin::Bin/loopback.pm";
+
+our $loopback_bind_net;
+our $loopback_bind_node;
 
 describe "IPXWrapper using DOSBox UDP encapsulation" => sub
 {
@@ -388,6 +393,13 @@ describe "IPXWrapper using DOSBox UDP encapsulation" => sub
 					
 					data => "addicted",
 				},
+				{
+					src_net    => $capture_a->net(),
+					src_node   => $capture_a->node(),
+					src_socket => 4444,
+					
+					data => "export",
+				},
 			]);
 			
 			cmp_hashes_partial(\@packets_b, [
@@ -398,9 +410,24 @@ describe "IPXWrapper using DOSBox UDP encapsulation" => sub
 					
 					data => "export",
 				},
+				{
+					src_net    => $capture_b->net(),
+					src_node   => $capture_b->node(),
+					src_socket => 4444,
+					
+					data => "addicted",
+				},
 			]);
 		};
 	};
+
+	before all => sub
+	{
+		$loopback_bind_net  = "00:00:00:00";
+		$loopback_bind_node = "00:00:00:00:00:00";
+	};
+	
+	it_should_behave_like "ipx loopback packet delivery";
 };
 
 runtests unless caller;

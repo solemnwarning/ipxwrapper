@@ -1,5 +1,5 @@
 /* IPXWrapper - Configuration tool
- * Copyright (C) 2011-2025 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2011-2026 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -19,12 +19,9 @@
 #include <windowsx.h>
 #include <commctrl.h>
 #include <iphlpapi.h>
-#include <string>
-#include <vector>
 #include <stdint.h>
 #include <stdio.h>
 #include <ctype.h>
-#include <set>
 
 #include "config.h"
 #include "interface2.h"
@@ -76,7 +73,7 @@ struct ratelimit_value
 	DWORD value;
 };
 
-static const ratelimit_value PACKET_LIMIT_VALUES[] = {
+static const struct ratelimit_value PACKET_LIMIT_VALUES[] = {
 	{ "Unlimited", 0 },
 	{ "100 packets/sec", 100 },
 	{ "250 packets/sec", 250 },
@@ -91,7 +88,7 @@ static const ratelimit_value PACKET_LIMIT_VALUES[] = {
 	{ NULL, 0 },
 };
 
-static const ratelimit_value BYTE_LIMIT_VALUES[] = {
+static const struct ratelimit_value BYTE_LIMIT_VALUES[] = {
 	{ "Unlimited", 0 },
 	{ "1 KiB/sec", 1024 },
 	{ "10 KiB/sec", 10240 },
@@ -109,9 +106,9 @@ static bool stash_nic_config();
 static bool save_config();
 static void main_window_init();
 static void main_window_update();
-static void main_window_layout(HWND *visible_groups);
+static void main_window_layout(HWND *visible_groups, int n_visible_groups);
 
-static HWND create_child(HWND parent, LPCTSTR class_name, LPCTSTR title, DWORD style = 0, DWORD ex_style = 0, unsigned int id = 0);
+static HWND create_child(HWND parent, LPCTSTR class_name, LPCTSTR title, DWORD style, DWORD ex_style, unsigned int id);
 static HWND create_GroupBox(HWND parent, LPCTSTR title);
 static HWND create_STATIC(HWND parent, LPCTSTR text);
 static HWND create_checkbox(HWND parent, LPCTSTR label, int id);
@@ -121,18 +118,20 @@ static HWND create_radio(HWND parent, LPCTSTR label, int id);
 static int get_text_width(HWND hwnd, const char *txt);
 static int get_text_height(HWND hwnd);
 
-static std::string w32_errmsg(DWORD errnum);
-static void die(std::string msg);
+static const char *w32_errmsg(DWORD errnum);
+static void die(const char *fmt, ...);
 static bool _pcap_installed();
 
-static const bool PCAP_INSTALLED = _pcap_installed();
+static bool PCAP_INSTALLED;
 
-static std::vector<iface> nics;
+static struct iface *nics = NULL;
+static size_t nics_size = 0;
+static size_t nics_count = 0;
 
-static main_config_t main_config = get_main_config(true);
-static addr48_t primary_iface    = get_primary_iface();
+static main_config_t main_config;
+static addr48_t primary_iface;
 
-static std::string inv_error;
+static const char *inv_error;
 static HWND inv_window = NULL;
 
 typedef LRESULT CALLBACK (*wproc_fptr)(HWND,UINT,WPARAM,LPARAM);
@@ -342,8 +341,12 @@ int main()
 	
 	if(!RegisterClassEx(&wclass))
 	{
-		die("Could not register window class: " + w32_errmsg(GetLastError()));
+		die("Could not register window class: %s", w32_errmsg(GetLastError()));
 	}
+
+	PCAP_INSTALLED = _pcap_installed();
+	main_config    = get_main_config(true);
+	primary_iface  = get_primary_iface();
 	
 	if(!PCAP_INSTALLED && main_config.encap_type == ENCAP_TYPE_PCAP)
 	{
@@ -360,14 +363,14 @@ int main()
 	
 	while((mret = GetMessage(&msg, NULL, 0, 0))) {
 		if(mret == -1) {
-			die("GetMessage failed: " + w32_errmsg(GetLastError()));
+			die("GetMessage failed: %s", w32_errmsg(GetLastError()));
 		}
 		
 		TranslateMessage(&msg);
 		DispatchMessage(&msg);
 		
 		if(inv_window && !PeekMessage(&msg, NULL, 0, 0, 0)) {
-			MessageBox(wh.main, inv_error.c_str(), "Error", MB_OK);
+			MessageBox(wh.main, inv_error, "Error", MB_OK);
 			
 			SetFocus(inv_window);
 			Edit_SetSel(inv_window, 0, Edit_GetTextLength(inv_window));
@@ -383,14 +386,22 @@ int main()
 
 static void _add_nic(addr48_t hwaddr, const char *name)
 {
-	iface iface;
+	if(nics_size <= nics_count)
+	{
+		nics_size += 8;
+		nics = realloc(nics, (nics_size * sizeof(struct iface)));
+		if(nics == NULL)
+		{
+			die("Unable to allocate memory");
+		}
+	}
 	
-	strcpy(iface.name, name);
+	strcpy(nics[nics_count].name, name);
 	
-	iface.hwaddr = hwaddr;
-	iface.config = get_iface_config(hwaddr);
+	nics[nics_count].hwaddr = hwaddr;
+	nics[nics_count].config = get_iface_config(hwaddr);
 	
-	nics.push_back(iface);
+	++nics_count;
 }
 
 /* Repopulate the list of network interfaces.
@@ -400,7 +411,7 @@ static void _add_nic(addr48_t hwaddr, const char *name)
 */
 static void reload_nics()
 {
-	nics.clear();
+	nics_count = 0;
 	
 	if(main_config.encap_type == ENCAP_TYPE_PCAP)
 	{
@@ -449,9 +460,9 @@ static void reload_nics()
 	lvi.state     = 0;
 	lvi.stateMask = 0;
 	
-	for(auto i = nics.begin(); i != nics.end(); ++i)
+	for(size_t i = 0; i < nics_count; ++i)
 	{
-		lvi.pszText = i->name;
+		lvi.pszText = nics[i].name;
 		
 		ListView_InsertItem(wh.nic_list, &lvi);
 		++(lvi.iItem);
@@ -475,13 +486,13 @@ static void reload_primary_nics()
 	ComboBox_AddString(wh.primary, "Default");
 	ComboBox_SetCurSel(wh.primary, 0);
 	
-	for(auto i = nics.begin(); i != nics.end(); i++)
+	for(size_t i = 0; i < nics_count; ++i)
 	{
-		if(i->config.enabled)
+		if(nics[i].config.enabled)
 		{
-			int index = ComboBox_AddString(wh.primary, i->name);
+			int index = ComboBox_AddString(wh.primary, nics[i].name);
 			
-			if(i->hwaddr == primary_iface)
+			if(nics[i].hwaddr == primary_iface)
 			{
 				ComboBox_SetCurSel(wh.primary, index);
 			}
@@ -551,11 +562,11 @@ static bool save_config()
 			
 			int this_nic = 0;
 			
-			for(auto i = nics.begin(); i != nics.end(); i++)
+			for(size_t i = 0; i < nics_count; ++i)
 			{
-				if(i->config.enabled && ++this_nic == pri_index)
+				if(nics[i].config.enabled && ++this_nic == pri_index)
 				{
-					primary_iface = i->hwaddr;
+					primary_iface = nics[i].hwaddr;
 					break;
 				}
 			}
@@ -631,7 +642,7 @@ static bool save_config()
 	}
 	else if(main_config.encap_type == ENCAP_TYPE_PCAP)
 	{
-		main_config.frame_type = (main_config_frame_type)(ComboBox_GetCurSel(wh.ipx_frame_type) + 1);
+		main_config.frame_type = ComboBox_GetCurSel(wh.ipx_frame_type) + 1;
 	}
 	
 	main_config.w95_bug   = get_checkbox(wh.opt_w95);
@@ -659,9 +670,9 @@ static bool save_config()
 	
 	if(main_config.encap_type == ENCAP_TYPE_IPXWRAPPER || main_config.encap_type == ENCAP_TYPE_PCAP)
 	{
-		for(auto i = nics.begin(); i != nics.end(); i++)
+		for(size_t i = 0; i < nics_count; ++i)
 		{
-			if(!set_iface_config(i->hwaddr, &(i->config)))
+			if(!set_iface_config(nics[i].hwaddr, &(nics[i].config)))
 			{
 				return false;
 			}
@@ -690,7 +701,7 @@ static void main_window_init()
 	
 	if(!wh.main)
 	{
-		die("Could not create main window: " + w32_errmsg(GetLastError()));
+		die("Could not create main window: %s", w32_errmsg(GetLastError()));
 	}
 	
 	/* +- Encapsulation type-------------------------------------+
@@ -742,7 +753,7 @@ static void main_window_init()
 	{
 		wh.box_primary = create_GroupBox(wh.main, "Primary interface");
 		
-		wh.primary = create_child(wh.box_primary, WC_COMBOBOX, NULL, CBS_DROPDOWNLIST | CBS_HASSTRINGS, 0);
+		wh.primary = create_child(wh.box_primary, WC_COMBOBOX, NULL, CBS_DROPDOWNLIST | CBS_HASSTRINGS, 0, 0);
 	}
 	
 	/* +- Network adapters --------------------------------------+
@@ -852,7 +863,7 @@ static void main_window_init()
 		wh.box_ipx_options = create_GroupBox(wh.main, "Network options");
 		
 		wh.ipx_frame_type_lbl = create_STATIC(wh.box_ipx_options, "Frame type");
-		wh.ipx_frame_type     = create_child( wh.box_ipx_options, WC_COMBOBOX, NULL, CBS_DROPDOWNLIST | CBS_HASSTRINGS, 0);
+		wh.ipx_frame_type     = create_child( wh.box_ipx_options, WC_COMBOBOX, NULL, CBS_DROPDOWNLIST | CBS_HASSTRINGS, 0, 0);
 		
 		/* Initialise controls. */
 		
@@ -882,10 +893,10 @@ static void main_window_init()
 		wh.opt_profile    = create_checkbox(wh.box_options, "Log profiling counters", ID_OPT_PROFILE);
 		
 		wh.opt_rate_limit_packets_lbl = create_STATIC(wh.box_options, "Rate limit packets");
-		wh.opt_rate_limit_packets = create_child(wh.box_options, WC_COMBOBOX, NULL, CBS_DROPDOWNLIST | CBS_HASSTRINGS, 0);
+		wh.opt_rate_limit_packets = create_child(wh.box_options, WC_COMBOBOX, NULL, CBS_DROPDOWNLIST | CBS_HASSTRINGS, 0, 0);
 		
 		wh.opt_rate_limit_bytes_lbl = create_STATIC(wh.box_options, "Rate limit data");
-		wh.opt_rate_limit_bytes = create_child(wh.box_options, WC_COMBOBOX, NULL, CBS_DROPDOWNLIST | CBS_HASSTRINGS, 0);
+		wh.opt_rate_limit_bytes = create_child(wh.box_options, WC_COMBOBOX, NULL, CBS_DROPDOWNLIST | CBS_HASSTRINGS, 0, 0);
 		
 		set_checkbox(wh.opt_w95,        main_config.w95_bug);
 		set_checkbox(wh.opt_log_enable, main_config.log_level < LOG_DISABLED);
@@ -1060,7 +1071,7 @@ static void main_window_init()
 			ComboBox_GetLBText(wh.ipx_frame_type, i, ft_label);
 			
 			int this_ft_w = get_text_width(wh.ipx_frame_type, ft_label) * 1.5;
-			ft_w = std::max(ft_w, this_ft_w);
+			ft_w = max(ft_w, this_ft_w);
 		}
 		
 		int box_ipx_options_y = BOX_TOP_PAD;
@@ -1149,22 +1160,21 @@ static void main_window_update()
 	EnableWindow(wh.opt_log_trace, get_checkbox(wh.opt_log_enable) && get_checkbox(wh.opt_log_debug));
 	EnableWindow(wh.opt_profile,   get_checkbox(wh.opt_log_enable));
 	
-	std::vector<HWND> visible_groups = {
-		wh.box_encap,
-	};
+	HWND visible_groups[8] = { wh.box_encap };
+	int n_visible_groups = 1;
 	
 	if(get_checkbox(wh.encap_ipxwrapper))
 	{
 		main_config.encap_type = ENCAP_TYPE_IPXWRAPPER;
 		
 		ShowWindow(wh.box_primary, SW_SHOW);
-		visible_groups.push_back(wh.box_primary);
+		visible_groups[n_visible_groups++] = wh.box_primary;
 		
 		ShowWindow(wh.box_nic, SW_SHOW);
-		visible_groups.push_back(wh.box_nic);
+		visible_groups[n_visible_groups++] = wh.box_nic;
 		
 		ShowWindow(wh.box_ipxwrapper_options, SW_SHOW);
-		visible_groups.push_back(wh.box_ipxwrapper_options);
+		visible_groups[n_visible_groups++] = wh.box_ipxwrapper_options;
 		
 		ShowWindow(wh.box_dosbox_options, SW_HIDE);
 		ShowWindow(wh.box_ipx_options, SW_HIDE);
@@ -1178,7 +1188,7 @@ static void main_window_update()
 		ShowWindow(wh.box_ipxwrapper_options, SW_HIDE);
 		
 		ShowWindow(wh.box_dosbox_options, SW_SHOW);
-		visible_groups.push_back(wh.box_dosbox_options);
+		visible_groups[n_visible_groups++] = wh.box_dosbox_options;
 		
 		ShowWindow(wh.box_ipx_options, SW_HIDE);
 	}
@@ -1187,27 +1197,26 @@ static void main_window_update()
 		main_config.encap_type = ENCAP_TYPE_PCAP;
 		
 		ShowWindow(wh.box_primary, SW_SHOW);
-		visible_groups.push_back(wh.box_primary);
+		visible_groups[n_visible_groups++] = wh.box_primary;
 		
 		ShowWindow(wh.box_nic, SW_SHOW);
-		visible_groups.push_back(wh.box_nic);
+		visible_groups[n_visible_groups++] = wh.box_nic;
 		
 		ShowWindow(wh.box_ipxwrapper_options, SW_HIDE);
 		ShowWindow(wh.box_dosbox_options, SW_HIDE);
 		
 		ShowWindow(wh.box_ipx_options, SW_SHOW);
-		visible_groups.push_back(wh.box_ipx_options);
+		visible_groups[n_visible_groups++] = wh.box_ipx_options;
 	}
 	
-	visible_groups.push_back(wh.box_options);
-	visible_groups.push_back(NULL);
+	visible_groups[n_visible_groups++] = wh.box_options;
 	
-	main_window_layout(visible_groups.data());
+	main_window_layout(visible_groups, n_visible_groups);
 	
 	UpdateWindow(wh.main);
 }
 
-static void main_window_layout(HWND *visible_groups)
+static void main_window_layout(HWND *visible_groups, int n_visible_groups)
 {
 	int y = 0;
 	
@@ -1284,7 +1293,7 @@ static HWND create_child(HWND parent, LPCTSTR class_name, LPCTSTR title, DWORD s
 	
 	if(!hwnd)
 	{
-		die(std::string("Could not create ") + class_name + " window: " + w32_errmsg(GetLastError()));
+		die("Could not create %s window: %s", class_name, w32_errmsg(GetLastError()));
 	}
 	
 	SendMessage(hwnd, WM_SETFONT, (WPARAM)GetStockObject(DEFAULT_GUI_FONT), TRUE);
@@ -1294,7 +1303,7 @@ static HWND create_child(HWND parent, LPCTSTR class_name, LPCTSTR title, DWORD s
 
 static HWND create_GroupBox(HWND parent, LPCTSTR title)
 {
-	HWND groupbox = create_child(parent, "BUTTON", title, BS_GROUPBOX);
+	HWND groupbox = create_child(parent, "BUTTON", title, BS_GROUPBOX, 0, 0);
 	default_groupbox_wproc = (wproc_fptr)SetWindowLongPtr(groupbox, GWLP_WNDPROC, (LONG_PTR)&groupbox_wproc);
 	
 	return groupbox;
@@ -1302,7 +1311,7 @@ static HWND create_GroupBox(HWND parent, LPCTSTR title)
 
 static HWND create_STATIC(HWND parent, LPCTSTR text)
 {
-	return create_child(parent, "STATIC", text, SS_RIGHT);
+	return create_child(parent, "STATIC", text, SS_RIGHT, 0, 0);
 }
 
 static HWND create_checkbox(HWND parent, LPCTSTR label, int id)
@@ -1361,16 +1370,23 @@ static int get_text_height(HWND hwnd) {
 }
 
 /* Convert a win32 error number to a message */
-static std::string w32_errmsg(DWORD errnum) {
-	char buf[256] = {'\0'};
+static const char *w32_errmsg(DWORD errnum) {
+	static char buf[1024] = {'\0'};
 	
-	FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, NULL, errnum, 0, buf, sizeof(buf), NULL);
+	FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, NULL, errnum, 0, buf, 1023, NULL);
 	buf[strcspn(buf, "\r\n")] = '\0';
 	return buf;	
 }
 
-static void die(std::string msg) {
-	MessageBox(NULL, msg.c_str(), "Fatal error", MB_OK | MB_TASKMODAL | MB_ICONERROR);
+static void die(const char *fmt, ...) {
+	va_list argv;
+	char msg[1024];
+	
+	va_start(argv, fmt);
+	vsnprintf(msg, 1024, fmt, argv);
+	va_end(argv);
+
+	MessageBox(NULL, msg, "Fatal error", MB_OK | MB_TASKMODAL | MB_ICONERROR);
 	exit(1);
 }
 
@@ -1390,7 +1406,7 @@ static bool _pcap_installed()
 }
 
 /* Used to display errors from shared functions. */
-extern "C" void log_printf(enum ipx_log_level level, const char *fmt, ...)
+void log_printf(enum ipx_log_level level, const char *fmt, ...)
 {
 	int icon = 0;
 	const char *title = NULL;

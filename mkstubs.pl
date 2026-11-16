@@ -1,5 +1,5 @@
 # IPXWrapper - Generate assembly stub functions
-# Copyright (C) 2008-2024 Daniel Collins <solemnwarning@solemnwarning.net>
+# Copyright (C) 2008-2026 Daniel Collins <solemnwarning@solemnwarning.net>
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License version 2 as published by
@@ -76,6 +76,8 @@ extern _find_sym_direct
 extern _log_call
 extern _fprof_record_timed
 extern _fprof_record_untimed
+
+extern _min_log_level
 
 struc FuncStats
 	.func_name:   resd 1
@@ -200,7 +202,7 @@ END
 				; Bypass the profiling code and jump straight into the taget
 				; function when not profiling.
 				cmp byte [_stubs_enable_profile], 0
-				je $func->{name}_skip
+				je $func->{name}_noprofile
 				
 				push ebp
 				mov ebp, esp
@@ -237,6 +239,8 @@ END
 END
 		}
 		
+		$to_copy = $func->{params};
+		
 		print CODE <<"END";
 				; Call target function
 				call [$func->{name}_addr]
@@ -263,10 +267,70 @@ END
 				; Record profiling data
 				call _fprof_record_timed
 				
+				; Log returning from the target function
+				push dword 0xFFFFFFFF
+				push $func->{name}_target_func
+				push dword $dll_index
+				call _log_call
+				
 				add esp, 8  ; Pop end tick count
 				pop eax     ; Pop return value
 				add esp, 8  ; Pop start tick count
 				
+				pop ebp ; Restore caller's ebp
+				
+				ret $func->{params}
+				
+				$func->{name}_noprofile:
+				
+				; Skip to fast path (jump straight to the function) if not logging calls.
+				cmp dword [_min_log_level], 1
+				jg $func->{name}_skip
+				
+				push ebp
+				mov ebp, esp
+				
+				; Copy original arguments ($to_copy bytes)
+END
+		
+		for(; $to_copy >= 4;)
+		{
+			$to_copy -= 4;
+			print CODE <<"END";
+				push dword [ebp + 4 + 4 + $to_copy]
+END
+		}
+		
+		for(; $to_copy >= 2;)
+		{
+			$to_copy -= 2;
+			print CODE <<"END";
+				push word [ebp + 4 + 4 + $to_copy]
+END
+		}
+		
+		for(; $to_copy >= 1;)
+		{
+			$to_copy -= 1;
+			print CODE <<"END";
+				push byte [ebp + 4 + 4 + $to_copy]
+END
+		}
+		
+		print CODE <<"END";
+				; Call target function
+				call [$func->{name}_addr]
+				
+				; Push target function return value onto stack
+				push eax
+				
+				; Log returning from the target function
+				push dword 0xFFFFFFFF
+				push $func->{name}_target_func
+				push dword $dll_index
+				call _log_call
+				
+				pop eax ; Pop return value
 				pop ebp ; Restore caller's ebp
 				
 				ret $func->{params}

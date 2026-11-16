@@ -35,16 +35,12 @@ or communication between Windows and DOS games (running under DOSBox).
 To enable this, select the "DOSBox UDP encapsulation" option in ipxconfig and
 enter the address/port of your DOSBox server.
 
-**NOTE**: SPX connections are not supported when using this option.
-
 Using the real IPX protocol
 ---------------------------
 
 If your software needs to send/receive real IPX frames, for example because it
 talks to an old piece of equipment that only understands IPX, install WinPcap
 and select the "Real IPX encapsulation" option in ipxconfig.
-
-**NOTE**: SPX connections are not supported when using this option.
 
 Compatibility
 -------------
@@ -53,30 +49,65 @@ Software that uses WinSock 1.x and/or DirectPlay (before version 8) is supported
 
 The following have been reported to work:
 
+ * Alien versus Predator Gold
  * Atomic Bomberman
+ * Civilization: Call to Power
  * Call to Power II
  * Carmageddon
  * Carmageddon II
  * Command & Conquer: Red Alert 2
  * Darkstone: Evil Reigns
+ * Dark Colony
+ * Daytona USA Deluxe/Evolution
+ * Delta Force
  * Delta Force 2
  * Diablo
+ * Dune 2000
+ * Dungeon Keeper
+ * Dungeon Keeper 2
  * FIFA: Road to World Cup 98
+ * Formula 1 97 / Formula 1 Championship Edition
+ * Future Cop LAPD
+ * Get Medieval
+ * Grand Theft Auto II
  * Hardwar: The Future Is Greedy
+ * HyperBlade
  * Heroes of Might and Magic III
+ * Ignition
+ * Interstate '76
  * Laser Arena
  * Machines: Wired for War
+ * MageSlayer
+ * Midtown Madness
+ * Midtown Madness 2
+ * Monster Truck Madness
+ * Monster Truck Madness 2
+ * Motorhead
+ * Motocross Madness
+ * Motocross Madness 2
+ * Moto Racer
+ * Moto Racer 2
+ * Need for Speed II - Special Edition
  * Need For Speed III - Hot Pursuit
+ * Need for Speed: High Stakes
  * Outlive
  * Rising Lands
  * Rival Realms
+ * Sega Rally 2
+ * Sega Touring Car Championship
  * Sid Meier's Alpha Centauri
+ * Speed Demons
+ * StarCraft (including BroodWar)
  * Star Wars Episode I: Racer
  * Star Wars Jedi Knight: Dark Forces II
  * Street Wars: Constructor Underworld/Mob Rule
+ * Take No Prisoners
+ * Test Drive 5
  * Theme Hospital
+ * TOCA 2: Touring Cars
  * Total Annihilation
  * Twisted Metal 2
+ * Ultimate Race Pro
  * Virtua Cop
  * Warcraft II
  * War Wind

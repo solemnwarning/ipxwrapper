@@ -1,5 +1,5 @@
 /* ipxwrapper - Library header
- * Copyright (C) 2008-2023 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2008-2026 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -28,6 +28,7 @@
 
 #include "config.h"
 #include "funcprof.h"
+#include "mclock.h"
 #include "router.h"
 
 /* The standard Windows driver (in XP) only allows 1467 bytes anyway */
@@ -57,6 +58,14 @@
 #define IPX_IS_SPXII	(int)(1<<11)
 #define IPX_LISTENING	(int)(1<<12)
 #define IPX_CONNECT_OK	(int)(1<<13)
+#define IPX_CONNECTING	(int)(1<<14)
+#define IPX_CLOSING (int)(1<<15) /**< SPX socket closed locally, awaiting acknowledgement of disconnection from peer, or spx_abort_time */
+#define IPX_CLOSED (int)(1<<16) /**< SPX socket closed by peer, awaiting acknowledgement by application and spx_abort_time */
+#define IPX_ABORTED (int)(1<<17) /**< SPX socket closed by timeout */
+#define IPX_NONBLOCK (int)(1<<18) /**< Socket is in non-blocking mode. */
+#define IPX_ACCEPT_PENDING (int)(1<<19) /**< Inbound SPX connection, not yet accepted by the application. */
+
+#define SPX_RTT_BACKLOG_COUNT 8 /**< Number of most recent packet RTTs to record. */
 
 typedef struct ipx_socket ipx_socket;
 typedef struct ipx_packet ipx_packet;
@@ -110,6 +119,9 @@ struct ipx_recv_queue
 
 typedef struct ipx_recv_queue ipx_recv_queue;
 
+struct spx_queue;
+struct spx_pending_connection;
+
 struct ipx_socket {
 	SOCKET fd;
 	
@@ -128,10 +140,62 @@ struct ipx_socket {
 	
 	/* Address used with connect call, only set when IPX_CONNECTED is */
 	struct sockaddr_ipx remote_addr;
+
+	uint16_t local_conn;   /**< Local SPX connection ID (only valid when IPX_IS_SPX and IPX_LISTENING, IPX_CONNECTING or IPX_CONNECTED is set). */
+	uint16_t remote_conn;  /**< Peer SPX connection ID (only valid when IPX_IS_SPX and IPX_CONNECTED is set). */
 	
 	struct ipx_recv_queue *recv_queue;
 	
+	SOCKET spx_master_fd;
+	HANDLE spx_connect_event;
+	
+	union {
+		/* Members used by SPX LISTENING SOCKETS ONLY. */
+		struct {
+			ipx_socket *spx_accept_queue_head;  /**< Head of SPX accept queue (only valid when IPX_LISTENING is set). */
+			int spx_max_backlog;                /**< Maximum number of inbound SPX connections to queue (only valid when IPX_LISTENING is set). */
+			int spx_current_backlog;            /**< Current number of connections in accept queue (only valid when IPX_LISTENING is set). */
+		};
+		
+		/* Members used by SPX CONNECTION SOCKETS ONLY. */
+		struct {
+			ipx_socket *spx_accept_listener;    /**< Listening socket this socket is waiting to be accepted on (only valid when IPX_ACCEPT_PENDING is set). */
+			ipx_socket *spx_accept_queue_prev;  /**< Previous node in listener's accept queue (only valid when IPX_ACCEPT_PENDING is set). */
+			ipx_socket *spx_accept_queue_next;  /**< Next node in listener's accept queue (only valid when IPX_ACCEPT_PENDING is set). */
+			
+			struct spx_queue *spx_recv_queue; /**< Queue of SPX packets to be received by the application (only valid when IPX_CONNECTED is set). */
+			uint16_t spx_recv_seq; /**< Sequence number of next expected SPX data packet (host byte order). */
+			size_t spx_recv_inflight; /**< Number of received bytes written to the socket and awaiting confirmation from recv_packet(). */
+			
+			struct spx_queue *spx_send_queue; /**< Queue of SPX packets to be transmitted (only valid when IPX_CONNECTED or IPX_CLOSING is set). */
+			uint16_t spx_send_seq; /**< Sequence number of next SPX data packet to send (host byte order). */
+			
+			mclock_point_t spx_retransmit_time; /**< Time when last packet needs to be retransmitted. */
+			
+			mclock_point_t spx_verify_time; /**< Time when watchdog request will next be transmitted. */
+			mclock_point_t spx_abort_time;  /**< Time when connection will be aborted due to a (assumed) dead peer. */
+			
+			/**
+			 * @brief Tracking of RTT from acknowledged packets on this SPX connection.
+			 *
+			 * This array tracks the RTT of recently transmitted SPX packets. Each entry is one of the
+			 * following values:
+			 *
+			 * Zero     - No data (early in connection lifetime).
+			 * Positive - Round trip time in milliseconds of a packet.
+			 * Negative - Retransmission count of a packet.
+			*/
+			int spx_rtt_history[SPX_RTT_BACKLOG_COUNT];
+			
+			mclock_point_t spx_transmit_time; /**< Time of first transmission of current in-flight SPX packet. */
+			int spx_retransmit_count; /**< Number of retransmissions of current in-flight SPX packet. */
+		};
+	};
+	
 	UT_hash_handle hh;
+
+	ipx_socket *prev;
+	ipx_socket *next;
 };
 
 struct ipx_packet {
@@ -152,42 +216,9 @@ struct ipx_packet {
 #define IPX_MAGIC_SPXLOOKUP 1
 #define IPX_MAGIC_COALESCED 2
 
-typedef struct spxlookup_req spxlookup_req_t;
+extern ipx_socket *socket_by_fd;
+extern ipx_socket *all_sockets;
 
-struct spxlookup_req
-{
-	unsigned char net[4];
-	unsigned char node[6];
-	uint16_t socket;
-	
-	char padding[20];
-}  __attribute__((__packed__));
-
-typedef struct spxlookup_reply spxlookup_reply_t;
-
-struct spxlookup_reply
-{
-	unsigned char net[4];
-	unsigned char node[6];
-	uint16_t socket;
-	
-	uint16_t port;
-	
-	char padding[18];
-}  __attribute__((__packed__));
-
-typedef struct spxinit spxinit_t;
-
-struct spxinit
-{
-	unsigned char net[4];
-	unsigned char node[6];
-	uint16_t socket;
-	
-	char padding[20];
-} __attribute__((__packed__));
-
-extern ipx_socket *sockets;
 extern main_config_t main_config;
 
 extern struct FuncStats ipxwrapper_fstats[];

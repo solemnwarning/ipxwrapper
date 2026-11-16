@@ -155,6 +155,17 @@ void ipx_to_string(char *buf, addr32_t net, addr48_t node, uint16_t sock)
 	mirtoto_snprintf(buf + 30, IPX_SADDR_SIZE - 30, "%hu", ntohs(sock));
 }
 
+void spx_to_string(char *buf, addr32_t net, addr48_t node, uint16_t sock, uint16_t conn)
+{
+	addr32_string(buf, net);
+	buf[11] = '/';
+	
+	addr48_string(buf + 12, node);
+	buf[29] = '/';
+	
+	sprintf(buf + 30, "%hu/%hu", ntohs(sock), ntohs(conn));
+}
+
 /* Generate a (probably) unique locally-administered MAC address. */
 addr48_t gen_random_mac()
 {

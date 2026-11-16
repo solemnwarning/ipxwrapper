@@ -1,5 +1,5 @@
 # IPXWrapper test suite
-# Copyright (C) 2014-2023 Daniel Collins <solemnwarning@solemnwarning.net>
+# Copyright (C) 2014-2026 Daniel Collins <solemnwarning@solemnwarning.net>
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License version 2 as published by
@@ -35,9 +35,10 @@ sub new
 	my $pid = open3(my $in, my $out, undef, @command);
 	
 	my $self = bless({
-		pid => $pid,
-		in  => $in,
-		out => $out,
+		pid   => $pid,
+		in    => $in,
+		out   => $out,
+		addrs => [],
 	}, $class);
 	
 	my $output = "";
@@ -48,13 +49,18 @@ sub new
 		
 		$line =~ s/[\r\n]//g;
 		
-		if($line =~ m/^Ready (\S+) (\S+) (\S+)$/)
+		if($line =~ m/^(Ready|Bound) (\S+) (\S+) (\S+)$/)
 		{
-			$self->{net}    = $1;
-			$self->{node}   = $2;
-			$self->{socket} = $3;
+			push(@{ $self->{addrs} }, {
+				net    => $2,
+				node   => $3,
+				socket => $4,
+			});
 			
-			return $self;
+			if($1 eq "Ready")
+			{
+				return $self;
+			}
 		}
 	}
 	
@@ -73,14 +79,20 @@ sub DESTROY
 
 sub net
 {
-	my ($self) = @_;
-	return $self->{net};
+	my ($self, $sock_idx) = @_;
+	return $self->{addrs}->[$sock_idx // 0]->{net};
 }
 
 sub node
 {
-	my ($self) = @_;
-	return $self->{node};
+	my ($self, $sock_idx) = @_;
+	return $self->{addrs}->[$sock_idx // 0]->{node};
+}
+
+sub socket
+{
+	my ($self, $sock_idx) = @_;
+	return $self->{addrs}->[$sock_idx // 0]->{socket};
 }
 
 sub _end
@@ -130,14 +142,15 @@ sub kill_and_read
 	{
 		$line =~ s/[\r\n]//g;
 		
-		if($line =~ m{^(\S+) (\S+) (\S+) (.*)$})
+		if($line =~ m{^(\d+) (\S+) (\S+) (\S+) (.*)$})
 		{
 			push(@packets, {
-				src_net    => $1,
-				src_node   => $2,
-				src_socket => $3,
+				sock_idx   => $1,
+				src_net    => $2,
+				src_node   => $3,
+				src_socket => $4,
 				
-				data => $4,
+				data => $5,
 			});
 		}
 		else{
@@ -150,10 +163,12 @@ sub kill_and_read
 
 sub send
 {
-	my ($self, $sa_net, $sa_node, $sa_socket, $data) = @_;
+	my ($self, $sa_net, $sa_node, $sa_socket, $data, $sock_idx) = @_;
+	
+	$sock_idx //= 0;
 	
 	my $stdin = $self->{in};
-	print {$stdin} "$sa_net $sa_node $sa_socket $data\n";
+	print {$stdin} "$sock_idx $sa_net $sa_node $sa_socket $data\n";
 }
 
 1;

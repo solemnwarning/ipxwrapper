@@ -1,5 +1,5 @@
 /* IPXWrapper - Router code
- * Copyright (C) 2011-2023 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2011-2026 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -32,6 +32,7 @@
 #include "interface.h"
 #include "addrcache.h"
 #include "ethernet.h"
+#include "spx.h"
 
 #define IPX_SOCK_ECHO 2
 
@@ -61,6 +62,7 @@ static HANDLE router_thread  = NULL;
 
 SOCKET shared_socket  = -1;
 SOCKET private_socket = -1;
+uint16_t private_port = 0; /**< Local port of private UDP socket (network byte order) */
 
 struct sockaddr_in dosbox_server_addr;
 static HANDLE dosbox_ready_event = NULL;
@@ -171,6 +173,19 @@ void router_init(void)
 		_init_socket(&shared_socket, main_config.udp_port, TRUE, TRUE);
 		_init_socket(&private_socket, 0, TRUE, FALSE);
 	}
+
+	{
+		struct sockaddr_in private_addr;
+		int addrlen = sizeof(private_addr);
+
+		if(r_getsockname(private_socket, (struct sockaddr*)(&private_addr), &addrlen) == SOCKET_ERROR)
+		{
+			log_printf(LOG_ERROR, "Unable to identify private UDP port address: %s", w32_error(WSAGetLastError()));
+		}
+		else{
+			private_port = private_addr.sin_port;
+		}
+	}
 	
 	router_running = true;
 	
@@ -224,11 +239,12 @@ void router_cleanup(void)
 	}
 }
 
-#define BCAST_NET  addr32_in((unsigned char[]){0xFF,0xFF,0xFF,0xFF})
-#define BCAST_NODE addr48_in((unsigned char[]){0xFF,0xFF,0xFF,0xFF,0xFF,0xFF})
-#define ZERO_NET   addr32_in((unsigned char[]){0x00,0x00,0x00,0x00})
+void router_wake(void)
+{
+	SetEvent(router_event);
+}
 
-static void _deliver_packet(
+void deliver_packet(
 	uint8_t type,
 	addr32_t src_net,
 	addr48_t src_node,
@@ -239,7 +255,13 @@ static void _deliver_packet(
 	const void *data,
 	size_t data_size)
 {
-	FPROF_RECORD_SCOPE(&(ipxwrapper_fstats[IPXWRAPPER_FSTATS__deliver_packet]));
+	FPROF_RECORD_SCOPE(&(ipxwrapper_fstats[IPXWRAPPER_FSTATS_deliver_packet]));
+	
+	if(type == IPX_TYPE_SPX)
+	{
+		spx_process_packet(src_net, src_node, src_socket, dest_net, dest_node, dest_socket, data, data_size);
+		return;
+	}
 	
 	{
 		IPX_STRING_ADDR(src_addr, src_net, src_node, src_socket);
@@ -252,7 +274,7 @@ static void _deliver_packet(
 	lock_sockets();
 	
 	ipx_socket *sock, *tmp;
-	HASH_ITER(hh, sockets, sock, tmp)
+	HASH_ITER(hh, socket_by_fd, sock, tmp)
 	{
 		if(sock->flags & IPX_IS_SPX)
 		{
@@ -392,58 +414,14 @@ static void _handle_udp_recv(ipx_packet *packet, size_t packet_size, struct sock
 		
 		if(packet->ptype == IPX_MAGIC_SPXLOOKUP)
 		{
-			/* The other system is trying to resolve the IP address
-			 * and port number of a listening SPX socket.
+			/* Older versions of IPXWrapper implemented SPX as a direct TCP connection, using this
+			 * IPX_MAGIC_SPXLOOKUP packet to discover any hosts with a listening SPX socket bound
+			 * to the requested address. We now implement real SPX on top of IPX, so just warn if
+			 * we see a message from an older version of IPXWrapper trying to use SPX.
 			*/
 			
-			if(data_size != sizeof(spxlookup_req_t))
-			{
-				log_printf(LOG_DEBUG, "Recieved IPX_MAGIC_SPXLOOKUP packet with %hu byte payload, dropping", data_size);
-				return;
-			}
-			
-			spxlookup_req_t *req = (spxlookup_req_t*)(packet->data);
-			
-			/* Search the sockets table for a listening socket which
-			 * is bound to the requested address.
-			*/
-			
-			lock_sockets();
-			
-			ipx_socket *s, *tmp;
-			HASH_ITER(hh, sockets, s, tmp)
-			{
-				if(
-					s->flags & IPX_IS_SPX
-					&& s->flags & IPX_LISTENING
-					&& (memcmp(req->net, s->addr.sa_netnum, 4) == 0
-						|| addr32_in(req->net) == ZERO_NET)
-					&& memcmp(req->node, s->addr.sa_nodenum, 6) == 0
-					&& req->socket == s->addr.sa_socket)
-				{
-					/* This socket seems to fit the bill.
-					 * Reply with the port number.
-					*/
-					
-					spxlookup_reply_t reply;
-					memset(&reply, 0, sizeof(reply));
-					
-					memcpy(reply.net, req->net, 4);
-					memcpy(reply.node, req->node, 6);
-					reply.socket = req->socket;
-					
-					reply.port = s->port;
-					
-					if(sendto(private_socket, (char*)(&reply), sizeof(reply), 0, (struct sockaddr*)(&src_ip), sizeof(src_ip)) == -1)
-					{
-						log_printf(LOG_ERROR, "Cannot send spxlookup_reply packet: %s", w32_error(WSAGetLastError()));
-					}
-					
-					break;
-				}
-			}
-			
-			unlock_sockets();
+			IPX_STRING_ADDR(src_addr, addr32_in(packet->src_net), addr48_in(packet->src_node), packet->src_socket);
+			log_printf(LOG_WARNING, "Recieved IPX_MAGIC_SPXLOOKUP packet from %s (%s) running an older version of IPXWrapper, dropping", src_addr, inet_ntoa(src_ip.sin_addr));
 		}
 		else{
 			log_printf(LOG_DEBUG, "Recieved magic packet unknown ptype %u, dropping", (unsigned int)(packet->ptype));
@@ -509,7 +487,7 @@ static void _handle_udp_recv(ipx_packet *packet, size_t packet_size, struct sock
 		addr32_in(packet->src_net), addr48_in(packet->src_node), packet->src_socket
 	);
 	
-	_deliver_packet(packet->ptype,
+	deliver_packet(packet->ptype,
 		addr32_in(packet->src_net),
 		addr48_in(packet->src_node),
 		packet->src_socket,
@@ -551,6 +529,29 @@ static void _handle_dosbox_registration_response(novell_ipx_packet *packet, size
 	SetEvent(dosbox_ready_event);
 }
 
+static void _send_dosbox_ping_ack(addr48_t reply_to)
+{
+	novell_ipx_packet ack_pkt;
+	
+	ack_pkt.checksum = 0xFFFF;
+	ack_pkt.length = htons(sizeof(ack_pkt));
+	ack_pkt.hops = 0;
+	ack_pkt.type = 0;
+	
+	memset(ack_pkt.dest_net, 0, sizeof(ack_pkt.dest_net));
+	addr48_out(ack_pkt.dest_node, reply_to);
+	ack_pkt.dest_socket = htons(IPX_SOCK_ECHO);
+	
+	memset(ack_pkt.src_net, 0, sizeof(ack_pkt.src_net));
+	addr48_out(ack_pkt.src_node, dosbox_local_nodenum);
+	ack_pkt.src_socket = htons(IPX_SOCK_ECHO);
+	
+	if(sendto(private_socket, (const void*)(&ack_pkt), sizeof(ack_pkt), 0, (struct sockaddr*)(&dosbox_server_addr), sizeof(dosbox_server_addr)) < 0)
+	{
+		log_printf(LOG_ERROR, "Error sending DOSBox ping ack: %s", w32_error(WSAGetLastError()));
+	}
+}
+
 static void _handle_dosbox_recv(novell_ipx_packet *packet, size_t packet_size)
 {
 	FPROF_RECORD_SCOPE(&(ipxwrapper_fstats[IPXWRAPPER_FSTATS__handle_dosbox_recv]));
@@ -559,6 +560,14 @@ static void _handle_dosbox_recv(novell_ipx_packet *packet, size_t packet_size)
 	{
 		/* Doesn't look valid. */
 		log_printf(LOG_ERROR, "Recieved invalid IPX packet from DOSBox server, ignoring");
+		return;
+	}
+	
+	if(packet->dest_socket == htons(IPX_SOCK_ECHO)
+		&& addr48_in(packet->dest_node) == BCAST_NODE)
+	{
+		log_printf(LOG_DEBUG, "DEBUG: dosbox ping detected, sending ack");
+		_send_dosbox_ping_ack(addr48_in(packet->src_node));
 		return;
 	}
 	
@@ -599,7 +608,7 @@ static void _handle_dosbox_recv(novell_ipx_packet *packet, size_t packet_size)
 			
 			size_t data_size = ntohs(p->length) - sizeof(novell_ipx_packet);
 			
-			_deliver_packet(
+			deliver_packet(
 				p->type,
 				
 				addr32_in(p->src_net),
@@ -627,7 +636,7 @@ static void _handle_dosbox_recv(novell_ipx_packet *packet, size_t packet_size)
 		
 		size_t data_size = ntohs(packet->length) - sizeof(novell_ipx_packet);
 		
-		_deliver_packet(
+		deliver_packet(
 			packet->type,
 			
 			addr32_in(packet->src_net),
@@ -689,7 +698,10 @@ static int _do_udp_recv(int fd)
 		}
 	}
 	else{
-		_handle_udp_recv((ipx_packet*)(buf), len, addr);
+		if(addr.sin_port != private_port || !ipv4_address_is_local(addr.sin_addr.s_addr))
+		{
+			_handle_udp_recv((ipx_packet*)(buf), len, addr);
+		}
 	}
 	
 	return 1;
@@ -756,7 +768,7 @@ static void _handle_pcap_frame(u_char *user, const struct pcap_pkthdr *pkt_heade
 		}
 	}
 	
-	_deliver_packet(ipx->type,
+	deliver_packet(ipx->type,
 		addr32_in(ipx->src_net),
 		addr48_in(ipx->src_node),
 		ipx->src_socket,
@@ -829,6 +841,8 @@ static DWORD router_main(void *arg)
 		}
 	}
 	
+	mclock_point_t next_spx_retransmit = mclock_now();
+	
 	while(1)
 	{
 		DWORD wait_ms = 1000;
@@ -865,6 +879,12 @@ static DWORD router_main(void *arg)
 					wait_ms = min(wait_ms, 1000);
 				}
 			}
+		}
+		
+		uint32_t next_spx_retransmit_in = mclock_ms_until(next_spx_retransmit, mclock_now());
+		if(next_spx_retransmit_in < wait_ms)
+		{
+			wait_ms = next_spx_retransmit_in;
 		}
 		
 		WaitForMultipleObjects(n_events, wait_events, FALSE, wait_ms);
@@ -987,6 +1007,8 @@ static DWORD router_main(void *arg)
 				dosbox_registration_retry_interval_ms = min(dosbox_registration_retry_interval_ms, MAX_DOSBOX_REGISTRATION_RETRY_INTERVAL_MS);
 			}
 		}
+
+		next_spx_retransmit = spx_retransmit_lost();
 	}
 	
 	if(ipx_encap_type == ENCAP_TYPE_PCAP)

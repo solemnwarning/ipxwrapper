@@ -1,3 +1,11 @@
+Version UNRELEASED:
+	Fix delivery of locally-generated packets to the same process when using
+	IPXWrapper UDP or DOSBox encapsulation.
+	
+	Implement the actual SPX protocol to allow SPX over DOSBox or real IPX
+	encapsulation. Will not communicate with earlier versions of IPXWrapper
+	even when using UDP encapsulation.
+
 Version 0.7.2:
 	Fix error when loading settings under Windows XP compatibility mode.
 	

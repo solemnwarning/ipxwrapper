@@ -1,5 +1,5 @@
 # IPXWrapper - Makefile
-# Copyright (C) 2011-2025 Daniel Collins <solemnwarning@solemnwarning.net>
+# Copyright (C) 2011-2026 Daniel Collins <solemnwarning@solemnwarning.net>
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License version 2 as published by
@@ -15,8 +15,7 @@
 # Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 ifdef HOST
-CC  := $(HOST)-gcc
-CXX := $(HOST)-g++
+CC := $(HOST)-gcc
 endif
 
 WINDRES ?= $(shell \
@@ -32,8 +31,7 @@ endif
 
 INCLUDE := -I./include/ -I./winpcap/include/ -D_WIN32_WINNT=0x0500 -D_WIN32_IE=0x0500 -DHAVE_REMOTE
 
-CFLAGS   := -std=c99   -mno-ms-bitfields -Wall -DINI_HANDLER_LINENO=1 $(DBG_OPT) $(INCLUDE)
-CXXFLAGS := -std=c++0x -mno-ms-bitfields -Wall -DINI_HANDLER_LINENO=1 $(DBG_OPT) $(INCLUDE)
+CFLAGS := -std=c99   -mno-ms-bitfields -Wall -DINI_HANDLER_LINENO=1 $(DBG_OPT) $(INCLUDE) $(CFLAGS)
 
 DEPDIR := .d
 $(shell mkdir -p $(DEPDIR)/src/ $(DEPDIR)/tools/ $(DEPDIR)/tests/tap/)
@@ -46,12 +44,12 @@ BIN_FILES := $(shell cat manifest.bin.txt)
 SRC_FILES := $(shell cat manifest.src.txt)
 
 # Tests to compile before running the test suite.
-TESTS := tests/addr.exe tests/addrcache.exe tests/ethernet.exe tests/ratelimit.exe tools/fionread.exe
+TESTS := tests/addr.exe tests/addrcache.exe tests/ethernet.exe tests/ratelimit.exe tests/spx.exe tools/fionread.exe
 
 # Tools to compile before running the test suite.
 TOOLS := tools/socket.exe tools/list-interfaces.exe tools/bind.exe tools/ipx-send.exe \
 	tools/ipx-recv.exe tools/spx-server.exe tools/spx-client.exe  tools/ipx-isr.exe \
-	tools/dptool.exe tools/osversion.exe tools/reg-set-bin.exe
+	tools/dptool.exe tools/wstool.exe tools/osversion.exe tools/reg-set-bin.exe
 
 # DLLs to copy to the tools/ directory before running the test suite.
 TOOL_DLLS := tools/ipxwrapper.dll tools/wsock32.dll tools/mswsock.dll tools/dpwsockx.dll
@@ -86,13 +84,13 @@ dist: all
 
 IPXWRAPPER_OBJS := src/ipxwrapper.o src/winsock.o src/ipxwrapper_stubs.o src/log.o src/common.o \
 	src/interface.o src/interface2.o src/router.o src/ipxwrapper.def src/addrcache.o src/config.o src/addr.o \
-	src/firewall.o src/ethernet.o src/funcprof.o src/coalesce.o src/snprintf.o inih/ini.o
+	src/firewall.o src/ethernet.o src/funcprof.o src/coalesce.o src/spx.o src/mclock.o src/snprintf.o inih/ini.o
 
 ipxwrapper.dll: $(IPXWRAPPER_OBJS)
 	echo 'const char *version_string = "$(VERSION)", *compile_time = "'`date`'";' | $(CC) -c -x c -o version.o -
 	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -static-libgcc -shared -o $@ $^ version.o -liphlpapi -lversion -lole32 -loleaut32
 
-src/ipxwrapper_stubs.s: src/ipxwrapper_stubs.txt
+src/ipxwrapper_stubs.s: mkstubs.pl src/ipxwrapper_stubs.txt
 	perl mkstubs.pl src/ipxwrapper_stubs.txt src/ipxwrapper_stubs.s ipxwrapper.dll
 
 #
@@ -102,7 +100,7 @@ src/ipxwrapper_stubs.s: src/ipxwrapper_stubs.txt
 wsock32.dll: src/stubdll.o src/wsock32_stubs.o src/log.o src/common.o src/config.o src/addr.o src/funcprof.o src/snprintf.o inih/ini.o src/wsock32.def
 	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -static-libgcc -shared -o $@ $^
 
-src/wsock32_stubs.s: src/wsock32_stubs.txt
+src/wsock32_stubs.s: mkstubs.pl src/wsock32_stubs.txt
 	perl mkstubs.pl src/wsock32_stubs.txt src/wsock32_stubs.s wsock32.dll
 
 #
@@ -112,7 +110,7 @@ src/wsock32_stubs.s: src/wsock32_stubs.txt
 mswsock.dll: src/stubdll.o src/mswsock_stubs.o src/log.o src/common.o src/config.o src/addr.o src/funcprof.o src/snprintf.o inih/ini.o src/mswsock.def
 	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -static-libgcc -shared -o $@ $^
 
-src/mswsock_stubs.s: src/mswsock_stubs.txt
+src/mswsock_stubs.s: mkstubs.pl src/mswsock_stubs.txt
 	perl mkstubs.pl src/mswsock_stubs.txt src/mswsock_stubs.s mswsock.dll
 
 #
@@ -122,7 +120,7 @@ src/mswsock_stubs.s: src/mswsock_stubs.txt
 dpwsockx.dll: src/directplay.o src/log.o src/dpwsockx_stubs.o src/common.o src/config.o src/addr.o src/funcprof.o src/snprintf.o  inih/ini.o src/dpwsockx.def
 	$(CC) $(CFLAGS) -Wl,--enable-stdcall-fixup -static-libgcc -shared -o $@ $^ -lwsock32
 
-src/dpwsockx_stubs.s: src/dpwsockx_stubs.txt
+src/dpwsockx_stubs.s: mkstubs.pl src/dpwsockx_stubs.txt
 	perl mkstubs.pl src/dpwsockx_stubs.txt src/dpwsockx_stubs.s dpwsockx.dll
 
 #
@@ -133,9 +131,9 @@ IPXCONFIG_OBJS := src/ipxconfig.o icons/ipxconfig.o src/addr.o src/interface2.o 
 	src/config.o src/ipxconfig_stubs.o src/funcprof.o src/snprintf.o inih/ini.o
 
 ipxconfig.exe: $(IPXCONFIG_OBJS)
-	$(CXX) $(CXXFLAGS) -Wl,--enable-stdcall-fixup -static-libgcc -static-libstdc++ -mwindows -o $@ $^ -liphlpapi -lcomctl32 -lws2_32
+	$(CC) $(CCFLAGS) -Wl,--enable-stdcall-fixup -static-libgcc -mwindows -o $@ $^ -liphlpapi -lcomctl32 -lws2_32
 
-src/ipxconfig_stubs.s: src/ipxwrapper_stubs.txt
+src/ipxconfig_stubs.s: mkstubs.pl src/ipxwrapper_stubs.txt
 	perl mkstubs.pl src/ipxconfig_stubs.txt src/ipxconfig_stubs.s ipxconfig.exe
 
 #
@@ -162,10 +160,6 @@ src/%.o: src/%.c
 	$(CC) $(CFLAGS) $(DEPFLAGS) -c -o $@ $<
 	$(DEPPOST)
 
-src/%.o: src/%.cpp
-	$(CXX) $(CXXFLAGS) $(DEPFLAGS) -c -o $@ $<
-	$(DEPPOST)
-
 #
 # TESTING
 #
@@ -178,9 +172,10 @@ test-prep: $(TESTS) $(TOOLS) $(TOOL_DLLS)
 .PHONY: tools test-prep
 
 tests/addr.exe: tests/addr.o tests/tap/basic.o src/addr.o src/snprintf.o
-tests/addrcache.exe: tests/addrcache.o tests/tap/basic.o src/addrcache.o src/addr.o src/common.o src/snprintf.o
+tests/addrcache.exe: tests/addrcache.o tests/tap/basic.o src/addrcache.o src/addr.o src/snprintf.o
 tests/ethernet.exe: tests/ethernet.o tests/tap/basic.o src/ethernet.o src/addr.o src/snprintf.o
 tests/ratelimit.exe: tests/ratelimit.o src/addr.o src/common.o tests/tap/basic.o src/snprintf.o
+tests/spx.exe: tests/spx.o src/addr.o src/mclock.o tests/tap/basic.o src/snprintf.o
 
 tests/%.exe: tests/%.o src/snprintf.o
 	$(CC) $(CFLAGS) -o $@ $^ -lwsock32
