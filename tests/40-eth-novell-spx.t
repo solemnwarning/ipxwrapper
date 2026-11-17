@@ -41,6 +41,13 @@ our $spx_capture_class;
 
 describe "IPXWrapper using Novell Ethernet encapsulation" => sub
 {
+	if(!IPXWrapper::Tool::OSVersion->get($remote_ip_a)->platform_is_winnt())
+	{
+		# Skip these tests under Windows 98.
+		it "(not implemented)";
+		return;
+	}
+	
 	before all => sub
 	{
 		reg_delete_key($remote_ip_a, "HKCU\\Software\\IPXWrapper");
