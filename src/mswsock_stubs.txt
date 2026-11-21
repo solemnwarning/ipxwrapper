@@ -33,7 +33,7 @@ rresvport                      mswsock.dll       rresvport
 s_perror                       mswsock.dll       s_perror
 sethostname                    mswsock.dll       sethostname
 inet_addr                      mswsock.dll       inet_addr                       4
-WSHEnumProtocols               ipxwrapper.dll    WSHEnumProtocols               16
+WSHEnumProtocols               mswsock.dll       WSHEnumProtocols
 ntohs                          wsock32.dll       ntohs                           4
 Arecv                          mswsock.dll       Arecv
 Asend                          mswsock.dll       Asend

@@ -293,14 +293,6 @@ INT APIENTRY EnumProtocolsW(LPINT lpiProtocols, LPVOID lpProtocolBuffer, LPDWORD
 	return do_EnumProtocols(lpiProtocols, lpProtocolBuffer, lpdwBufferLength, true, sys_result, real_bufsize);
 }
 
-INT WINAPI WSHEnumProtocols(LPINT lpiProtocols, LPWSTR lpTransportKeyName, LPVOID lpProtocolBuffer, LPDWORD lpdwBufferLength)
-{
-	DWORD real_bufsize = *lpdwBufferLength;
-	int sys_result = r_WSHEnumProtocols(lpiProtocols, lpTransportKeyName, lpProtocolBuffer, lpdwBufferLength);
-	
-	return do_EnumProtocols(lpiProtocols, lpProtocolBuffer, lpdwBufferLength, false, sys_result, real_bufsize);
-}
-
 static int recv_queue_adjust_refcount(ipx_recv_queue *recv_queue, int adj)
 {
 	EnterCriticalSection(&(recv_queue->refcount_lock));

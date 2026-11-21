@@ -75,7 +75,7 @@ NPLoadNameSpaces               wsock32.dll       NPLoadNameSpaces
 TransmitFile                   wsock32.dll       TransmitFile                   28
 AcceptEx                       wsock32.dll       AcceptEx                       32
 GetAcceptExSockaddrs           wsock32.dll       GetAcceptExSockaddrs           32
-WSHEnumProtocols               ipxwrapper.dll    WSHEnumProtocols               16
+WSHEnumProtocols               wsock32.dll       WSHEnumProtocols
 Arecv                          wsock32.dll       Arecv
 Asend                          wsock32.dll       Asend
 NSPStartup                     wsock32.dll       NSPStartup
