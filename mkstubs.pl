@@ -130,6 +130,7 @@ END
 
 print CODE <<"END";
 global _stub_fstats
+align 4,db 0
 _stub_fstats:
 END
 
