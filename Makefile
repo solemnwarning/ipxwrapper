@@ -57,8 +57,8 @@ TOOL_DLLS := tools/ipxwrapper.dll tools/wsock32.dll tools/mswsock.dll tools/dpws
 all: ipxwrapper.dll wsock32.dll mswsock.dll ipxconfig.exe dpwsockx.dll dplay-setup.exe
 
 clean:
-	rm -f ipxwrapper.dll wsock32.dll mswsock.dll ipxconfig.exe dpwsockx.dll
-	rm -f src/*.o src/*_stubs.s icons/*.o version.o
+	rm -f ipxwrapper.dll wsock32.dll mswsock.dll ipxconfig.exe dpwsockx.dll dplay-setup.exe
+	rm -f inih/*.o src/*.o src/*_stubs.s icons/*.o version.o
 	
 	rm -f $(TESTS) $(addsuffix .o,$(basename $(TESTS))) tests/tap/basic.o
 	rm -f $(TOOLS) $(addsuffix .o,$(basename $(TOOLS)))
