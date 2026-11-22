@@ -5,6 +5,12 @@ Version UNRELEASED:
 	Implement the actual SPX protocol to allow SPX over DOSBox or real IPX
 	encapsulation. Will not communicate with earlier versions of IPXWrapper
 	even when using UDP encapsulation.
+	
+	Respond to pings from DOSBox servers.
+	
+	Support running on Windows 98.
+	
+	Remove inappropriate WSHEnumProtocols() shim.
 
 Version 0.7.2:
 	Fix error when loading settings under Windows XP compatibility mode.
