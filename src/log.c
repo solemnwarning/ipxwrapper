@@ -78,7 +78,7 @@ void log_open(const char *file) {
 
 void log_connect(const char *log_server_addr, uint16_t log_server_port)
 {
-	if(strcmp(log_server_addr, "") == 0)
+	if(log_server_addr == NULL || strcmp(log_server_addr, "") == 0)
 	{
 		return;
 	}

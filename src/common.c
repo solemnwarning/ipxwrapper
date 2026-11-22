@@ -295,6 +295,11 @@ char *reg_get_string(HKEY key, const char *name, const char *default_value)
 		}
 	}
 	
+	if(default_value == NULL)
+	{
+		return NULL;
+	}
+	
 	char *default_copy = strdup(default_value);
 	if(default_copy == NULL)
 	{
@@ -430,52 +435,152 @@ void __stdcall log_call(unsigned int entry, const char *symbol, unsigned int tar
 	}
 }
 
-wchar_t *get_module_path(HMODULE module)
+AWString_t *get_module_path(HMODULE module)
 {
-	size_t size   = 256;
-	wchar_t *path = NULL;
+	size_t size    = 256;
+	wchar_t *wpath = malloc(size * sizeof(wchar_t));
 	
-	do {
-		free(path);
+	if(wpath == NULL)
+	{
+		SetLastError(ERROR_OUTOFMEMORY);
+		return NULL;
+	}
+	
+	DWORD rsize;
+	while((rsize = GetModuleFileNameW(module, wpath, size) >= (size - 1)))
+	{
+		free(wpath);
 		
 		size *= 2;
+		wpath = malloc(size * sizeof(wchar_t));
 		
-		if(!(path = (wchar_t*)(malloc(sizeof(wchar_t) * size))))
+		if(wpath == NULL)
 		{
-			SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+			SetLastError(ERROR_OUTOFMEMORY);
 			return NULL;
 		}
-	} while(GetModuleFileNameW(module, path, size) == size);
+	}
 	
-	return path;
+	if(rsize == 0)
+	{
+		DWORD error = GetLastError();
+		
+		free(wpath);
+		
+		if(error == ERROR_CALL_NOT_IMPLEMENTED)
+		{
+			/* Windows 98 doesn't implement unicode functions, so we fall back to
+			 * GetModuleFileNameA() if we get this error.
+			*/
+		}
+		else{
+			return NULL;
+		}
+	}
+	else{
+		return AWString_from_wide(wpath);
+	}
+	
+	char *apath = malloc(size);
+	if(apath == NULL)
+	{
+		SetLastError(ERROR_OUTOFMEMORY);
+		return NULL;
+	}
+	
+	while((rsize = GetModuleFileNameA(module, apath, size) >= (size - 1)))
+	{
+		free(apath);
+		
+		size *= 2;
+		apath = malloc(size);
+		
+		if(apath == NULL)
+		{
+			SetLastError(ERROR_OUTOFMEMORY);
+			return NULL;
+		}
+	}
+	
+	/* GetModuleFileNameA() returns zero even on success on Windows 98... so ignore the return
+	 * value and hope for the best on older systems.
+	*/
+	
+	if(rsize == 0 && windows_at_least_2000())
+	{
+		free(apath);
+		return NULL;
+	}
+	else{
+		return AWString_from_ansi(apath);
+	}
 }
 
-wchar_t *get_module_relative_path(HMODULE module, const wchar_t *relative_path)
+AWString_t *get_module_relative_path(HMODULE module, const char *relative_path)
 {
-	wchar_t *module_path = get_module_path(module);
+	AWString_t *module_path = get_module_path(module);
 	if(module_path == NULL)
 	{
 		return NULL;
 	}
 	
-	wchar_t *module_path_last_slash = wcsrchr(module_path, '\\');
+	AWString_t *path;
 	
-	size_t module_path_base_len = module_path_last_slash != NULL
-		? (module_path_last_slash - module_path) + 1
-		: 0;
-	
-	wchar_t *path = malloc((module_path_base_len + wcslen(relative_path) + 1) * sizeof(wchar_t));
-	if(path == NULL)
+	if(AWString_is_wide(module_path))
 	{
-		free(module_path);
-		SetLastError(ERROR_NOT_ENOUGH_MEMORY);
-		return NULL;
+		const wchar_t *wp = AWString_get_wide(module_path);
+		const wchar_t *module_path_last_slash = wcsrchr(wp, '\\');
+		
+		size_t module_path_base_len = module_path_last_slash != NULL
+			? (module_path_last_slash - wp) + 1
+			: 0;
+		
+		size_t rp_size = strlen(relative_path) + 1;
+		
+		wchar_t *p = malloc((module_path_base_len + rp_size) * sizeof(wchar_t));
+		if(p == NULL)
+		{
+			AWString_free(module_path);
+			SetLastError(ERROR_OUTOFMEMORY);
+			return NULL;
+		}
+		
+		memcpy(p, wp, (module_path_base_len * sizeof(wchar_t)));
+		
+		int rp_result = MultiByteToWideChar(CP_WINANSI, 0, relative_path, rp_size, (p + module_path_base_len), (rp_size * sizeof(wchar_t)));
+		if(rp_result == 0)
+		{
+			AWString_free(module_path);
+			return NULL;
+		}
+		
+		path = AWString_from_wide(p);
+	}
+	else{
+		const char *ap = AWString_get_ansi(module_path);
+		const char *module_path_last_slash = strrchr(ap, '\\');
+		
+		size_t module_path_base_len = module_path_last_slash != NULL
+			? (module_path_last_slash - ap) + 1
+			: 0;
+		
+		size_t rp_size = strlen(relative_path) + 1;
+		
+		char *p = malloc(module_path_base_len + rp_size);
+		if(p == NULL)
+		{
+			AWString_free(module_path);
+			SetLastError(ERROR_OUTOFMEMORY);
+			return NULL;
+		}
+		
+		memcpy(p, ap, module_path_base_len);
+		memcpy((p + module_path_base_len), relative_path, rp_size);
+		
+		path = AWString_from_ansi(p);
 	}
 	
-	memcpy(path, module_path, (module_path_base_len * sizeof(wchar_t)));
-	wcscpy((path + module_path_base_len), relative_path);
-	
-	free(module_path);
+	AWString_free(module_path);
 	
 	return path;
 }
