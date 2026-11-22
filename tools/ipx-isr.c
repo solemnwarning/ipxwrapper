@@ -157,7 +157,8 @@ int main(int argc, char **argv)
 		sockets[num_sockets] = -1;
 	}
 	
-	HANDLE send_thread_h = CreateThread(NULL, 0, &send_thread, sockets, 0, NULL);
+	DWORD send_thread_id;
+	HANDLE send_thread_h = CreateThread(NULL, 0, &send_thread, sockets, 0, &send_thread_id);
 	assert(send_thread_h != NULL);
 	
 	char buf[1024];

@@ -26,6 +26,7 @@ use IPXWrapper::Capture::IPX;
 use IPXWrapper::Capture::IPXLLC;
 use IPXWrapper::Capture::IPXNovell;
 use IPXWrapper::Tool::IPXRecv;
+use IPXWrapper::Tool::OSVersion;
 use IPXWrapper::Util;
 
 require "$FindBin::Bin/config.pm";
@@ -635,6 +636,13 @@ shared_examples_for "ipx over ethernet" => sub
 
 describe "IPXWrapper using Ethernet encapsulation" => sub
 {
+	if(!IPXWrapper::Tool::OSVersion->get($remote_ip_a)->platform_is_winnt())
+	{
+		# Skip these tests under Windows 98.
+		it "(not implemented)";
+		return;
+	}
+	
 	before all => sub
 	{
 		reg_delete_key($remote_ip_a, "HKCU\\Software\\IPXWrapper");
@@ -653,6 +661,13 @@ describe "IPXWrapper using Ethernet encapsulation" => sub
 
 describe "IPXWrapper using Novell Ethernet encapsulation" => sub
 {
+	if(!IPXWrapper::Tool::OSVersion->get($remote_ip_a)->platform_is_winnt())
+	{
+		# Skip these tests under Windows 98.
+		it "(not implemented)";
+		return;
+	}
+	
 	before all => sub
 	{
 		reg_delete_key($remote_ip_a, "HKCU\\Software\\IPXWrapper");
@@ -671,6 +686,13 @@ describe "IPXWrapper using Novell Ethernet encapsulation" => sub
 
 describe "IPXWrapper using LLC (802.2) Ethernet encapsulation" => sub
 {
+	if(!IPXWrapper::Tool::OSVersion->get($remote_ip_a)->platform_is_winnt())
+	{
+		# Skip these tests under Windows 98.
+		it "(not implemented)";
+		return;
+	}
+	
 	before all => sub
 	{
 		reg_delete_key($remote_ip_a, "HKCU\\Software\\IPXWrapper");

@@ -17,6 +17,8 @@ src/addr.c
 src/addr.h
 src/addrcache.c
 src/addrcache.h
+src/awstring.c
+src/awstring.h
 src/coalesce.c
 src/coalesce.h
 src/common.c

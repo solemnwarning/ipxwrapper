@@ -469,6 +469,8 @@ shared_examples_for "spx protocol tests" => sub
 			
 			sleep(1);
 			
+			my @packets = ();
+			
 			for(my $i = 0; $i < 9; ++$i)
 			{
 				sleep(3);
@@ -490,20 +492,26 @@ shared_examples_for "spx protocol tests" => sub
 					ack_number          => 0,
 				};
 				
-				my @packets = grep { !mac_eq($_->{src_mac}, $local_mac_a) } $capture->read_available();
+				push(@packets, grep { !mac_eq($_->{src_mac}, $local_mac_a) } $capture->read_available());
 				
-				cmp_hashes_partial(\@packets, [ $watchdog_request ]) or return;
+				cmp_hashes_partial(\@packets, [ $watchdog_request ], [ $watchdog_request ]) or return;
 				
-				# Verify socket isn't signalled yet.
-				my ($read_ready, undef, undef) = $client->select([ $client_sock ], undef, undef, 0);
-				cmp_set($read_ready, []);
+				shift(@packets);
+				
+				if($i < 8)
+				{
+					# Verify socket isn't signalled yet.
+					my ($read_ready, undef, undef) = $client->select([ $client_sock ], undef, undef, 0);
+					cmp_set($read_ready, []);
+				}
 			}
 			
 			sleep(3);
 			
 			# Connection should've timed out now - check it stopped sending watchdog requests.
 			
-			cmp_hashes_partial([ $capture->read_available() ], []) or return;
+			push(@packets, grep { !mac_eq($_->{src_mac}, $local_mac_a) } $capture->read_available());
+			cmp_hashes_partial(\@packets, []) or return;
 			
 			# Socket should be flagged as readable now.
 			my ($read_ready, undef, undef) = $client->select([ $client_sock ], undef, undef, 0);
@@ -1932,6 +1940,8 @@ shared_examples_for "spx protocol tests" => sub
 			
 			my ($server_conn_id) = $packets[0]->{src_connection_id};
 			
+			@packets = ();
+			
 			for(my $i = 0; $i < 9; ++$i)
 			{
 				sleep(3);
@@ -1953,20 +1963,26 @@ shared_examples_for "spx protocol tests" => sub
 					ack_number          => 0,
 				};
 				
-				my @packets = grep { !mac_eq($_->{src_mac}, $local_mac_a) } $capture->read_available();
+				push(@packets, grep { !mac_eq($_->{src_mac}, $local_mac_a) } $capture->read_available());
 				
-				cmp_hashes_partial(\@packets, [ $watchdog_request ]) or return;
+				cmp_hashes_partial(\@packets, [ $watchdog_request ], [ $watchdog_request ]) or return;
 				
-				# Verify socket isn't signalled yet.
-				my ($read_ready, undef, undef) = $server->select([ $server_client->{socket} ], undef, undef, 0);
-				cmp_set($read_ready, []);
+				shift(@packets);
+				
+				if($i < 8)
+				{
+					# Verify socket isn't signalled yet.
+					my ($read_ready, undef, undef) = $server->select([ $server_client->{socket} ], undef, undef, 0);
+					cmp_set($read_ready, []);
+				}
 			}
 			
 			sleep(3);
 			
 			# Connection should've timed out now - check it stopped sending watchdog requests.
 			
-			cmp_hashes_partial([ $capture->read_available() ], []) or return;
+			push(@packets, grep { !mac_eq($_->{src_mac}, $local_mac_a) } $capture->read_available());
+			cmp_hashes_partial(\@packets, []) or return;
 			
 			# Socket should be flagged as readable now.
 			my ($read_ready, undef, undef) = $server->select([ $server_client->{socket} ], undef, undef, 0);

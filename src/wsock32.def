@@ -50,6 +50,10 @@ EXPORTS
 	__WSAFDIsSet			@151
 	WEP				@500
 	WSApSetPostRoutine		@1000
+	WsControl			@1001
+	closesockinfo			@1002
+	Arecv				@1003
+	Asend				@1004
 	WSHEnumProtocols		@1005
 	inet_network			@1100
 	getnetbyname			@1101
@@ -73,6 +77,7 @@ EXPORTS
 	GetServiceA			@1119
 	GetServiceW			@1120
 	NPLoadNameSpaces		@1130
+	NSPStartup			@1131
 	TransmitFile			@1140
 	AcceptEx			@1141
 	GetAcceptExSockaddrs		@1142

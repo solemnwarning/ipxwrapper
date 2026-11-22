@@ -1,5 +1,5 @@
 /* IPXWrapper - Function profiling functions
- * Copyright (C) 2019 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2019-2024 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -30,7 +30,7 @@ void fprof_init(struct FuncStats *fstats, size_t n_fstats)
 		
 		fstats[i].n_calls = 0;
 		
-		InitializeCriticalSectionAndSpinCount(&(fstats[i].cs), 0x80000000);
+		init_critical_section(&(fstats[i].cs));
 	}
 }
 

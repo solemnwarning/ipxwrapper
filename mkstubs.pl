@@ -72,6 +72,7 @@ print CODE <<"END";
 extern _QueryPerformanceCounter\@4
 
 extern _find_sym
+extern _find_sym_direct
 extern _log_call
 extern _fprof_record_timed
 extern _fprof_record_untimed
@@ -129,6 +130,7 @@ END
 
 print CODE <<"END";
 global _stub_fstats
+align 4,db 0
 _stub_fstats:
 END
 
@@ -148,7 +150,32 @@ END
 
 foreach my $func(@stubs)
 {
-	if(defined $func->{params})
+	if($func->{name} =~ m/_DIRECT$/)
+	{
+		# XXX_DIRECT functions jump straight to the target function without any logging to
+		# avoid unintended recursion within our own code.
+		
+		print CODE <<"END";
+			global _$func->{name}
+			_$func->{name}:
+				; Check if we have address cached
+				cmp dword [$func->{name}_addr], 0
+				jne $func->{name}_go
+				
+				; Fetch target function address
+				push $func->{name}_target_func
+				push dword $func->{target_dll_index}
+				call _find_sym_direct
+				mov dword [$func->{name}_addr], eax
+				
+				$func->{name}_go:
+				
+				; Jump into target function. We have left the stack as we found it
+				; so it can take over our frame.
+				jmp [$func->{name}_addr]
+END
+	}
+	elsif(defined $func->{params})
 	{
 		my $to_copy = $func->{params};
 		

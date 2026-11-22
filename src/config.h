@@ -54,6 +54,8 @@ typedef struct main_config {
 	
 	enum ipx_log_level log_level;
 	bool profile;
+	char *log_server_addr;
+	uint16_t log_server_port;
 	
 	unsigned int rate_limit_packets;
 	unsigned int rate_limit_bytes;

@@ -39,6 +39,9 @@ main_config_t get_main_config(bool ignore_ini)
 	config.log_level  = LOG_INFO;
 	config.profile    = false;
 	
+	config.log_server_addr = NULL;
+	config.log_server_port = 0;
+	
 	config.dosbox_server_addr = NULL;
 	config.dosbox_server_port = 213;
 	config.dosbox_coalesce = false;
@@ -50,31 +53,37 @@ main_config_t get_main_config(bool ignore_ini)
 	
 	if(!ignore_ini)
 	{
-		wchar_t *ini_path = get_module_relative_path(NULL, L"ipxwrapper.ini");
+		AWString_t *ini_path = get_module_relative_path(NULL, "ipxwrapper.ini");
 		
-		FILE *ini_file = _wfopen(ini_path, L"r");
-		if(ini_file != NULL)
+		if(ini_path != NULL)
 		{
-			int ini_result = ini_parse_file(ini_file, &process_ini_directive, &config);
+			FILE *ini_file = AWString_is_wide(ini_path)
+				? _wfopen(AWString_get_wide(ini_path), L"r")
+				: fopen(AWString_get_ansi(ini_path), "r");
 			
-			if(ini_result > 0)
+			if(ini_file != NULL)
 			{
-				log_printf(LOG_ERROR, "Parse error in ipxwrapper.ini at line %d", ini_result);
+				int ini_result = ini_parse_file(ini_file, &process_ini_directive, &config);
+				
+				if(ini_result > 0)
+				{
+					log_printf(LOG_ERROR, "Parse error in ipxwrapper.ini at line %d", ini_result);
+				}
+				
+				/* Check log_level here because min_log_level isn't initialised yet. */
+				if(config.log_level <= LOG_INFO)
+				{
+					log_printf(LOG_INFO, "Loaded configuration from %s", AWString_get_ansi(ini_path));
+				}
+				
+				fclose(ini_file);
+				AWString_free(ini_path);
+				
+				return config;
 			}
 			
-			/* Check log_level here because min_log_level isn't initialised yet. */
-			if(config.log_level <= LOG_INFO)
-			{
-				log_printf(LOG_INFO, "Loaded configuration from %S", ini_path);
-			}
-			
-			fclose(ini_file);
-			free(ini_path);
-			
-			return config;
+			AWString_free(ini_path);
 		}
-		
-		free(ini_path);
 	}
 	
 	HKEY reg = reg_open_main(false);
@@ -100,6 +109,9 @@ main_config_t get_main_config(bool ignore_ini)
 	config.frame_type = reg_get_dword(reg, "frame_type", config.frame_type);
 	config.log_level  = reg_get_dword(reg, "log_level",  config.log_level);
 	config.profile    = reg_get_dword(reg, "profile",    config.profile);
+	
+	config.log_server_addr = reg_get_string(reg, "log_server_addr", NULL);
+	config.log_server_port = reg_get_dword(reg, "log_server_port", config.log_server_port);
 	
 	config.dosbox_server_addr = reg_get_string(reg, "dosbox_server_addr", "");
 	config.dosbox_server_port = reg_get_dword(reg, "dosbox_server_port", config.dosbox_server_port);

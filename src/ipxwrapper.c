@@ -1,5 +1,5 @@
 /* ipxwrapper - Library functions
- * Copyright (C) 2008-2024 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2008-2025 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -53,6 +53,9 @@ static CRITICAL_SECTION sockets_cs;
 typedef ULONGLONG WINAPI (*GetTickCount64_t)(void);
 static HMODULE kernel32 = NULL;
 
+typedef UINT WINAPI (*GetSystemWindowsDirectory_t)(LPSTR lpBuffer, UINT uSize);
+static GetSystemWindowsDirectory_t GetSystemWindowsDirectory_ptr = NULL;
+
 struct FuncStats ipxwrapper_fstats[] = {
 	#define FPROF_DECL(func) { #func },
 	#include "ipxwrapper_prof_defs.h"
@@ -68,15 +71,6 @@ unsigned int recv_packets = 0, recv_bytes = 0;  /* Forwarded to emulated socket 
 
 unsigned int send_packets_udp = 0, send_bytes_udp = 0;  /* Sent over UDP transport */
 unsigned int recv_packets_udp = 0, recv_bytes_udp = 0;  /* Received over UDP transport */
-
-static void init_cs(CRITICAL_SECTION *cs)
-{
-	if(!InitializeCriticalSectionAndSpinCount(cs, 0x80000000))
-	{
-		log_printf(LOG_ERROR, "Failed to initialise critical section: %s", w32_error(GetLastError()));
-		abort();
-	}
-}
 
 static HANDLE prof_thread_handle = NULL;
 static HANDLE prof_thread_exit = NULL;
@@ -135,6 +129,8 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 		min_log_level = main_config.log_level;
 		ipx_encap_type = main_config.encap_type;
 		
+		log_connect(main_config.log_server_addr, main_config.log_server_port);
+		
 		log_printf(LOG_INFO, "IPXWrapper %s", version_string);
 		log_printf(LOG_INFO, "Compiled at %s", compile_time);
 		log_printf(LOG_INFO, "Performance counter: %lld Hz", perf_counter_freq);
@@ -144,7 +140,19 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 			log_printf(LOG_WARNING, "SystemRoot is not set in the environment");
 			
 			char env[268] = "SystemRoot=";
-			GetSystemWindowsDirectory(env+11, 256);
+			
+			if(!kernel32 && (kernel32 = LoadLibrary("kernel32.dll")))
+			{
+				GetSystemWindowsDirectory_ptr = (GetSystemWindowsDirectory_t)(GetProcAddress(kernel32, "GetSystemWindowsDirectoryA"));
+			}
+			
+			if(GetSystemWindowsDirectory_ptr != NULL)
+			{
+				GetSystemWindowsDirectory_ptr(env+11, 256);
+			}
+			else{
+				GetWindowsDirectory(env+11, 256);
+			}
 			
 			log_printf(LOG_INFO, "Setting SystemRoot to '%s'", env+11);
 			_putenv(env);
@@ -160,7 +168,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 		
 		ipx_interfaces_init();
 		
-		init_cs(&sockets_cs);
+		init_critical_section(&sockets_cs);
 		
 		WSADATA wsdata;
 		int err = WSAStartup(MAKEWORD(1,1), &wsdata);
@@ -179,13 +187,14 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 			prof_thread_exit = CreateEvent(NULL, FALSE, FALSE, NULL);
 			if(prof_thread_exit != NULL)
 			{
+				DWORD prof_thread_id;
 				prof_thread_handle = CreateThread(
 					NULL,               /* lpThreadAttributes */
 					0,                  /* dwStackSize */
 					&prof_thread_main,  /* lpStartAddress */
 					NULL,               /* lpParameter */
 					0,                  /* dwCreationFlags */
-					NULL);              /* lpThreadId */
+					&prof_thread_id);   /* lpThreadId */
 				
 				if(prof_thread_handle == NULL)
 				{
