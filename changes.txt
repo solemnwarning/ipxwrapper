@@ -1,4 +1,4 @@
-Version UNRELEASED:
+Version 0.8.0:
 	Fix delivery of locally-generated packets to the same process when using
 	IPXWrapper UDP or DOSBox encapsulation.
 	
