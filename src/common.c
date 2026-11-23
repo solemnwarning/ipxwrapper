@@ -37,6 +37,7 @@ static const char *dll_names[] = {
 };
 
 static HANDLE dll_handles[] = {NULL, NULL, NULL, NULL, NULL, NULL, NULL};
+static LPTHREAD_START_ROUTINE kernel32_FreeLibrary = NULL;
 
 /* Convert a windows error number to an error message */
 const char *w32_error(DWORD errnum) {
@@ -335,6 +336,23 @@ void load_dll(unsigned int dllnum, bool direct) {
 	char path[512];
 	const char *dll;
 	
+	if(kernel32_FreeLibrary == NULL)
+	{
+		HMODULE kernel32 = GetModuleHandle("KERNEL32.DLL");
+		if(kernel32 == NULL)
+		{
+			log_printf(LOG_ERROR, "Could not obtain handle to KERNEL32.DLL, error code %u", (unsigned)(GetLastError()));
+			abort();
+		}
+		
+		kernel32_FreeLibrary = (LPTHREAD_START_ROUTINE)(GetProcAddress(kernel32, "FreeLibrary"));
+		if(kernel32_FreeLibrary == NULL)
+		{
+			log_printf(LOG_ERROR, "Could not get FreeLibrary address from KERNEL32.DLL, error code %u", (unsigned)(GetLastError()));
+			abort();
+		}
+	}
+	
 	if(dllnum && dllnum != 5) {
 		GetSystemDirectory(path, sizeof(path));
 		
@@ -369,19 +387,15 @@ void load_dll(unsigned int dllnum, bool direct) {
 	}
 }
 
-static DWORD WINAPI FreeLibraryThread(LPVOID lpParameter)
-{
-	FreeLibrary((HMODULE)(lpParameter));
-	return 0;
-}
-
 void unload_dlls(void) {
 	int i;
 	
 	for(i = 0; dll_names[i]; i++) {
 		if(dll_handles[i]) {
+			assert(kernel32_FreeLibrary != NULL);
+			
 			DWORD flt_id;
-			HANDLE flt_thread = CreateThread(NULL, 0, &FreeLibraryThread, dll_handles[i], 0, &flt_id);
+			HANDLE flt_thread = CreateThread(NULL, 0, kernel32_FreeLibrary, dll_handles[i], 0, &flt_id);
 			if(flt_thread == NULL)
 			{
 				log_printf(LOG_ERROR, "FreeLibrary thread creation failed (%s) - %s will not be unloaded!\n", w32_error(GetLastError()), dll_names[i]);
