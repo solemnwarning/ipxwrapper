@@ -25,13 +25,15 @@ WINDRES ?= $(shell \
 
 ifdef DEBUG
 DBG_OPT := -g
+DNDEBUG_FLAG :=
 else
 DBG_OPT := -Wl,-s
+DNDEBUG_FLAG := -DNDEBUG
 endif
 
 INCLUDE := -I./include/ -I./winpcap/include/ -D_WIN32_WINNT=0x0500 -D_WIN32_IE=0x0500 -DHAVE_REMOTE
 
-CFLAGS := -std=c99   -mno-ms-bitfields -Wall -DINI_HANDLER_LINENO=1 $(DBG_OPT) $(INCLUDE) $(CFLAGS)
+CFLAGS := -std=c99 -mno-ms-bitfields -Wall -DINI_HANDLER_LINENO=1 $(DBG_OPT) $(INCLUDE) $(CFLAGS)
 
 DEPDIR := .d
 $(shell mkdir -p $(DEPDIR)/src/ $(DEPDIR)/tools/ $(DEPDIR)/tests/tap/)
@@ -158,7 +160,7 @@ src/%_stubs.o: src/%_stubs.s
 	nasm -f win32 -o $@ $<
 
 src/%.o: src/%.c
-	$(CC) $(CFLAGS) $(DEPFLAGS) -c -o $@ $<
+	$(CC) $(CFLAGS) $(DEPFLAGS) $(DNDEBUG_FLAG) -c -o $@ $<
 	$(DEPPOST)
 
 #
