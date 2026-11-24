@@ -508,8 +508,6 @@ int WSAAPI closesocket(SOCKET sockfd)
 	{
 		log_printf(LOG_ERROR, "closesocket(%d): %s", sockfd, w32_error(cs_error));
 		
-		unlock_sockets();
-		
 		WSASetLastError(cs_error);
 		return -1;
 	}
