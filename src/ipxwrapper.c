@@ -1,5 +1,5 @@
 /* ipxwrapper - Library functions
- * Copyright (C) 2008-2025 Daniel Collins <solemnwarning@solemnwarning.net>
+ * Copyright (C) 2008-2026 Daniel Collins <solemnwarning@solemnwarning.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published by
@@ -19,6 +19,7 @@
 
 #include <winsock2.h>
 #include <windows.h>
+#include <assert.h>
 #include <wsipx.h>
 #include <nspapi.h>
 #include <iphlpapi.h>
@@ -278,49 +279,124 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
  * Returns an ipx_socket pointer on success, unlocks the sockets table and
  * returns NULL if no match is found.
 */
+#ifdef NDEBUG
 ipx_socket *get_socket(SOCKET sockfd)
+#else
+ipx_socket *get_socket_actual(SOCKET sockfd, const char *file, int line)
+#endif
 {
+	#ifdef NDEBUG
 	lock_sockets();
+	#else
+	lock_sockets_actual(file, line);
+	#endif
 	
 	ipx_socket *sock;
 	HASH_FIND_INT(socket_by_fd, &sockfd, sock);
 	
 	if(!sock)
 	{
+		#ifdef NDEBUG
 		unlock_sockets();
+		#else
+		unlock_sockets_actual(file, line);
+		#endif
 	}
 	
 	return sock;
 }
 
 /* Like get_socket(), but also calls wait_for_ready() if an IPX socket was found. */
+#ifdef NDEBUG
 ipx_socket *get_socket_wait_for_ready(SOCKET sockfd, int timeout_ms)
+#else
+ipx_socket *get_socket_wait_for_ready_actual(SOCKET sockfd, int timeout_ms, const char *file, int line)
+#endif
 {
+	#ifdef NDEBUG
 	ipx_socket *sock = get_socket(sockfd);
+	#else
+	ipx_socket *sock = get_socket_actual(sockfd, file, line);
+	#endif
 	
 	if(sock)
 	{
+		#ifdef NDEBUG
 		unlock_sockets();
+		#else
+		unlock_sockets_actual(file, line);
+		#endif
+		
 		wait_for_ready(timeout_ms);
 		
 		sock = get_socket(sockfd);
 	}
 	
 	return sock;
-	lock_sockets();
 }
 
+#ifndef NDEBUG
+static DWORD sockets_cs_thread = 0;
+static unsigned int sockets_cs_depth = 0;
+#endif
+
 /* Lock the mutex */
+#ifdef NDEBUG
 void lock_sockets(void)
+#else
+void lock_sockets_actual(const char *file, int line)
+#endif
 {
 	FPROF_RECORD_SCOPE(&(ipxwrapper_fstats[IPXWRAPPER_FSTATS_lock_sockets]));
+	
+	#ifndef NDEBUG
+	log_printf(LOG_DEBUG, "Acquiring sockets lock at %s:%d...", file, line);
+	#endif
+	
 	EnterCriticalSection(&sockets_cs);
+	
+	#ifndef NDEBUG
+	if(++sockets_cs_depth == 1)
+	{
+		assert(sockets_cs_thread == 0);
+		sockets_cs_thread = GetCurrentThreadId();
+	}
+	else{
+		assert(sockets_cs_thread == GetCurrentThreadId());
+	}
+	
+	log_printf(LOG_DEBUG, "Acquired sockets lock");
+	#endif
 }
 
 /* Unlock the mutex */
+#ifdef NDEBUG
 void unlock_sockets(void)
+#else
+void unlock_sockets_actual(const char *file, int line)
+#endif
 {
+	#ifndef NDEBUG
+	if(sockets_cs_thread != GetCurrentThreadId() || sockets_cs_depth == 0)
+	{
+		log_printf(LOG_DEBUG, "Attempted to release sockets lock when not held (sockets_cs_thread = %u, sockets_cs_depth = %u) at %s:%d",
+			(unsigned)(sockets_cs_thread), sockets_cs_depth, file, line);
+		abort();
+	}
+	
+	if(--sockets_cs_depth == 0)
+	{
+		sockets_cs_thread = 0;
+	}
+	
+	log_printf(LOG_DEBUG, "Releasing sockets lock at %s:%d...", file, line);
+	#endif
+	
 	LeaveCriticalSection(&sockets_cs);
+	
+	#ifndef NDEBUG
+	log_printf(LOG_DEBUG, "Released sockets lock");
+	#endif
 }
 
 uint64_t get_ticks(void)

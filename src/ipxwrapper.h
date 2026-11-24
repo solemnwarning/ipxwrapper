@@ -235,12 +235,25 @@ extern unsigned int recv_packets, recv_bytes;  /* Forwarded to emulated socket *
 extern unsigned int send_packets_udp, send_bytes_udp;  /* Sent over UDP transport */
 extern unsigned int recv_packets_udp, recv_bytes_udp;  /* Received over UDP transport */
 
+uint64_t get_ticks(void);
+uint64_t get_uticks(void);
+
+#ifdef NDEBUG
 ipx_socket *get_socket(SOCKET sockfd);
 ipx_socket *get_socket_wait_for_ready(SOCKET sockfd, int timeout_ms);
 void lock_sockets(void);
 void unlock_sockets(void);
-uint64_t get_ticks(void);
-uint64_t get_uticks(void);
+#else
+ipx_socket *get_socket_actual(SOCKET sockfd, const char *file, int line);
+ipx_socket *get_socket_wait_for_ready_actual(SOCKET sockfd, int timeout_ms, const char *file, int line);
+void lock_sockets_actual(const char *file, int line);
+void unlock_sockets_actual(const char *file, int line);
+
+#define get_socket(sockfd) get_socket_actual(sockfd, __FILE__, __LINE__)
+#define get_socket_wait_for_ready(sockfd, timeout_ms) get_socket_wait_for_ready_actual(sockfd, timeout_ms, __FILE__, __LINE__)
+#define lock_sockets() lock_sockets_actual(__FILE__, __LINE__)
+#define unlock_sockets() unlock_sockets_actual(__FILE__, __LINE__)
+#endif
 
 void add_self_to_firewall(void);
 
